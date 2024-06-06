@@ -1,0 +1,8 @@
+[package]
+name = "sorepl"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+rustyline = { version = "14.0.0", features = ["with-sqlite-history", "derive"] }
