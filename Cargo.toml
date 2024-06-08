@@ -6,3 +6,4 @@ edition = "2021"
 
 [dependencies]
 rustyline = { version = "14.0.0", features = ["with-sqlite-history", "derive"] }
+solang-parser = "0.3.4"
