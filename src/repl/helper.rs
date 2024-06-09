@@ -1,7 +1,6 @@
 use anyhow::Result;
 use rustyline::{
     highlight::{Highlighter, MatchingBracketHighlighter},
-    hint::HistoryHinter,
     sqlite_history::SQLiteHistory,
     validate::MatchingBracketValidator,
     Completer, Config, Editor, Helper, Hinter, Validator,
@@ -17,8 +16,6 @@ pub(crate) struct MyHelper {
     highlighter: MatchingBracketHighlighter,
     #[rustyline(Validator)]
     validator: MatchingBracketValidator,
-    #[rustyline(Hinter)]
-    hinter: HistoryHinter,
     colored_prompt: String,
 }
 
@@ -27,7 +24,6 @@ impl MyHelper {
         MyHelper {
             completer: MyCompleter::new(),
             highlighter: MatchingBracketHighlighter::new(),
-            hinter: HistoryHinter::new(),
             colored_prompt: ">> ".to_owned(),
             validator: MatchingBracketValidator::new(),
         }
