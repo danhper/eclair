@@ -1,4 +1,7 @@
-use rustyline::{completion::{FilenameCompleter, Pair}, Context};
+use rustyline::{
+    completion::{FilenameCompleter, Pair},
+    Context,
+};
 
 pub(crate) struct MyCompleter {
     filename_completer: FilenameCompleter,
@@ -12,6 +15,18 @@ impl MyCompleter {
     }
 }
 
+fn is_completing_path(line: &str, pos: usize) -> bool {
+    for c in line[..pos].chars().rev() {
+        if c == ' ' {
+            return false;
+        }
+        if c == '/' {
+            return true;
+        }
+    }
+    false
+}
+
 impl rustyline::completion::Completer for MyCompleter {
     type Candidate = Pair;
 
@@ -21,7 +36,7 @@ impl rustyline::completion::Completer for MyCompleter {
         pos: usize,
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Pair>)> {
-        if line.starts_with("./") || line.starts_with("../") || line.starts_with('/') {
+        if is_completing_path(line, pos) {
             return self.filename_completer.complete(line, pos, _ctx);
         }
 
