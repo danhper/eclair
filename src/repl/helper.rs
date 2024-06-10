@@ -60,7 +60,7 @@ impl Highlighter for MyHelper {
     }
 }
 
-pub fn create_editor() -> Result<Editor<MyHelper, SQLiteHistory>> {
+pub(crate) fn create_editor() -> Result<Editor<MyHelper, SQLiteHistory>> {
     let config =
         Config::builder()
             .completion_type(rustyline::CompletionType::List)
