@@ -7,5 +7,7 @@ edition = "2021"
 [dependencies]
 anyhow = { version = "1.0.86", features = ["backtrace"] }
 ethers = "2.0.14"
+glob = "0.3.1"
 rustyline = { version = "14.0.0", features = ["with-sqlite-history", "derive"] }
+serde_json = "1.0.117"
 solang-parser = "0.3.3"
