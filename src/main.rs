@@ -1,18 +1,14 @@
-use std::env;
-
 use anyhow::Result;
 
-use sorepl::{project::types::Project, repl::Repl};
+use foundry_cli::{handler, utils};
+use sorepl::repl::Repl;
 
 fn main() -> Result<()> {
-    // let mut repl = Repl::create()?;
-    // repl.run();
-    let project_path = env::home_dir()
-        .unwrap()
-        .join("workspace/organizations/tlx/protocol-dev");
-    let project =
-        sorepl::project::foundry::FoundryProject::load(project_path.to_owned().to_str().unwrap())?;
-    println!("{:?}", project.contract_names());
+    handler::install();
+    utils::load_dotenv();
+
+    let mut repl = Repl::create()?;
+    repl.run();
 
     Ok(())
 }

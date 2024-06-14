@@ -1,22 +1,35 @@
 use anyhow::{anyhow, bail, Result};
 use ethers::abi::Contract;
 use serde_json::Value;
-use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Instant};
+use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
 
 pub struct FoundryProject {
     abis: HashMap<String, Contract>,
 }
 
 impl FoundryProject {
+    pub fn load<P: AsRef<Path>>(directory: P) -> Result<Self> {
+        if !Self::is_valid(&directory) {
+            return Err(anyhow::anyhow!("Invalid project"));
+        }
+        let mut project = FoundryProject::new();
+        project._load_abis_from_directory(&directory)?;
+        Ok(project)
+    }
+
     fn new() -> Self {
         FoundryProject {
             abis: HashMap::new(),
         }
     }
 
-    fn _load_abis_from_directory(&mut self, directory: &str) -> Result<()> {
+    pub fn is_valid<P: AsRef<Path>>(directory: P) -> bool {
+        Path::new(directory.as_ref()).join("foundry.toml").is_file()
+    }
+
+    fn _load_abis_from_directory<P: AsRef<Path>>(&mut self, directory: P) -> Result<()> {
         let files = glob::glob(
-            Path::new(directory)
+            Path::new(directory.as_ref())
                 .join("out")
                 .join("**/*.json")
                 .to_str()
@@ -53,20 +66,13 @@ impl FoundryProject {
     }
 }
 
+impl Default for FoundryProject {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl super::types::Project for FoundryProject {
-    fn load(directory: &str) -> Result<Self> {
-        if !Self::is_valid_project(directory) {
-            return Err(anyhow::anyhow!("Invalid project"));
-        }
-        let mut project = FoundryProject::new();
-        project._load_abis_from_directory(directory)?;
-        Ok(project)
-    }
-
-    fn is_valid_project(directory: &str) -> bool {
-        Path::new(directory).join("foundry.toml").is_file()
-    }
-
     fn get_contract(&self, name: &str) -> ethers::abi::Contract {
         self.abis.get(name).expect("Contract not found").clone()
     }

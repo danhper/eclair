@@ -1,10 +1,14 @@
-use anyhow::Result;
+use std::path::PathBuf;
+
+use anyhow::{anyhow, Result};
 use rustyline::{
     sqlite_history::SQLiteHistory, validate::MatchingBracketValidator, Completer, Config, Editor,
     Helper, Highlighter, Hinter, Validator,
 };
 
 use crate::repl::completer::MyCompleter;
+
+const SOREPL_HISTORY_FILE_NAME: &str = ".sorepl_history.sqlite3";
 
 #[derive(Helper, Completer, Hinter, Validator, Highlighter)]
 pub(crate) struct MyHelper {
@@ -28,8 +32,12 @@ impl MyHelper {
     }
 
     pub fn set_prompt(&mut self, prompt: &str) {
-        self.colored_prompt = prompt.to_owned();
+        prompt.clone_into(&mut self.colored_prompt)
     }
+}
+
+fn history_file() -> Option<PathBuf> {
+    foundry_config::Config::foundry_dir().map(|p| p.join(SOREPL_HISTORY_FILE_NAME))
 }
 
 pub(crate) fn create_editor() -> Result<Editor<MyHelper, SQLiteHistory>> {
@@ -37,9 +45,11 @@ pub(crate) fn create_editor() -> Result<Editor<MyHelper, SQLiteHistory>> {
         .completion_type(rustyline::CompletionType::List)
         .auto_add_history(true)
         .build();
-    let history = rustyline::sqlite_history::SQLiteHistory::open(config, "tmp/history.sqlite3")?;
     let helper = MyHelper::new();
+    let history_file_path = history_file().ok_or(anyhow!("Could not find foundry directory"))?;
+    let history = rustyline::sqlite_history::SQLiteHistory::open(config, &history_file_path)?;
     let mut rl: Editor<MyHelper, _> = Editor::with_history(config, history)?;
+
     rl.set_helper(Some(helper));
     Ok(rl)
 }

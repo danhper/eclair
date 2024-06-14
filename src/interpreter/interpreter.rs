@@ -1,25 +1,35 @@
-use std::{collections::HashMap, str::FromStr};
+use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Result};
 use ethers::types::{Address, H160, U256};
 use solang_parser::pt::{Expression, Statement};
 
-use super::{eval_result::EvalResult, parsing, utils::expr_as_var};
+use crate::project::types::Project;
+
+use super::{env::Env, parsing, utils::expr_as_var, value::Value};
 
 pub struct Interpreter {
-    env: HashMap<String, EvalResult>,
+    env: Env,
     debug: bool,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
-            env: HashMap::new(),
+            env: Env::new(),
             debug: false,
         }
     }
 
-    pub fn evaluate_line(&mut self, line: &str) -> Result<EvalResult> {
+    pub fn load_project(&mut self, project: Box<dyn Project>) -> Result<()> {
+        for contract_name in project.contract_names() {
+            let contract = project.get_contract(&contract_name);
+            self.env.set_type(&contract_name, contract.clone());
+        }
+        Ok(())
+    }
+
+    pub fn evaluate_line(&mut self, line: &str) -> Result<Option<Value>> {
         if line.starts_with('!') {
             return self.evaluate_directive(line);
         }
@@ -30,45 +40,59 @@ impl Interpreter {
         self.evaluate_statement(&stmt)
     }
 
-    pub fn evaluate_directive(&mut self, line: &str) -> Result<EvalResult> {
+    pub fn evaluate_directive(&mut self, line: &str) -> Result<Option<Value>> {
         match line {
             "!env" => {
-                for (k, v) in &self.env {
-                    println!("{}: {}", k, v);
+                for k in self.env.list_vars() {
+                    println!("{}: {}", k, self.env.get_var(&k).unwrap());
                 }
             }
             "!debug" => self.debug = !self.debug,
             _ => bail!("Directive not supported"),
         }
 
-        Ok(EvalResult::Empty)
+        Ok(None)
     }
 
-    pub fn evaluate_statement(&mut self, stmt: &Statement) -> Result<EvalResult> {
+    pub fn evaluate_statement(&mut self, stmt: &Statement) -> Result<Option<Value>> {
         match stmt {
-            Statement::Expression(_, expr) => self.evaluate_expression(expr),
+            Statement::Expression(_, expr) => self.evaluate_expression(expr).map(Some),
+            Statement::VariableDefinition(_, var, expr) => {
+                let id = var
+                    .name
+                    .clone()
+                    .ok_or(anyhow!("invalid declaration {}", stmt))?
+                    .name;
+                if let Some(e) = expr {
+                    let result = self.evaluate_expression(e)?;
+                    self.env.set_var(&id, result.clone());
+                    Ok(None)
+                } else {
+                    bail!("declarations need rhs")
+                }
+            }
             _ => bail!("Statement not supported".to_string()),
         }
     }
 
-    pub fn evaluate_expression(&mut self, expr: &Expression) -> Result<EvalResult> {
+    pub fn evaluate_expression(&mut self, expr: &Expression) -> Result<Value> {
         match expr {
             Expression::NumberLiteral(_, n, _, _) => {
                 let parsed_n = U256::from_dec_str(n).map_err(|e| anyhow!("{}", e.to_string()))?;
-                Ok(EvalResult::Uint(parsed_n))
+                Ok(Value::Uint(parsed_n))
             }
-            Expression::StringLiteral(strs) => Ok(EvalResult::Str(strs[0].string.clone())),
+            Expression::StringLiteral(strs) => Ok(Value::Str(strs[0].string.clone())),
 
             Expression::Assign(_, var, expr) => {
                 let id = expr_as_var(var)?;
                 let result = self.evaluate_expression(expr)?;
-                self.env.insert(id.to_string(), result.clone());
+                self.env.set_var(&id, result.clone());
                 Ok(result)
             }
 
             Expression::Variable(var) => {
                 let id = var.to_string();
-                if let Some(result) = self.env.get(&id) {
+                if let Some(result) = self.env.get_var(&id) {
                     Ok(result.clone())
                 } else {
                     bail!("{} is not defined", id);
@@ -84,9 +108,9 @@ impl Interpreter {
             Expression::HexNumberLiteral(_, n, _) => {
                 let result = if n.len() == 42 {
                     let addr = H160::from_str(&n[2..])?;
-                    EvalResult::Addr(Address::try_from(addr)?)
+                    Value::Addr(Address::try_from(addr)?)
                 } else {
-                    EvalResult::Uint(U256::from_dec_str(n)?)
+                    Value::Uint(U256::from_dec_str(n)?)
                 };
                 Ok(result)
             }
@@ -97,21 +121,16 @@ impl Interpreter {
         }
     }
 
-    fn eval_binop(
-        &mut self,
-        lexpr: &Expression,
-        rexpr: &Expression,
-        op: &str,
-    ) -> Result<EvalResult> {
+    fn eval_binop(&mut self, lexpr: &Expression, rexpr: &Expression, op: &str) -> Result<Value> {
         let lhs = self.evaluate_expression(lexpr)?;
         let rhs = self.evaluate_expression(rexpr)?;
         match (&lhs, &rhs) {
-            (EvalResult::Uint(l), EvalResult::Uint(r)) => match op {
-                "+" => Ok(EvalResult::Uint(l + r)),
-                "-" => Ok(EvalResult::Uint(l - r)),
-                "*" => Ok(EvalResult::Uint(l * r)),
-                "/" => Ok(EvalResult::Uint(l / r)),
-                "%" => Ok(EvalResult::Uint(l % r)),
+            (Value::Uint(l), Value::Uint(r)) => match op {
+                "+" => Ok(Value::Uint(l + r)),
+                "-" => Ok(Value::Uint(l - r)),
+                "*" => Ok(Value::Uint(l * r)),
+                "/" => Ok(Value::Uint(l / r)),
+                "%" => Ok(Value::Uint(l % r)),
                 _ => bail!("{} not supported", op),
             },
             _ => bail!("{} not supported for {} and {}", op, lhs, rhs),
