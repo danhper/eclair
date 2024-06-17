@@ -4,13 +4,13 @@ use ethers::abi::Abi;
 
 use super::Value;
 
-pub(crate) struct Env {
+pub struct Env {
     variables: HashMap<String, Value>,
     types: HashMap<String, Abi>,
 }
 
 impl Env {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Env {
             variables: HashMap::new(),
             types: HashMap::new(),
@@ -23,6 +23,10 @@ impl Env {
 
     pub fn get_type(&self, name: &str) -> Option<&Abi> {
         self.types.get(name)
+    }
+
+    pub fn list_types(&self) -> Vec<String> {
+        self.types.keys().cloned().collect()
     }
 
     pub fn list_vars(&self) -> Vec<String> {

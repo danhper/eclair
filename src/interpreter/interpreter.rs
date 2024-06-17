@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::{cell::RefCell, rc::Rc};
 
 use anyhow::{anyhow, bail, Result};
 use ethers::types::{Address, H160, U256};
@@ -9,22 +10,21 @@ use crate::project::types::Project;
 use super::{env::Env, parsing, utils::expr_as_var, value::Value};
 
 pub struct Interpreter {
-    env: Env,
+    env: Rc<RefCell<Env>>,
     debug: bool,
 }
 
 impl Interpreter {
-    pub fn new() -> Self {
-        Interpreter {
-            env: Env::new(),
-            debug: false,
-        }
+    pub fn new(env: Rc<RefCell<Env>>) -> Self {
+        Interpreter { env, debug: false }
     }
 
     pub fn load_project(&mut self, project: Box<dyn Project>) -> Result<()> {
         for contract_name in project.contract_names() {
             let contract = project.get_contract(&contract_name);
-            self.env.set_type(&contract_name, contract.clone());
+            self.env
+                .borrow_mut()
+                .set_type(&contract_name, contract.clone());
         }
         Ok(())
     }
@@ -43,8 +43,8 @@ impl Interpreter {
     pub fn evaluate_directive(&mut self, line: &str) -> Result<Option<Value>> {
         match line {
             "!env" => {
-                for k in self.env.list_vars() {
-                    println!("{}: {}", k, self.env.get_var(&k).unwrap());
+                for k in self.env.borrow().list_vars() {
+                    println!("{}: {}", k, self.env.borrow().get_var(&k).unwrap());
                 }
             }
             "!debug" => self.debug = !self.debug,
@@ -65,7 +65,7 @@ impl Interpreter {
                     .name;
                 if let Some(e) = expr {
                     let result = self.evaluate_expression(e)?;
-                    self.env.set_var(&id, result.clone());
+                    self.env.borrow_mut().set_var(&id, result.clone());
                     Ok(None)
                 } else {
                     bail!("declarations need rhs")
@@ -86,13 +86,13 @@ impl Interpreter {
             Expression::Assign(_, var, expr) => {
                 let id = expr_as_var(var)?;
                 let result = self.evaluate_expression(expr)?;
-                self.env.set_var(&id, result.clone());
+                self.env.borrow_mut().set_var(&id, result.clone());
                 Ok(result)
             }
 
             Expression::Variable(var) => {
                 let id = var.to_string();
-                if let Some(result) = self.env.get_var(&id) {
+                if let Some(result) = self.env.borrow().get_var(&id) {
                     Ok(result.clone())
                 } else {
                     bail!("{} is not defined", id);
@@ -135,11 +135,5 @@ impl Interpreter {
             },
             _ => bail!("{} not supported for {} and {}", op, lhs, rhs),
         }
-    }
-}
-
-impl Default for Interpreter {
-    fn default() -> Self {
-        Self::new()
     }
 }

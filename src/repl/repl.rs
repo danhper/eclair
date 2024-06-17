@@ -1,10 +1,11 @@
-use super::helper::{create_editor, MyHelper};
 use anyhow::Result;
 use rustyline::error::ReadlineError;
 use rustyline::sqlite_history::SQLiteHistory;
 use rustyline::Editor;
+use std::{cell::RefCell, rc::Rc};
 
-use crate::interpreter::Interpreter;
+use super::helper::{create_editor, MyHelper};
+use crate::interpreter::{Env, Interpreter};
 use crate::project::foundry::FoundryProject;
 
 pub struct Repl {
@@ -13,9 +14,9 @@ pub struct Repl {
 }
 
 impl Repl {
-    pub fn create() -> Result<Self> {
-        let rl = create_editor()?;
-        let mut interpreter = Interpreter::new();
+    pub fn create(env: Rc<RefCell<Env>>) -> Result<Self> {
+        let rl = create_editor(env.clone())?;
+        let mut interpreter = Interpreter::new(env);
         let current_dir = std::env::current_dir()?;
         if FoundryProject::is_valid(&current_dir) {
             let project = FoundryProject::load(&current_dir)?;
