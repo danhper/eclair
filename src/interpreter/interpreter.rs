@@ -1,3 +1,4 @@
+use std::future;
 use std::str::FromStr;
 use std::{cell::RefCell, rc::Rc};
 
@@ -30,18 +31,18 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn evaluate_line(&mut self, line: &str) -> Result<Option<Value>> {
+    pub async fn evaluate_line(&mut self, line: &str) -> Result<Option<Value>> {
         if line.starts_with('!') {
-            return self.evaluate_directive(line);
+            return self.evaluate_directive(line).await;
         }
         let stmt = parsing::parse_statement(line)?;
         if self.debug {
             println!("{:#?}", stmt);
         }
-        self.evaluate_statement(&stmt)
+        self.evaluate_statement(&stmt).await
     }
 
-    pub fn evaluate_directive(&mut self, line: &str) -> Result<Option<Value>> {
+    pub async fn evaluate_directive(&mut self, line: &str) -> Result<Option<Value>> {
         match line {
             "!env" => {
                 for k in self.env.borrow().list_vars() {
@@ -83,9 +84,12 @@ impl Interpreter {
         }
     }
 
-    pub fn evaluate_statement(&mut self, stmt: &Statement) -> Result<Option<Value>> {
+    pub async fn evaluate_statement(&mut self, stmt: &Statement) -> Result<Option<Value>> {
         match stmt {
-            Statement::Expression(_, expr) => self.evaluate_expression(expr).map(Some),
+            Statement::Expression(_, expr) => self
+                .evaluate_expression(Box::new(expr.clone()))
+                .await
+                .map(Some),
             Statement::VariableDefinition(_, var, expr) => {
                 let id = var
                     .name
@@ -93,7 +97,7 @@ impl Interpreter {
                     .ok_or(anyhow!("invalid declaration {}", stmt))?
                     .name;
                 if let Some(e) = expr {
-                    let result = self.evaluate_expression(e)?;
+                    let result = self.evaluate_expression(Box::new(e.clone())).await?;
                     self.env.borrow_mut().set_var(&id, result.clone());
                     Ok(None)
                 } else {
@@ -104,17 +108,17 @@ impl Interpreter {
         }
     }
 
-    pub fn evaluate_expression(&mut self, expr: &Expression) -> Result<Value> {
-        match expr {
+    pub async fn evaluate_expression(&mut self, expr: Box<Expression>) -> Result<Value> {
+        match *expr {
             Expression::NumberLiteral(_, n, _, _) => {
-                let parsed_n = U256::from_dec_str(n).map_err(|e| anyhow!("{}", e.to_string()))?;
+                let parsed_n = U256::from_dec_str(&n).map_err(|e| anyhow!("{}", e.to_string()))?;
                 Ok(Value::Uint(parsed_n))
             }
             Expression::StringLiteral(strs) => Ok(Value::Str(strs[0].string.clone())),
 
             Expression::Assign(_, var, expr) => {
-                let id = expr_as_var(var)?;
-                let result = self.evaluate_expression(expr)?;
+                let id = expr_as_var(&var)?;
+                let result = self.evaluate_expression(expr).await?;
                 self.env.borrow_mut().set_var(&id, result.clone());
                 Ok(result)
             }
@@ -128,19 +132,19 @@ impl Interpreter {
                 }
             }
 
-            Expression::Add(_, lhs, rhs) => self.eval_binop(lhs, rhs, "+"),
-            Expression::Subtract(_, lhs, rhs) => self.eval_binop(lhs, rhs, "-"),
-            Expression::Multiply(_, lhs, rhs) => self.eval_binop(lhs, rhs, "*"),
-            Expression::Divide(_, lhs, rhs) => self.eval_binop(lhs, rhs, "/"),
-            Expression::Modulo(_, lhs, rhs) => self.eval_binop(lhs, rhs, "%"),
+            Expression::Add(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "+").await,
+            Expression::Subtract(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "-").await,
+            Expression::Multiply(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "*").await,
+            Expression::Divide(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "/").await,
+            Expression::Modulo(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "%").await,
 
             Expression::FunctionCall(_, name, args_) => {
-                let call_type = self.create_call_type(name)?;
-                let args = args_
-                    .iter()
-                    .map(|arg| self.evaluate_expression(arg))
-                    .collect::<Result<Vec<Value>>>()?;
-                call_type.execute(&mut self.env.borrow_mut(), &args)
+                let call_type = self.create_call_type(&name)?;
+                let mut args = vec![];
+                for arg in args_ {
+                    args.push(self.evaluate_expression(Box::new(arg)).await?);
+                }
+                call_type.execute(&mut self.env.borrow_mut(), &args).await
             }
 
             Expression::HexNumberLiteral(_, n, _) => {
@@ -148,20 +152,25 @@ impl Interpreter {
                     let addr = H160::from_str(&n[2..])?;
                     Value::Addr(Address::try_from(addr)?)
                 } else {
-                    Value::Uint(U256::from_dec_str(n)?)
+                    Value::Uint(U256::from_dec_str(&n)?)
                 };
                 Ok(result)
             }
 
-            Expression::Parenthesis(_, expr) => self.evaluate_expression(expr),
+            Expression::Parenthesis(_, expr) => self.evaluate_expression(expr).await,
 
             v => bail!("{} not supported", v),
         }
     }
 
-    fn eval_binop(&mut self, lexpr: &Expression, rexpr: &Expression, op: &str) -> Result<Value> {
-        let lhs = self.evaluate_expression(lexpr)?;
-        let rhs = self.evaluate_expression(rexpr)?;
+    async fn eval_binop(
+        &mut self,
+        lexpr: &Expression,
+        rexpr: &Expression,
+        op: &str,
+    ) -> Result<Value> {
+        let lhs = self.evaluate_expression(Box::new(lexpr.clone())).await?;
+        let rhs = self.evaluate_expression(Box::new(rexpr.clone())).await?;
         match (&lhs, &rhs) {
             (Value::Uint(l), Value::Uint(r)) => match op {
                 "+" => Ok(Value::Uint(l + r)),

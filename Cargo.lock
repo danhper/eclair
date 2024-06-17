@@ -5904,6 +5904,7 @@ dependencies = [
  "rustyline",
  "serde_json",
  "solang-parser",
+ "url",
 ]
 
 [[package]]
