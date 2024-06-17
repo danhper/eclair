@@ -1,4 +1,5 @@
 mod env;
+mod functions;
 #[allow(clippy::module_inception)]
 mod interpreter;
 mod parsing;

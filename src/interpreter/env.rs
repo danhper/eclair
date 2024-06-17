@@ -41,3 +41,9 @@ impl Env {
         self.variables.insert(name.to_string(), value);
     }
 }
+
+impl Default for Env {
+    fn default() -> Self {
+        Self::new()
+    }
+}

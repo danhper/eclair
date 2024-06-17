@@ -7,6 +7,7 @@ use solang_parser::pt::{Expression, Statement};
 
 use crate::project::types::Project;
 
+use super::functions::CallType;
 use super::{env::Env, parsing, utils::expr_as_var, value::Value};
 
 pub struct Interpreter {
@@ -52,6 +53,34 @@ impl Interpreter {
         }
 
         Ok(None)
+    }
+
+    fn create_call_type(&mut self, func: &Expression) -> Result<CallType> {
+        match func {
+            Expression::Variable(var) => {
+                let id = var.to_string();
+                if self.env.borrow().get_type(&id).is_some() {
+                    Ok(CallType::ContractCast(id))
+                } else if self.env.borrow().get_var(&id).is_some() {
+                    Ok(CallType::RegularCall(id))
+                } else {
+                    bail!("{} is not defined", id);
+                }
+            }
+            Expression::MemberAccess(_, expr, id) => {
+                let receiver = expr_as_var(expr)?;
+                if let Some(v) = self.env.borrow().get_var(&receiver) {
+                    if matches!(v, Value::Contract(_, _, _)) {
+                        Ok(CallType::ContractCall(receiver.to_string(), id.to_string()))
+                    } else {
+                        Ok(CallType::ModuleCall(receiver.to_string(), id.to_string()))
+                    }
+                } else {
+                    bail!("{} is not defined", receiver);
+                }
+            }
+            _ => bail!("{} not supported", func),
+        }
     }
 
     pub fn evaluate_statement(&mut self, stmt: &Statement) -> Result<Option<Value>> {
@@ -104,6 +133,15 @@ impl Interpreter {
             Expression::Multiply(_, lhs, rhs) => self.eval_binop(lhs, rhs, "*"),
             Expression::Divide(_, lhs, rhs) => self.eval_binop(lhs, rhs, "/"),
             Expression::Modulo(_, lhs, rhs) => self.eval_binop(lhs, rhs, "%"),
+
+            Expression::FunctionCall(_, name, args_) => {
+                let call_type = self.create_call_type(name)?;
+                let args = args_
+                    .iter()
+                    .map(|arg| self.evaluate_expression(arg))
+                    .collect::<Result<Vec<Value>>>()?;
+                call_type.execute(&mut self.env.borrow_mut(), &args)
+            }
 
             Expression::HexNumberLiteral(_, n, _) => {
                 let result = if n.len() == 42 {
