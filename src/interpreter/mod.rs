@@ -1,8 +1,10 @@
-mod eval_result;
+mod env;
 #[allow(clippy::module_inception)]
 mod interpreter;
 mod parsing;
 mod utils;
+mod value;
 
-pub use eval_result::EvalResult;
+pub use env::Env;
 pub use interpreter::Interpreter;
+pub use value::Value;
