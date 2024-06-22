@@ -1,3 +1,4 @@
+mod directive;
 mod env;
 mod functions;
 #[allow(clippy::module_inception)]

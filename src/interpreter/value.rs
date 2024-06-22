@@ -1,8 +1,7 @@
-use ethers::abi::Token;
-use ethers::{
-    abi::{Abi, Tokenizable},
-    types::{Address, U256},
-    utils::to_checksum,
+// use alloy::abi::Token;
+use alloy::{
+    json_abi::JsonAbi,
+    primitives::{Address, U256},
 };
 use std::fmt::{self, Display, Formatter};
 
@@ -11,39 +10,45 @@ pub enum Value {
     Uint(U256),
     Str(String),
     Addr(Address),
-    Contract(String, Address, Abi),
+    Contract(String, Address, JsonAbi),
 }
+
+unsafe impl std::marker::Send for Value {}
 
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Value::Uint(n) => write!(f, "{}", n),
-            Value::Addr(a) => write!(f, "{}", to_checksum(a, None)),
+            Value::Addr(a) => write!(f, "{}", a.to_checksum(None)),
             Value::Str(s) => write!(f, "\"{}\"", s),
-            Value::Contract(name, addr, _) => write!(f, "{}({})", name, to_checksum(addr, None)),
+            Value::Contract(name, addr, _) => write!(f, "{}({})", name, addr.to_checksum(None)),
         }
     }
 }
 
-impl Tokenizable for Value {
-    fn into_token(self) -> ethers::abi::Token {
-        match self {
-            Value::Uint(n) => Token::Uint(n.clone()),
-            Value::Str(s) => Token::String(s.clone()),
-            Value::Addr(a) => Token::Address(a.clone()),
-            Value::Contract(name, addr, _) => panic!("Cannot serialize contract value"),
-        }
-    }
+impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
+    type Error = anyhow::Error;
 
-    fn from_token(token: ethers::abi::Token) -> Result<Self, ethers::abi::InvalidOutputType>
-    where
-        Self: Sized,
-    {
-        match token {
-            Token::Uint(n) => Ok(Value::Uint(n)),
-            Token::String(s) => Ok(Value::Str(s)),
-            Token::Address(a) => Ok(Value::Addr(a)),
-            _ => Err(ethers::abi::InvalidOutputType("not valid".to_string())),
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        let v = match value {
+            Value::Uint(n) => alloy::dyn_abi::DynSolValue::Uint(*n, 256),
+            Value::Str(s) => alloy::dyn_abi::DynSolValue::String(s.clone()),
+            Value::Addr(a) => alloy::dyn_abi::DynSolValue::Address(*a),
+            Value::Contract(_, addr, _) => alloy::dyn_abi::DynSolValue::Address(*addr),
+        };
+        Ok(v)
+    }
+}
+
+impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
+    type Error = anyhow::Error;
+
+    fn try_from(value: alloy::dyn_abi::DynSolValue) -> Result<Self, Self::Error> {
+        match value {
+            alloy::dyn_abi::DynSolValue::Uint(n, _) => Ok(Value::Uint(n)),
+            alloy::dyn_abi::DynSolValue::String(s) => Ok(Value::Str(s)),
+            alloy::dyn_abi::DynSolValue::Address(a) => Ok(Value::Addr(a)),
+            v => Err(anyhow::anyhow!("{:?} not supported", v)),
         }
     }
 }

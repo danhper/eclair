@@ -1,10 +1,10 @@
+use alloy::json_abi::JsonAbi;
 use anyhow::{anyhow, bail, Result};
-use ethers::abi::Contract;
 use serde_json::Value;
 use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
 
 pub struct FoundryProject {
-    abis: HashMap<String, Contract>,
+    abis: HashMap<String, JsonAbi>,
 }
 
 impl FoundryProject {
@@ -60,7 +60,8 @@ impl FoundryProject {
         let contract_name = targets.values().next().unwrap().as_str().unwrap();
         self.abis.insert(
             contract_name.to_string(),
-            serde_json::from_value(json["abi"].clone())?,
+            JsonAbi::from_json_str(&json["abi"].to_string())?,
+            // serde_json::from_value(json["abi"].clone())?, // TODO: figure out why this doesn't work
         );
         Ok(())
     }
@@ -73,7 +74,7 @@ impl Default for FoundryProject {
 }
 
 impl super::types::Project for FoundryProject {
-    fn get_contract(&self, name: &str) -> ethers::abi::Contract {
+    fn get_contract(&self, name: &str) -> JsonAbi {
         self.abis.get(name).expect("Contract not found").clone()
     }
 

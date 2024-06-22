@@ -1,18 +1,20 @@
-use std::{cell::RefCell, rc::Rc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use foundry_cli::{handler, utils};
 
 use sorepl::interpreter::Env;
 use sorepl::repl::Repl;
+use tokio::sync::Mutex;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     handler::install();
     utils::load_dotenv();
 
-    let env = Rc::new(RefCell::new(Env::new()));
-    let mut repl = Repl::create(env)?;
-    repl.run();
+    let env = Arc::new(Mutex::new(Env::new()));
+    let mut repl = Repl::create(env).await?;
+    repl.run().await;
 
     Ok(())
 }

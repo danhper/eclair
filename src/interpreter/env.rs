@@ -1,34 +1,30 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use ethers::abi::Abi;
-use ethers::providers::{Http, Provider};
+use alloy::json_abi::JsonAbi;
 
 use super::Value;
 
+#[derive(Debug)]
 pub struct Env {
     variables: HashMap<String, Value>,
-    types: HashMap<String, Abi>,
-    pub provider: Arc<Provider<Http>>,
+    types: HashMap<String, JsonAbi>,
 }
+
+unsafe impl std::marker::Send for Env {}
 
 impl Env {
     pub fn new() -> Self {
         Env {
             variables: HashMap::new(),
             types: HashMap::new(),
-            provider: Arc::new(
-                Provider::<Http>::try_from("http://localhost:8545")
-                    .expect("could not create provider"),
-            ),
         }
     }
 
-    pub fn set_type(&mut self, name: &str, abi: Abi) {
+    pub fn set_type(&mut self, name: &str, abi: JsonAbi) {
         self.types.insert(name.to_string(), abi);
     }
 
-    pub fn get_type(&self, name: &str) -> Option<&Abi> {
+    pub fn get_type(&self, name: &str) -> Option<&JsonAbi> {
         self.types.get(name)
     }
 

@@ -1,18 +1,20 @@
-use crate::interpreter::Env;
-use std::{cell::RefCell, rc::Rc};
+use crate::interpreter::{Env, Value};
+use itertools::Itertools;
+use std::sync::Arc;
 
 use rustyline::{
     completion::{FilenameCompleter, Pair},
     Context,
 };
+use tokio::sync::Mutex;
 
 pub(crate) struct MyCompleter {
     filename_completer: FilenameCompleter,
-    env: Rc<RefCell<Env>>,
+    env: Arc<Mutex<Env>>,
 }
 
 impl MyCompleter {
-    pub fn new(env: Rc<RefCell<Env>>) -> Self {
+    pub fn new(env: Arc<Mutex<Env>>) -> Self {
         MyCompleter {
             filename_completer: FilenameCompleter::new(),
             env,
@@ -37,6 +39,18 @@ fn get_current_word(line: &str, pos: usize) -> &str {
     &line[start..pos]
 }
 
+fn is_completing_func_name(line: &str, pos: usize) -> bool {
+    for c in line[..pos].chars().rev() {
+        if c == ' ' || c == '(' {
+            return false;
+        }
+        if c == '.' {
+            return true;
+        }
+    }
+    false
+}
+
 impl rustyline::completion::Completer for MyCompleter {
     type Candidate = Pair;
 
@@ -50,9 +64,37 @@ impl rustyline::completion::Completer for MyCompleter {
             return self.filename_completer.complete(line, pos, _ctx);
         }
 
-        let mut types = self.env.borrow().list_types();
-        let mut vars_and_types = self.env.borrow().list_vars();
+        let env = self
+            .env
+            .clone()
+            .try_lock_owned()
+            .map_err(|_e| rustyline::error::ReadlineError::Interrupted)?;
+        let mut types = env.list_types();
+        let mut vars_and_types = env.list_vars();
         vars_and_types.append(&mut types);
+
+        let current_word = get_current_word(line, pos);
+
+        if is_completing_func_name(line, pos) {
+            let (func_name, receiver) = current_word
+                .rsplitn(2, '.')
+                .map(|s| s.trim())
+                .collect_tuple()
+                .unwrap_or_default();
+
+            if let Some(Value::Contract(_, _, abi)) = env.get_var(receiver) {
+                let completions = abi
+                    .functions
+                    .iter()
+                    .map(|func| Pair {
+                        display: func.0.clone(),
+                        replacement: func.0.clone(),
+                    })
+                    .filter(|item| item.display.starts_with(func_name))
+                    .collect::<Vec<_>>();
+                return Ok((pos - func_name.len(), completions));
+            }
+        }
 
         let completions: Vec<_> = vars_and_types
             .iter()
@@ -61,8 +103,6 @@ impl rustyline::completion::Completer for MyCompleter {
                 replacement: var.to_owned(),
             })
             .collect();
-
-        let current_word = get_current_word(line, pos);
 
         let matches = completions
             .into_iter()
