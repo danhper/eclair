@@ -12,9 +12,9 @@ use solang_parser::pt::{Expression, Statement};
 
 use crate::project::types::Project;
 
-use super::directive::Directive;
-use super::functions::CallType;
-use super::{env::Env, parsing, utils::expr_as_var, value::Value};
+use super::functions::Function;
+use super::types::Type;
+use super::{directive::Directive, env::Env, parsing, utils::expr_as_var, value::Value};
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -82,35 +82,6 @@ impl Interpreter {
         Ok(None)
     }
 
-    async fn create_call_type(&mut self, func: &Expression) -> Result<CallType> {
-        let env = self.env.lock().await;
-        match func {
-            Expression::Variable(var) => {
-                let id = var.to_string();
-                if env.get_type(&id).is_some() {
-                    Ok(CallType::ContractCast(id))
-                } else if env.get_var(&id).is_some() {
-                    Ok(CallType::RegularCall(id))
-                } else {
-                    bail!("{} is not defined", id);
-                }
-            }
-            Expression::MemberAccess(_, expr, id) => {
-                let receiver = expr_as_var(expr)?;
-                if let Some(v) = env.get_var(&receiver) {
-                    if matches!(v, Value::Contract(_, _, _)) {
-                        Ok(CallType::ContractCall(receiver.to_string(), id.to_string()))
-                    } else {
-                        Ok(CallType::ModuleCall(receiver.to_string(), id.to_string()))
-                    }
-                } else {
-                    bail!("{} is not defined", receiver);
-                }
-            }
-            _ => bail!("{} not supported", func),
-        }
-    }
-
     pub async fn evaluate_statement(&mut self, stmt: &Statement) -> Result<Option<Value>> {
         match stmt {
             Statement::Expression(_, expr) => self
@@ -161,10 +132,23 @@ impl Interpreter {
 
                 Expression::Variable(var) => {
                     let id = var.to_string();
-                    if let Some(result) = self.env.lock().await.get_var(&id) {
+                    let env = self.env.lock().await;
+                    if let Some(result) = env.get_var(&id) {
                         Ok(result.clone())
+                    } else if let Some(result) = env.get_type(&id) {
+                        let type_ = Type::Contract(id.clone(), result.clone());
+                        Ok(Value::Func(Function::Cast(type_)))
                     } else {
                         bail!("{} is not defined", id);
+                    }
+                }
+
+                Expression::MemberAccess(_, receiver_expr, method) => {
+                    match self.evaluate_expression(receiver_expr).await? {
+                        Value::Contract(c) => {
+                            Ok(Value::Func(Function::ContractCall(c, method.name.clone())))
+                        }
+                        v => bail!("invalid type for receiver, expected contract, got {}", v),
                     }
                 }
 
@@ -174,14 +158,17 @@ impl Interpreter {
                 Expression::Divide(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "/").await,
                 Expression::Modulo(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "%").await,
 
-                Expression::FunctionCall(_, name, args_) => {
-                    let call_type = self.create_call_type(&name).await?;
+                Expression::FunctionCall(_, func_expr, args_) => {
+                    let func = match self.evaluate_expression(func_expr).await? {
+                        Value::Func(f) => f,
+                        v => bail!("invalid type, expected function, got {}", v),
+                    };
                     let mut args = vec![];
                     for arg in args_ {
                         args.push(self.evaluate_expression(Box::new(arg)).await?);
                     }
                     let mut env = self.env.lock().await;
-                    call_type.execute(&mut env, &args, &self.provider).await
+                    func.execute(&args, &mut env, &self.provider).await
                 }
 
                 Expression::HexNumberLiteral(_, n, _) => {

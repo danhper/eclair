@@ -1,4 +1,3 @@
-use crate::interpreter::{Env, Value};
 use itertools::Itertools;
 use std::sync::Arc;
 
@@ -7,6 +6,8 @@ use rustyline::{
     Context,
 };
 use tokio::sync::Mutex;
+
+use crate::interpreter::{ContractInfo, Env, Value};
 
 pub(crate) struct MyCompleter {
     filename_completer: FilenameCompleter,
@@ -35,7 +36,7 @@ fn is_completing_path(line: &str, pos: usize) -> bool {
 }
 
 fn get_current_word(line: &str, pos: usize) -> &str {
-    let start = line[..pos].rfind(' ').map_or(0, |i| i + 1);
+    let start = line[..pos].rfind(&[' ', '(', ',']).map_or(0, |i| i + 1);
     &line[start..pos]
 }
 
@@ -82,7 +83,7 @@ impl rustyline::completion::Completer for MyCompleter {
                 .collect_tuple()
                 .unwrap_or_default();
 
-            if let Some(Value::Contract(_, _, abi)) = env.get_var(receiver) {
+            if let Some(Value::Contract(ContractInfo(_, _, abi))) = env.get_var(receiver) {
                 let completions = abi
                     .functions
                     .iter()

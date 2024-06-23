@@ -3,14 +3,21 @@ use alloy::{
     json_abi::JsonAbi,
     primitives::{Address, U256},
 };
+use anyhow::bail;
 use std::fmt::{self, Display, Formatter};
+
+use super::functions::Function;
+
+#[derive(Debug, Clone)]
+pub struct ContractInfo(pub String, pub Address, pub JsonAbi);
 
 #[derive(Debug, Clone)]
 pub enum Value {
     Uint(U256),
     Str(String),
     Addr(Address),
-    Contract(String, Address, JsonAbi),
+    Contract(ContractInfo),
+    Func(Function),
 }
 
 unsafe impl std::marker::Send for Value {}
@@ -21,7 +28,10 @@ impl Display for Value {
             Value::Uint(n) => write!(f, "{}", n),
             Value::Addr(a) => write!(f, "{}", a.to_checksum(None)),
             Value::Str(s) => write!(f, "\"{}\"", s),
-            Value::Contract(name, addr, _) => write!(f, "{}({})", name, addr.to_checksum(None)),
+            Value::Contract(ContractInfo(name, addr, _)) => {
+                write!(f, "{}({})", name, addr.to_checksum(None))
+            }
+            Value::Func(func) => write!(f, "{}", func),
         }
     }
 }
@@ -34,7 +44,10 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::Uint(n) => alloy::dyn_abi::DynSolValue::Uint(*n, 256),
             Value::Str(s) => alloy::dyn_abi::DynSolValue::String(s.clone()),
             Value::Addr(a) => alloy::dyn_abi::DynSolValue::Address(*a),
-            Value::Contract(_, addr, _) => alloy::dyn_abi::DynSolValue::Address(*addr),
+            Value::Contract(ContractInfo(_, addr, _)) => {
+                alloy::dyn_abi::DynSolValue::Address(*addr)
+            }
+            Value::Func(_) => bail!("cannot convert function to Solidity type"),
         };
         Ok(v)
     }
