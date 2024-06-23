@@ -1,7 +1,8 @@
 // use alloy::abi::Token;
 use alloy::{
+    hex,
     json_abi::JsonAbi,
-    primitives::{Address, I256, U256},
+    primitives::{Address, B256, I256, U256},
 };
 use anyhow::bail;
 use std::fmt::{self, Display, Formatter};
@@ -16,6 +17,7 @@ pub enum Value {
     Int(I256),
     Uint(U256),
     Str(String),
+    FixBytes(B256, usize),
     Addr(Address),
     Contract(ContractInfo),
     Func(Function),
@@ -30,6 +32,10 @@ impl Display for Value {
             Value::Uint(n) => write!(f, "{}", n),
             Value::Addr(a) => write!(f, "{}", a.to_checksum(None)),
             Value::Str(s) => write!(f, "\"{}\"", s),
+            Value::FixBytes(w, s) => {
+                let bytes = w[..*s].to_vec();
+                write!(f, "0x{}", hex::encode(bytes))
+            }
             Value::Contract(ContractInfo(name, addr, _)) => {
                 write!(f, "{}({})", name, addr.to_checksum(None))
             }
@@ -47,6 +53,7 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::Uint(n) => alloy::dyn_abi::DynSolValue::Uint(*n, 256),
             Value::Str(s) => alloy::dyn_abi::DynSolValue::String(s.clone()),
             Value::Addr(a) => alloy::dyn_abi::DynSolValue::Address(*a),
+            Value::FixBytes(w, s) => alloy::dyn_abi::DynSolValue::FixedBytes(*w, *s),
             Value::Contract(ContractInfo(_, addr, _)) => {
                 alloy::dyn_abi::DynSolValue::Address(*addr)
             }
@@ -64,6 +71,7 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
             alloy::dyn_abi::DynSolValue::Uint(n, _) => Ok(Value::Uint(n)),
             alloy::dyn_abi::DynSolValue::String(s) => Ok(Value::Str(s)),
             alloy::dyn_abi::DynSolValue::Address(a) => Ok(Value::Addr(a)),
+            alloy::dyn_abi::DynSolValue::FixedBytes(w, s) => Ok(Value::FixBytes(w, s)),
             v => Err(anyhow::anyhow!("{:?} not supported", v)),
         }
     }

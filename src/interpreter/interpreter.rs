@@ -1,4 +1,5 @@
 use std::ops::Neg;
+use std::process::Command;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -81,6 +82,9 @@ impl Interpreter {
             Directive::Env => self.list_vars().await,
             Directive::Rpc(rpc_url) => self.set_provider(&rpc_url),
             Directive::Debug => self.debug = !self.debug,
+            Directive::Exec(cmd, args) => {
+                Command::new(cmd).args(args).spawn()?;
+            }
         }
 
         Ok(None)
