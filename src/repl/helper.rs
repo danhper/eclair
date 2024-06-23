@@ -1,11 +1,12 @@
 use std::path::PathBuf;
-use std::{cell::RefCell, rc::Rc};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use rustyline::{
     sqlite_history::SQLiteHistory, validate::MatchingBracketValidator, Completer, Config, Editor,
     Helper, Highlighter, Hinter, Validator,
 };
+use tokio::sync::Mutex;
 
 use crate::interpreter::Env;
 use crate::repl::completer::MyCompleter;
@@ -24,7 +25,7 @@ pub(crate) struct MyHelper {
 }
 
 impl MyHelper {
-    pub fn new(env: Rc<RefCell<Env>>) -> Self {
+    pub fn new(env: Arc<Mutex<Env>>) -> Self {
         MyHelper {
             completer: MyCompleter::new(env),
             highlighter: (),
@@ -42,7 +43,7 @@ fn history_file() -> Option<PathBuf> {
     foundry_config::Config::foundry_dir().map(|p| p.join(SOREPL_HISTORY_FILE_NAME))
 }
 
-pub(crate) fn create_editor(env: Rc<RefCell<Env>>) -> Result<Editor<MyHelper, SQLiteHistory>> {
+pub(crate) fn create_editor(env: Arc<Mutex<Env>>) -> Result<Editor<MyHelper, SQLiteHistory>> {
     let config = Config::builder()
         .completion_type(rustyline::CompletionType::List)
         .auto_add_history(true)

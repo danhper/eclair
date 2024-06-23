@@ -2,7 +2,8 @@ use anyhow::Result;
 use rustyline::error::ReadlineError;
 use rustyline::sqlite_history::SQLiteHistory;
 use rustyline::Editor;
-use std::{cell::RefCell, rc::Rc};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use super::helper::{create_editor, MyHelper};
 use crate::interpreter::{Env, Interpreter};
@@ -14,18 +15,18 @@ pub struct Repl {
 }
 
 impl Repl {
-    pub fn create(env: Rc<RefCell<Env>>) -> Result<Self> {
+    pub async fn create(env: Arc<Mutex<Env>>) -> Result<Self> {
         let rl = create_editor(env.clone())?;
         let mut interpreter = Interpreter::new(env);
         let current_dir = std::env::current_dir()?;
         if FoundryProject::is_valid(&current_dir) {
             let project = FoundryProject::load(&current_dir)?;
-            interpreter.load_project(Box::new(project))?;
+            interpreter.load_project(Box::new(project)).await?;
         }
         Ok(Repl { rl, interpreter })
     }
 
-    pub fn run(&mut self) {
+    pub async fn run(&mut self) {
         loop {
             let p = ">> ";
             self.rl
@@ -34,7 +35,7 @@ impl Repl {
                 .set_prompt(&format!("\x1b[1;32m{p}\x1b[0m"));
             let readline = self.rl.readline(p);
             match readline {
-                Ok(line) => self.process_line(line.trim()),
+                Ok(line) => self.process_line(line.trim()).await,
                 Err(ReadlineError::Interrupted) => break,
                 Err(ReadlineError::Eof) => break,
                 Err(err) => {
@@ -45,11 +46,11 @@ impl Repl {
         }
     }
 
-    fn process_line(&mut self, line: &str) {
+    async fn process_line(&mut self, line: &str) {
         if line.is_empty() {
             return;
         }
-        match self.interpreter.evaluate_line(line.trim()) {
+        match self.interpreter.evaluate_line(line.trim()).await {
             Ok(None) => (),
             Ok(Some(result)) => println!("{}", result),
             Err(e) => println!("Error: {:?}", e),
