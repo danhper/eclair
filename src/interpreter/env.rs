@@ -1,13 +1,11 @@
 use std::collections::HashMap;
 
-use alloy::json_abi::JsonAbi;
-
-use super::Value;
+use super::{types::Type, Value};
 
 #[derive(Debug)]
 pub struct Env {
     variables: HashMap<String, Value>,
-    types: HashMap<String, JsonAbi>,
+    types: HashMap<String, Type>,
 }
 
 unsafe impl std::marker::Send for Env {}
@@ -20,11 +18,11 @@ impl Env {
         }
     }
 
-    pub fn set_type(&mut self, name: &str, abi: JsonAbi) {
-        self.types.insert(name.to_string(), abi);
+    pub fn set_type(&mut self, name: &str, type_: Type) {
+        self.types.insert(name.to_string(), type_);
     }
 
-    pub fn get_type(&self, name: &str) -> Option<&JsonAbi> {
+    pub fn get_type(&self, name: &str) -> Option<&Type> {
         self.types.get(name)
     }
 

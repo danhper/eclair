@@ -1,7 +1,7 @@
 // use alloy::abi::Token;
 use alloy::{
     json_abi::JsonAbi,
-    primitives::{Address, U256},
+    primitives::{Address, I256, U256},
 };
 use anyhow::bail;
 use std::fmt::{self, Display, Formatter};
@@ -13,6 +13,7 @@ pub struct ContractInfo(pub String, pub Address, pub JsonAbi);
 
 #[derive(Debug, Clone)]
 pub enum Value {
+    Int(I256),
     Uint(U256),
     Str(String),
     Addr(Address),
@@ -25,6 +26,7 @@ unsafe impl std::marker::Send for Value {}
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
+            Value::Int(n) => write!(f, "{}", n),
             Value::Uint(n) => write!(f, "{}", n),
             Value::Addr(a) => write!(f, "{}", a.to_checksum(None)),
             Value::Str(s) => write!(f, "\"{}\"", s),
@@ -41,6 +43,7 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
 
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
         let v = match value {
+            Value::Int(n) => alloy::dyn_abi::DynSolValue::Int(*n, 256),
             Value::Uint(n) => alloy::dyn_abi::DynSolValue::Uint(*n, 256),
             Value::Str(s) => alloy::dyn_abi::DynSolValue::String(s.clone()),
             Value::Addr(a) => alloy::dyn_abi::DynSolValue::Address(*a),

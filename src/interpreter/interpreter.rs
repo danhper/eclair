@@ -1,11 +1,12 @@
-use alloy::hex::FromHex;
-use alloy::providers::{ProviderBuilder, RootProvider};
-use alloy::transports::http::{Client, Http};
+use std::ops::Neg;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use alloy::primitives::{Address, U256};
+use alloy::hex::FromHex;
+use alloy::primitives::{Address, I256, U256};
+use alloy::providers::{ProviderBuilder, RootProvider};
+use alloy::transports::http::{Client, Http};
 use anyhow::{anyhow, bail, Result};
 use futures::future::{BoxFuture, FutureExt};
 use solang_parser::pt::{Expression, Statement};
@@ -40,17 +41,20 @@ impl Interpreter {
 
     pub async fn load_project(&mut self, project: Box<dyn Project>) -> Result<()> {
         let mut env = self.env.lock().await;
-        for contract_name in project.contract_names() {
-            let contract = project.get_contract(&contract_name);
-            env.set_type(&contract_name, contract.clone());
+        for contract_name in project.contract_names().iter() {
+            let contract = project.get_contract(contract_name);
+            env.set_type(
+                contract_name,
+                Type::Contract(contract_name.clone(), contract.clone()),
+            );
         }
         Ok(())
     }
 
     pub async fn list_vars(&self) {
         let env = self.env.lock().await;
-        for k in env.list_vars() {
-            println!("{}: {}", k, env.get_var(&k).unwrap());
+        for k in env.list_vars().iter() {
+            println!("{}: {}", k, env.get_var(k).unwrap());
         }
     }
 
@@ -122,6 +126,12 @@ impl Interpreter {
                 }
                 Expression::StringLiteral(strs) => Ok(Value::Str(strs[0].string.clone())),
 
+                Expression::Negate(_, expr) => match self.evaluate_expression(expr).await? {
+                    Value::Int(n) => Ok(Value::Int(n.neg())),
+                    Value::Uint(n) => Ok(Value::Int(I256::from_raw(n).neg())),
+                    v => bail!("invalid type for negate, expected uint, got {}", v),
+                },
+
                 Expression::Assign(_, var, expr) => {
                     let id = expr_as_var(&var)?;
                     let result = self.evaluate_expression(expr).await?;
@@ -135,9 +145,8 @@ impl Interpreter {
                     let env = self.env.lock().await;
                     if let Some(result) = env.get_var(&id) {
                         Ok(result.clone())
-                    } else if let Some(result) = env.get_type(&id) {
-                        let type_ = Type::Contract(id.clone(), result.clone());
-                        Ok(Value::Func(Function::Cast(type_)))
+                    } else if let Some(type_) = env.get_type(&id) {
+                        Ok(Value::Func(Function::Cast(type_.clone())))
                     } else {
                         bail!("{} is not defined", id);
                     }
@@ -152,11 +161,32 @@ impl Interpreter {
                     }
                 }
 
-                Expression::Add(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "+").await,
-                Expression::Subtract(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "-").await,
-                Expression::Multiply(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "*").await,
-                Expression::Divide(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "/").await,
-                Expression::Modulo(_, lhs, rhs) => self.eval_binop(&lhs, &rhs, "%").await,
+                Expression::Add(_, lhs, rhs) => self._eval_binop_expr(lhs, rhs, "+").await,
+                Expression::Subtract(_, lhs, rhs) => self._eval_binop_expr(lhs, rhs, "-").await,
+                Expression::Multiply(_, lhs, rhs) => self._eval_binop_expr(lhs, rhs, "*").await,
+                Expression::Divide(_, lhs, rhs) => self._eval_binop_expr(lhs, rhs, "/").await,
+                Expression::Modulo(_, lhs, rhs) => self._eval_binop_expr(lhs, rhs, "%").await,
+                Expression::Power(_, lhs, rhs) => {
+                    let left = self.evaluate_expression(lhs).await?;
+                    let right = self.evaluate_expression(rhs).await?;
+                    match (&left, &right) {
+                        (Value::Uint(l), Value::Uint(r)) => Ok(Value::Uint(l.pow(*r))),
+                        (Value::Int(l), Value::Uint(r)) => Ok(Value::Int(l.pow(*r))),
+                        (Value::Uint(l), Value::Int(r)) => {
+                            if r.is_negative() {
+                                bail!("exponentiation with negative exponent")
+                            }
+                            Ok(Value::Uint(l.pow(r.unchecked_into())))
+                        }
+                        (Value::Int(l), Value::Int(r)) => {
+                            if r.is_negative() {
+                                bail!("exponentiation with negative exponent")
+                            }
+                            Ok(Value::Int(l.pow(r.unchecked_into())))
+                        }
+                        _ => bail!("{} not supported for {} and {}", "^", left, right),
+                    }
+                }
 
                 Expression::FunctionCall(_, func_expr, args_) => {
                     let func = match self.evaluate_expression(func_expr).await? {
@@ -164,8 +194,8 @@ impl Interpreter {
                         v => bail!("invalid type, expected function, got {}", v),
                     };
                     let mut args = vec![];
-                    for arg in args_ {
-                        args.push(self.evaluate_expression(Box::new(arg)).await?);
+                    for arg in args_.iter() {
+                        args.push(self.evaluate_expression(Box::new(arg.clone())).await?);
                     }
                     let mut env = self.env.lock().await;
                     func.execute(&args, &mut env, &self.provider).await
@@ -188,24 +218,47 @@ impl Interpreter {
         .boxed()
     }
 
-    async fn eval_binop(
+    async fn _eval_binop_expr(
         &mut self,
-        lexpr: &Expression,
-        rexpr: &Expression,
+        lexpr: Box<Expression>,
+        rexpr: Box<Expression>,
         op: &str,
     ) -> Result<Value> {
-        let lhs = self.evaluate_expression(Box::new(lexpr.clone())).await?;
-        let rhs = self.evaluate_expression(Box::new(rexpr.clone())).await?;
+        let lhs = self.evaluate_expression(lexpr).await?;
+        let rhs = self.evaluate_expression(rexpr).await?;
         match (&lhs, &rhs) {
-            (Value::Uint(l), Value::Uint(r)) => match op {
-                "+" => Ok(Value::Uint(l + r)),
-                "-" => Ok(Value::Uint(l - r)),
-                "*" => Ok(Value::Uint(l * r)),
-                "/" => Ok(Value::Uint(l / r)),
-                "%" => Ok(Value::Uint(l % r)),
-                _ => bail!("{} not supported", op),
-            },
+            (Value::Uint(l), Value::Uint(r)) => self._eval_bin_op(*l, *r, op).map(Value::Uint),
+            (Value::Int(_), Value::Uint(_))
+            | (Value::Uint(_), Value::Int(_))
+            | (Value::Int(_), Value::Int(_)) => {
+                let (l, r) = match (lhs, rhs) {
+                    (Value::Int(l), Value::Int(r)) => (l, r),
+                    (Value::Uint(l), Value::Int(r)) => (I256::from_raw(l), r),
+                    (Value::Int(l), Value::Uint(r)) => (l, I256::from_raw(r)),
+                    _ => unreachable!(),
+                };
+                self._eval_bin_op(l, r, op).map(Value::Int)
+            }
             _ => bail!("{} not supported for {} and {}", op, lhs, rhs),
+        }
+    }
+
+    fn _eval_bin_op<T>(&self, l: T, r: T, op: &str) -> Result<T>
+    where
+        T: std::ops::Add<Output = T>
+            + std::ops::Sub<Output = T>
+            + std::ops::Mul<Output = T>
+            + std::ops::Div<Output = T>
+            + std::ops::Rem<Output = T>
+            + std::fmt::Display,
+    {
+        match op {
+            "+" => Ok(l + r),
+            "-" => Ok(l - r),
+            "*" => Ok(l * r),
+            "/" => Ok(l / r),
+            "%" => Ok(l % r),
+            _ => bail!("{} not supported for {} and {}", op, l, r),
         }
     }
 }
