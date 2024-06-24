@@ -1,10 +1,12 @@
 // use alloy::abi::Token;
 use alloy::{
+    dyn_abi::DynSolValue,
     hex,
     json_abi::JsonAbi,
     primitives::{Address, B256, I256, U256},
 };
-use anyhow::bail;
+use anyhow::{bail, Result};
+use itertools::Itertools;
 use std::fmt::{self, Display, Formatter};
 
 use super::functions::Function;
@@ -21,7 +23,21 @@ pub enum Value {
     FixBytes(B256, usize),
     Addr(Address),
     Contract(ContractInfo),
+    Tuple(Vec<Value>),
+    Array(Vec<Value>),
     Func(Function),
+}
+
+fn _values_to_string(values: &[Value]) -> String {
+    values.iter().map(|v| format!("{}", v)).join(", ")
+}
+
+fn _values_to_dyn_sol_values(values: &[Value]) -> Result<Vec<DynSolValue>> {
+    values.iter().map(DynSolValue::try_from).collect()
+}
+
+fn _dyn_sol_values_to_values(values: Vec<DynSolValue>) -> Result<Vec<Value>> {
+    values.into_iter().map(Value::try_from).collect()
 }
 
 unsafe impl std::marker::Send for Value {}
@@ -38,6 +54,8 @@ impl Display for Value {
                 let bytes = w[..*s].to_vec();
                 write!(f, "0x{}", hex::encode(bytes))
             }
+            Value::Tuple(v) => write!(f, "({})", _values_to_string(v)),
+            Value::Array(v) => write!(f, "[{}]", _values_to_string(v)),
             Value::Contract(ContractInfo(name, addr, _)) => {
                 write!(f, "{}({})", name, addr.to_checksum(None))
             }
@@ -51,15 +69,15 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
 
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
         let v = match value {
-            Value::Bool(b) => alloy::dyn_abi::DynSolValue::Bool(*b),
-            Value::Int(n) => alloy::dyn_abi::DynSolValue::Int(*n, 256),
-            Value::Uint(n) => alloy::dyn_abi::DynSolValue::Uint(*n, 256),
-            Value::Str(s) => alloy::dyn_abi::DynSolValue::String(s.clone()),
-            Value::Addr(a) => alloy::dyn_abi::DynSolValue::Address(*a),
-            Value::FixBytes(w, s) => alloy::dyn_abi::DynSolValue::FixedBytes(*w, *s),
-            Value::Contract(ContractInfo(_, addr, _)) => {
-                alloy::dyn_abi::DynSolValue::Address(*addr)
-            }
+            Value::Bool(b) => DynSolValue::Bool(*b),
+            Value::Int(n) => DynSolValue::Int(*n, 256),
+            Value::Uint(n) => DynSolValue::Uint(*n, 256),
+            Value::Str(s) => DynSolValue::String(s.clone()),
+            Value::Addr(a) => DynSolValue::Address(*a),
+            Value::FixBytes(w, s) => DynSolValue::FixedBytes(*w, *s),
+            Value::Contract(ContractInfo(_, addr, _)) => DynSolValue::Address(*addr),
+            Value::Tuple(vs) => DynSolValue::Tuple(_values_to_dyn_sol_values(vs)?),
+            Value::Array(vs) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
             Value::Func(_) => bail!("cannot convert function to Solidity type"),
         };
         Ok(v)
@@ -71,11 +89,13 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
 
     fn try_from(value: alloy::dyn_abi::DynSolValue) -> Result<Self, Self::Error> {
         match value {
-            alloy::dyn_abi::DynSolValue::Bool(b) => Ok(Value::Bool(b)),
-            alloy::dyn_abi::DynSolValue::Uint(n, _) => Ok(Value::Uint(n)),
-            alloy::dyn_abi::DynSolValue::String(s) => Ok(Value::Str(s)),
-            alloy::dyn_abi::DynSolValue::Address(a) => Ok(Value::Addr(a)),
-            alloy::dyn_abi::DynSolValue::FixedBytes(w, s) => Ok(Value::FixBytes(w, s)),
+            DynSolValue::Bool(b) => Ok(Value::Bool(b)),
+            DynSolValue::Uint(n, _) => Ok(Value::Uint(n)),
+            DynSolValue::String(s) => Ok(Value::Str(s)),
+            DynSolValue::Address(a) => Ok(Value::Addr(a)),
+            DynSolValue::FixedBytes(w, s) => Ok(Value::FixBytes(w, s)),
+            DynSolValue::Tuple(vs) => _dyn_sol_values_to_values(vs).map(Value::Tuple),
+            DynSolValue::Array(vs) => _dyn_sol_values_to_values(vs).map(Value::Array),
             v => Err(anyhow::anyhow!("{:?} not supported", v)),
         }
     }
@@ -92,6 +112,8 @@ impl PartialEq for Value {
             (Value::Str(a), Value::Str(b)) => a == b,
             (Value::Addr(a), Value::Addr(b)) => a == b,
             (Value::FixBytes(a, _), Value::FixBytes(b, _)) => a == b,
+            (Value::Tuple(a), Value::Tuple(b)) => a == b,
+            (Value::Array(a), Value::Array(b)) => a == b,
             (Value::Contract(ContractInfo(_, a, _)), Value::Contract(ContractInfo(_, b, _))) => {
                 a == b
             }
@@ -111,6 +133,8 @@ impl PartialOrd for Value {
             (Value::Str(a), Value::Str(b)) => a.partial_cmp(b),
             (Value::Addr(a), Value::Addr(b)) => a.partial_cmp(b),
             (Value::FixBytes(a, _), Value::FixBytes(b, _)) => a.partial_cmp(b),
+            (Value::Tuple(a), Value::Tuple(b)) => a.partial_cmp(b),
+            (Value::Array(a), Value::Array(b)) => a.partial_cmp(b),
             (Value::Contract(ContractInfo(_, a, _)), Value::Contract(ContractInfo(_, b, _))) => {
                 a.partial_cmp(b)
             }

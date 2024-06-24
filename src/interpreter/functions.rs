@@ -90,10 +90,7 @@ impl Function {
         if return_values.len() == 1 {
             Ok(return_values.into_iter().next().unwrap())
         } else {
-            bail!(
-                "Multiple return values not supported yet: {:?}",
-                return_values
-            );
+            Ok(Value::Tuple(return_values))
         }
     }
 }

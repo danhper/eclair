@@ -257,6 +257,27 @@ impl Interpreter {
                     }
                 }
 
+                Expression::ArraySubscript(_, expr, subscript_opt) => {
+                    let lhs = self.evaluate_expression(expr).await?;
+                    match lhs {
+                        Value::Tuple(values) | Value::Array(values) => {
+                            let subscript = subscript_opt.ok_or(anyhow!(
+                                "tuples and arrays do not support empty subscript"
+                            ))?;
+                            let u256_index = match self.evaluate_expression(subscript).await? {
+                                Value::Uint(n) => n,
+                                Value::Int(n) => n.unchecked_into(),
+                                v => bail!("invalid type for subscript, expected int, got {}", v),
+                            };
+                            if u256_index.ge(&U256::from(values.len() as u64)) {
+                                bail!("index out of bounds");
+                            }
+                            Ok(values[u256_index.to::<usize>()].clone())
+                        }
+                        v => bail!("invalid type for subscript, expected tuple, got {}", v),
+                    }
+                }
+
                 Expression::Add(_, lhs, rhs) => self._eval_binop_expr(lhs, rhs, "+").await,
                 Expression::Subtract(_, lhs, rhs) => self._eval_binop_expr(lhs, rhs, "-").await,
                 Expression::Multiply(_, lhs, rhs) => self._eval_binop_expr(lhs, rhs, "*").await,
