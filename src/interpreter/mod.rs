@@ -1,3 +1,4 @@
+mod builtin_methods;
 mod directive;
 mod env;
 mod functions;

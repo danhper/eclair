@@ -15,6 +15,7 @@ use solang_parser::pt::{Expression, Statement};
 
 use crate::project::types::Project;
 
+use super::builtin_methods::BuiltinMethod;
 use super::functions::Function;
 use super::types::Type;
 use super::{directive::Directive, env::Env, parsing, utils::expr_as_var, value::Value};
@@ -253,7 +254,14 @@ impl Interpreter {
                         Value::Contract(c) => {
                             Ok(Value::Func(Function::ContractCall(c, method.name.clone())))
                         }
-                        v => bail!("invalid type for receiver, expected contract, got {}", v),
+                        v => {
+                            let method = BuiltinMethod::new(&v, &method.name)?;
+                            if method.is_property() {
+                                Ok(method.execute(&[], &self.provider).await?)
+                            } else {
+                                Ok(Value::Func(Function::Method(method)))
+                            }
+                        }
                     }
                 }
 

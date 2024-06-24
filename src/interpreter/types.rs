@@ -1,18 +1,20 @@
 use std::fmt::Display;
 
 use alloy::json_abi::JsonAbi;
+use itertools::Itertools;
 
 #[derive(Debug, Clone)]
 pub enum Type {
     Address,
     Bool,
-    Int(u16),
-    Uint(u16),
-    Bytes,
+    Int(usize),
+    Uint(usize),
+    FixBytes(usize),
     String,
     Array(Box<Type>),
     Tuple(Vec<Type>),
     Contract(String, JsonAbi),
+    Function,
 }
 
 impl Display for Type {
@@ -22,20 +24,15 @@ impl Display for Type {
             Type::Bool => write!(f, "bool"),
             Type::Int(size) => write!(f, "int{}", size),
             Type::Uint(size) => write!(f, "uint{}", size),
-            Type::Bytes => write!(f, "bytes"),
+            Type::FixBytes(size) => write!(f, "bytes{}", size),
             Type::String => write!(f, "string"),
             Type::Array(t) => write!(f, "{}[]", t),
             Type::Tuple(t) => {
-                write!(f, "(")?;
-                for (i, t) in t.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", t)?;
-                }
-                write!(f, ")")
+                let items = t.iter().map(|v| format!("{}", v)).join(", ");
+                write!(f, "({})", items)
             }
             Type::Contract(name, _) => write!(f, "{}", name),
+            Type::Function => write!(f, "function"),
         }
     }
 }

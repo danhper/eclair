@@ -7,12 +7,13 @@ use alloy::{
 };
 use anyhow::{bail, Result};
 
-use super::{types::Type, value::ContractInfo, Env, Value};
+use super::{builtin_methods::BuiltinMethod, types::Type, value::ContractInfo, Env, Value};
 
 #[derive(Debug, Clone)]
 pub enum Function {
     Cast(Type),
     ContractCall(ContractInfo, String),
+    Method(BuiltinMethod),
 }
 
 impl Display for Function {
@@ -38,6 +39,7 @@ impl Display for Function {
                     arg_types.join(",")
                 )
             }
+            Function::Method(m) => write!(f, "{}", m),
         }
     }
 }
@@ -55,6 +57,7 @@ impl Function {
                 self._execute_contract_call(contract_info, func_name, args, provider)
                     .await
             }
+            Function::Method(m) => m.execute(args, provider).await,
         }
     }
 

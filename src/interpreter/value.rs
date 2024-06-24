@@ -9,7 +9,7 @@ use anyhow::{bail, Result};
 use itertools::Itertools;
 use std::fmt::{self, Display, Formatter};
 
-use super::functions::Function;
+use super::{functions::Function, types::Type};
 
 #[derive(Debug, Clone)]
 pub struct ContractInfo(pub String, pub Address, pub JsonAbi);
@@ -139,6 +139,43 @@ impl PartialOrd for Value {
                 a.partial_cmp(b)
             }
             _ => None,
+        }
+    }
+}
+
+impl Value {
+    pub fn get_type(&self) -> Type {
+        match self {
+            Value::Bool(_) => Type::Bool,
+            Value::Int(_) => Type::Int(256),
+            Value::Uint(_) => Type::Uint(256),
+            Value::Str(_) => Type::String,
+            Value::Addr(_) => Type::Address,
+            Value::FixBytes(_, s) => Type::FixBytes(*s),
+            Value::Tuple(vs) => Type::Tuple(vs.iter().map(Value::get_type).collect()),
+            Value::Array(vs) => {
+                let t = vs.iter().map(Value::get_type).next().unwrap_or(Type::Bool);
+                Type::Array(Box::new(t))
+            }
+            Value::Contract(ContractInfo(name, _, abi)) => {
+                Type::Contract(name.clone(), abi.clone())
+            }
+            Value::Func(_) => Type::Function,
+        }
+    }
+
+    pub fn as_address(&self) -> Result<Address> {
+        match self {
+            Value::Addr(addr) => Ok(*addr),
+            _ => bail!("cannot convert {} to address", self.get_type()),
+        }
+    }
+
+    pub fn to_i32(&self) -> Result<i32> {
+        match self {
+            Value::Int(n) => Ok(n.as_i32()),
+            Value::Uint(n) => Ok(n.to()),
+            _ => bail!("cannot convert {} to i32", self.get_type()),
         }
     }
 }
