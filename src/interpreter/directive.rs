@@ -2,7 +2,8 @@ use anyhow::Result;
 
 pub enum Directive {
     Env,
-    Rpc(String),
+    ShowRpc,
+    SetRpc(String),
     Debug,
     Exec(String, Vec<String>),
 }
@@ -17,17 +18,18 @@ impl Directive {
 
     pub fn parse(line: &str) -> Result<Self> {
         let mut parts = line.split_whitespace();
-        match parts.next() {
-            Some("!env") => Ok(Directive::Env),
-            Some("!rpc") => {
+        let directive = parts.next().ok_or(anyhow::anyhow!("Empty directive"))?;
+        match directive {
+            "env" => Ok(Directive::Env),
+            "rpc" => {
                 let url = parts.next().unwrap_or_default().to_string();
                 if url.is_empty() {
-                    return Err(anyhow::anyhow!("!rpc directive requires a URL"));
+                    return Ok(Directive::ShowRpc);
                 }
-                Ok(Directive::Rpc(url))
+                Ok(Directive::SetRpc(url))
             }
-            Some("!debug") => Ok(Directive::Debug),
-            Some("!exec") => {
+            "debug" => Ok(Directive::Debug),
+            "exec" | "e" => {
                 let cmd = parts.next().unwrap_or_default().to_string();
                 if cmd.is_empty() {
                     return Err(anyhow::anyhow!("!exec directive requires a command"));

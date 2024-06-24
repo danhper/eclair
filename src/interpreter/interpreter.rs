@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use alloy::hex::FromHex;
 use alloy::primitives::{Address, I256, U256};
-use alloy::providers::{ProviderBuilder, RootProvider};
+use alloy::providers::{Provider, ProviderBuilder, RootProvider};
 use alloy::transports::http::{Client, Http};
 use anyhow::{anyhow, bail, Result};
 use futures::future::{BoxFuture, FutureExt};
@@ -31,13 +31,13 @@ unsafe impl std::marker::Send for Interpreter {}
 unsafe impl Sync for Interpreter {}
 
 impl Interpreter {
-    pub fn new(env: Arc<Mutex<Env>>) -> Self {
-        let rpc_url = "http://localhost:8545".parse().unwrap();
+    pub fn new(env: Arc<Mutex<Env>>, provider_url: &str, debug: bool) -> Self {
+        let rpc_url = provider_url.parse().unwrap();
         let provider = ProviderBuilder::new().on_http(rpc_url);
 
         Interpreter {
             env,
-            debug: false,
+            debug,
             provider: Arc::new(provider),
         }
     }
@@ -68,8 +68,8 @@ impl Interpreter {
     }
 
     pub async fn evaluate_line(&mut self, line: &str) -> Result<Option<Value>> {
-        if line.starts_with('!') {
-            if let Ok(directive) = Directive::parse(line) {
+        if let Some(directive_str) = line.strip_prefix('!') {
+            if let Ok(directive) = Directive::parse(directive_str) {
                 return self._evaluate_directive(directive).await;
             }
         }
@@ -83,7 +83,10 @@ impl Interpreter {
     async fn _evaluate_directive(&mut self, directive: Directive) -> Result<Option<Value>> {
         match directive {
             Directive::Env => self.list_vars().await,
-            Directive::Rpc(rpc_url) => self.set_provider(&rpc_url),
+            Directive::SetRpc(rpc_url) => self.set_provider(&rpc_url),
+            Directive::ShowRpc => {
+                println!("{}", self.provider.root().client().transport().url())
+            }
             Directive::Debug => self.debug = !self.debug,
             Directive::Exec(cmd, args) => {
                 Command::new(cmd).args(args).spawn()?;

@@ -1,17 +1,18 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
+use rustyline::history::FileHistory;
 use rustyline::{
-    highlight::Highlighter, sqlite_history::SQLiteHistory, validate::MatchingBracketValidator,
-    Completer, Config, Editor, Helper, Hinter, Validator,
+    highlight::Highlighter, validate::MatchingBracketValidator, Completer, Config, Editor, Helper,
+    Hinter, Validator,
 };
 use tokio::sync::Mutex;
 
 use crate::interpreter::Env;
 use crate::repl::completer::MyCompleter;
 
-const SOREPL_HISTORY_FILE_NAME: &str = ".sorepl_history.sqlite3";
+const SOREPL_HISTORY_FILE_NAME: &str = ".sorepl_history.txt";
 
 #[derive(Helper, Completer, Hinter, Validator)]
 pub(crate) struct MyHelper {
@@ -36,18 +37,17 @@ impl MyHelper {
     }
 }
 
-fn history_file() -> Option<PathBuf> {
+pub fn history_file() -> Option<PathBuf> {
     foundry_config::Config::foundry_dir().map(|p| p.join(SOREPL_HISTORY_FILE_NAME))
 }
 
-pub(crate) fn create_editor(env: Arc<Mutex<Env>>) -> Result<Editor<MyHelper, SQLiteHistory>> {
+pub(crate) fn create_editor(env: Arc<Mutex<Env>>) -> Result<Editor<MyHelper, FileHistory>> {
     let config = Config::builder()
         .completion_type(rustyline::CompletionType::List)
         .auto_add_history(true)
         .build();
     let helper = MyHelper::new(env);
-    let history_file_path = history_file().ok_or(anyhow!("Could not find foundry directory"))?;
-    let history = rustyline::sqlite_history::SQLiteHistory::open(config, &history_file_path)?;
+    let history = FileHistory::default();
     let mut rl: Editor<MyHelper, _> = Editor::with_history(config, history)?;
 
     rl.set_helper(Some(helper));
