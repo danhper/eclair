@@ -1678,6 +1678,43 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
 
 [[package]]
+name = "chisel"
+version = "0.2.0"
+source = "git+https://github.com/foundry-rs/foundry?tag=nightly-5ac78a9cd4b94dc53d1fe5e0f42372b28b5a7559#5ac78a9cd4b94dc53d1fe5e0f42372b28b5a7559"
+dependencies = [
+ "alloy-dyn-abi",
+ "alloy-json-abi",
+ "alloy-primitives",
+ "alloy-rpc-types 0.1.0",
+ "clap",
+ "dirs",
+ "eyre",
+ "forge-fmt",
+ "foundry-block-explorers",
+ "foundry-cli",
+ "foundry-common",
+ "foundry-compilers",
+ "foundry-config",
+ "foundry-evm",
+ "once_cell",
+ "regex",
+ "reqwest",
+ "revm",
+ "rustyline 12.0.0",
+ "semver 1.0.23",
+ "serde",
+ "serde_json",
+ "solang-parser",
+ "strum",
+ "tikv-jemallocator",
+ "time",
+ "tokio",
+ "tracing",
+ "vergen",
+ "yansi",
+]
+
+[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1732,11 +1769,22 @@ checksum = "4b82cf0babdbd58558212896d1a4272303a57bdb245c2bf1147185fb45640e70"
 
 [[package]]
 name = "clipboard-win"
+version = "4.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7191c27c2357d9b7ef96baac1773290d4ca63b24205b82a3fd8a0637afcf0362"
+dependencies = [
+ "error-code 2.3.1",
+ "str-buf",
+ "winapi",
+]
+
+[[package]]
+name = "clipboard-win"
 version = "5.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79f4473f5144e20d9aceaf2972478f06ddf687831eafeeb434fbaf0acc4144ad"
 dependencies = [
- "error-code",
+ "error-code 3.2.0",
 ]
 
 [[package]]
@@ -2372,6 +2420,16 @@ dependencies = [
 
 [[package]]
 name = "error-code"
+version = "2.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64f18991e7bf11e7ffee451b5318b5c1a73c52d0d0ada6e5a3017c8c1ced6a21"
+dependencies = [
+ "libc",
+ "str-buf",
+]
+
+[[package]]
+name = "error-code"
 version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0474425d51df81997e2f90a21591180b38eccf27292d755f3e30750225c175b"
@@ -2473,6 +2531,17 @@ dependencies = [
  "arrayvec",
  "auto_impl",
  "bytes",
+]
+
+[[package]]
+name = "fd-lock"
+version = "3.0.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef033ed5e9bad94e55838ca0ca906db0e043f517adda0c8b79c7a8c66c93c1b5"
+dependencies = [
+ "cfg-if",
+ "rustix",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2749,6 +2818,7 @@ dependencies = [
  "cfg-if",
  "dirs",
  "dunce",
+ "fs_extra",
  "futures-util",
  "home",
  "itertools 0.12.1",
@@ -2756,6 +2826,7 @@ dependencies = [
  "memmap2",
  "once_cell",
  "path-slash",
+ "rand",
  "rayon",
  "regex",
  "semver 1.0.23",
@@ -2765,6 +2836,7 @@ dependencies = [
  "solang-parser",
  "svm-rs",
  "svm-rs-builds",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",
@@ -3018,6 +3090,12 @@ dependencies = [
  "rustix",
  "windows-sys 0.52.0",
 ]
+
+[[package]]
+name = "fs_extra"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "funty"
@@ -4216,6 +4294,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "num_threads"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "number_prefix"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5338,14 +5425,37 @@ dependencies = [
 
 [[package]]
 name = "rustyline"
+version = "12.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "994eca4bca05c87e86e15d90fc7a91d1be64b4482b38cb2d27474568fe7c9db9"
+dependencies = [
+ "bitflags 2.5.0",
+ "cfg-if",
+ "clipboard-win 4.5.0",
+ "fd-lock 3.0.13",
+ "home",
+ "libc",
+ "log",
+ "memchr",
+ "nix 0.26.4",
+ "radix_trie",
+ "scopeguard",
+ "unicode-segmentation",
+ "unicode-width",
+ "utf8parse",
+ "winapi",
+]
+
+[[package]]
+name = "rustyline"
 version = "14.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7803e8936da37efd9b6d4478277f4b2b9bb5cdb37a113e8d63222e58da647e63"
 dependencies = [
  "bitflags 2.5.0",
  "cfg-if",
- "clipboard-win",
- "fd-lock",
+ "clipboard-win 5.3.1",
+ "fd-lock 4.0.2",
  "home",
  "libc",
  "log",
@@ -5750,13 +5860,14 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "anyhow",
+ "chisel",
  "clap",
  "foundry-cli",
  "foundry-config",
  "futures",
  "glob",
  "itertools 0.13.0",
- "rustyline",
+ "rustyline 14.0.0",
  "serde_json",
  "solang-parser",
  "tokio",
@@ -5806,6 +5917,12 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "str-buf"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e08d8363704e6c71fc928674353e6b7c23dcea9d82d7012c8faf2a3a025f8d0"
 
 [[package]]
 name = "string_cache"
@@ -6036,6 +6153,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tikv-jemalloc-sys"
+version = "0.5.4+5.3.0-patched"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9402443cb8fd499b6f327e40565234ff34dbda27460c5b47db0db77443dd85d1"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
+name = "tikv-jemallocator"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "965fe0c26be5c56c94e38ba547249074803efd52adfb66de62107d95aab3eaca"
+dependencies = [
+ "libc",
+ "tikv-jemalloc-sys",
+]
+
+[[package]]
 name = "time"
 version = "0.3.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6043,7 +6180,9 @@ checksum = "5dfd88e563464686c916c7e46e623e520ddc6d79fa6641390f2e3fa86e83e885"
 dependencies = [
  "deranged",
  "itoa",
+ "libc",
  "num-conv",
+ "num_threads",
  "powerfmt",
  "serde",
  "time-core",
@@ -6111,6 +6250,7 @@ dependencies = [
  "libc",
  "mio",
  "num_cpus",
+ "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",
@@ -6584,6 +6724,18 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+
+[[package]]
+name = "vergen"
+version = "8.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e27d6bdd219887a9eadd19e1c34f32e47fa332301184935c6d9bca26f3cca525"
+dependencies = [
+ "anyhow",
+ "cfg-if",
+ "rustversion",
+ "time",
+]
 
 [[package]]
 name = "version_check"

@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use rustyline::{
-    sqlite_history::SQLiteHistory, validate::MatchingBracketValidator, Completer, Config, Editor,
-    Helper, Highlighter, Hinter, Validator,
+    highlight::Highlighter, sqlite_history::SQLiteHistory, validate::MatchingBracketValidator,
+    Completer, Config, Editor, Helper, Hinter, Validator,
 };
 use tokio::sync::Mutex;
 
@@ -13,12 +13,10 @@ use crate::repl::completer::MyCompleter;
 
 const SOREPL_HISTORY_FILE_NAME: &str = ".sorepl_history.sqlite3";
 
-#[derive(Helper, Completer, Hinter, Validator, Highlighter)]
+#[derive(Helper, Completer, Hinter, Validator)]
 pub(crate) struct MyHelper {
     #[rustyline(Completer)]
     completer: MyCompleter,
-    #[rustyline(Highlighter)]
-    highlighter: (),
     #[rustyline(Validator)]
     validator: MatchingBracketValidator,
     colored_prompt: String,
@@ -28,7 +26,6 @@ impl MyHelper {
     pub fn new(env: Arc<Mutex<Env>>) -> Self {
         MyHelper {
             completer: MyCompleter::new(env),
-            highlighter: (),
             colored_prompt: ">> ".to_owned(),
             validator: MatchingBracketValidator::new(),
         }
@@ -55,4 +52,10 @@ pub(crate) fn create_editor(env: Arc<Mutex<Env>>) -> Result<Editor<MyHelper, SQL
 
     rl.set_helper(Some(helper));
     Ok(rl)
+}
+
+impl Highlighter for MyHelper {
+    fn highlight<'l>(&self, line: &'l str, _pos: usize) -> std::borrow::Cow<'l, str> {
+        chisel::solidity_helper::SolidityHelper::highlight(line)
+    }
 }
