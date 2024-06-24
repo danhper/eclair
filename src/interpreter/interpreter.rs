@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::ops::Neg;
 use std::process::Command;
 use std::str::FromStr;
@@ -67,7 +68,9 @@ impl Interpreter {
 
     pub async fn evaluate_line(&mut self, line: &str) -> Result<Option<Value>> {
         if line.starts_with('!') {
-            return self.evaluate_directive(line).await;
+            if let Ok(directive) = Directive::parse(line) {
+                return self._evaluate_directive(directive).await;
+            }
         }
         let stmt = parsing::parse_statement(line)?;
         if self.debug {
@@ -76,8 +79,7 @@ impl Interpreter {
         self.evaluate_statement(&stmt).await
     }
 
-    pub async fn evaluate_directive(&mut self, line: &str) -> Result<Option<Value>> {
-        let directive = Directive::parse(line)?;
+    async fn _evaluate_directive(&mut self, directive: Directive) -> Result<Option<Value>> {
         match directive {
             Directive::Env => self.list_vars().await,
             Directive::Rpc(rpc_url) => self.set_provider(&rpc_url),
@@ -118,6 +120,7 @@ impl Interpreter {
     pub fn evaluate_expression(&mut self, expr: Box<Expression>) -> BoxFuture<'_, Result<Value>> {
         async move {
             match *expr {
+                Expression::BoolLiteral(_, b) => Ok(Value::Bool(b)),
                 Expression::NumberLiteral(_, n, decimals, _) => {
                     let mut parsed_n =
                         U256::from_str(&n).map_err(|e| anyhow!("{}", e.to_string()))?;
@@ -129,6 +132,95 @@ impl Interpreter {
                     Ok(Value::Uint(parsed_n))
                 }
                 Expression::StringLiteral(strs) => Ok(Value::Str(strs[0].string.clone())),
+
+                Expression::RationalNumberLiteral(_, whole, raw_fraction, raw_exponent, _) => {
+                    let mut n = if whole.is_empty() {
+                        U256::from(0)
+                    } else {
+                        U256::from_str(&whole).map_err(|e| anyhow!("{}", e.to_string()))?
+                    };
+                    let exponent = if raw_exponent.is_empty() {
+                        U256::from(0)
+                    } else {
+                        U256::from_str(&raw_exponent)?
+                    };
+                    n *= U256::from(10).pow(exponent);
+
+                    let fraction = if raw_fraction.is_empty() {
+                        U256::from(0)
+                    } else {
+                        U256::from_str(&raw_fraction)?
+                    };
+                    let decimals_count = if fraction.is_zero() {
+                        U256::from(0)
+                    } else {
+                        U256::from(fraction.log10() + 1)
+                    };
+                    if decimals_count > exponent {
+                        bail!("fraction has more digits than decimals");
+                    }
+                    let adjusted_fraction =
+                        fraction * U256::from(10).pow(exponent - decimals_count);
+                    n += adjusted_fraction;
+
+                    Ok(Value::Uint(n))
+                }
+
+                Expression::And(_, lexpr, rexpr) => {
+                    let lhs = self.evaluate_expression(lexpr).await?;
+                    if let Value::Bool(false) = lhs {
+                        return Ok(lhs);
+                    }
+                    let rhs = self.evaluate_expression(rexpr).await?;
+                    match (&lhs, &rhs) {
+                        (Value::Bool(a), Value::Bool(b)) => Ok(Value::Bool(*a && *b)),
+                        _ => bail!("expected booleans for &&, got {} and {}", lhs, rhs),
+                    }
+                }
+
+                Expression::Or(_, lexpr, rexpr) => {
+                    let lhs = self.evaluate_expression(lexpr).await?;
+                    if let Value::Bool(true) = lhs {
+                        return Ok(lhs);
+                    }
+                    let rhs = self.evaluate_expression(rexpr).await?;
+                    match (&lhs, &rhs) {
+                        (Value::Bool(a), Value::Bool(b)) => Ok(Value::Bool(*a || *b)),
+                        _ => bail!("expected booleans for ||, got {} and {}", lhs, rhs),
+                    }
+                }
+
+                Expression::Not(_, expr) => match self.evaluate_expression(expr).await? {
+                    Value::Bool(b) => Ok(Value::Bool(!b)),
+                    v => bail!("invalid type for not, expected bool, got {}", v),
+                },
+
+                Expression::Equal(_, lhs, rhs) => {
+                    self._eval_comparison(lhs, rhs, |o| o == Ordering::Equal)
+                        .await
+                }
+                Expression::NotEqual(_, lhs, rhs) => {
+                    self._eval_comparison(lhs, rhs, |o| o == Ordering::Equal)
+                        .await
+                }
+                Expression::Less(_, lhs, rhs) => {
+                    self._eval_comparison(lhs, rhs, |o| o == Ordering::Less)
+                        .await
+                }
+                Expression::LessEqual(_, lhs, rhs) => {
+                    self._eval_comparison(lhs, rhs, |o| o == Ordering::Less || o == Ordering::Equal)
+                        .await
+                }
+                Expression::More(_, lhs, rhs) => {
+                    self._eval_comparison(lhs, rhs, |o| o == Ordering::Greater)
+                        .await
+                }
+                Expression::MoreEqual(_, lhs, rhs) => {
+                    self._eval_comparison(lhs, rhs, |o| {
+                        o == Ordering::Greater || o == Ordering::Equal
+                    })
+                    .await
+                }
 
                 Expression::Negate(_, expr) => match self.evaluate_expression(expr).await? {
                     Value::Int(n) => Ok(Value::Int(n.neg())),
@@ -220,6 +312,20 @@ impl Interpreter {
             }
         }
         .boxed()
+    }
+
+    async fn _eval_comparison(
+        &mut self,
+        lexpr: Box<Expression>,
+        rexpr: Box<Expression>,
+        op: fn(Ordering) -> bool,
+    ) -> Result<Value> {
+        let lhs = self.evaluate_expression(lexpr).await?;
+        let rhs = self.evaluate_expression(rexpr).await?;
+        match lhs.partial_cmp(&rhs) {
+            Some(ordering) => Ok(Value::Bool(op(ordering))),
+            None => bail!("cannot compare {} and {}", lhs, rhs),
+        }
     }
 
     async fn _eval_binop_expr(
