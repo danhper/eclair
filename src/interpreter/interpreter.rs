@@ -56,8 +56,19 @@ impl Interpreter {
 
     pub async fn list_vars(&self) {
         let env = self.env.lock().await;
-        for k in env.list_vars().iter() {
+        let mut vars = env.list_vars();
+        vars.sort();
+        for k in vars.iter() {
             println!("{}: {}", k, env.get_var(k).unwrap());
+        }
+    }
+
+    pub async fn list_types(&self) {
+        let env = self.env.lock().await;
+        let mut types = env.list_types();
+        types.sort();
+        for k in types.iter() {
+            println!("{}", k);
         }
     }
 
@@ -82,7 +93,8 @@ impl Interpreter {
 
     async fn _evaluate_directive(&mut self, directive: Directive) -> Result<Option<Value>> {
         match directive {
-            Directive::Env => self.list_vars().await,
+            Directive::ListVars => self.list_vars().await,
+            Directive::ListTypes => self.list_types().await,
             Directive::SetRpc(rpc_url) => self.set_provider(&rpc_url),
             Directive::ShowRpc => {
                 println!("{}", self.provider.root().client().transport().url())

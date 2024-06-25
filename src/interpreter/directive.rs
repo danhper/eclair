@@ -1,7 +1,8 @@
 use anyhow::Result;
 
 pub enum Directive {
-    Env,
+    ListVars,
+    ListTypes,
     ShowRpc,
     SetRpc(String),
     Debug,
@@ -10,7 +11,7 @@ pub enum Directive {
 
 impl Directive {
     pub fn all() -> Vec<String> {
-        ["!env", "!rpc", "!debug", "!exec"]
+        ["!types", "!vars", "!rpc", "!debug", "!exec"]
             .iter()
             .map(|s| s.to_string())
             .collect()
@@ -20,7 +21,8 @@ impl Directive {
         let mut parts = line.split_whitespace();
         let directive = parts.next().ok_or(anyhow::anyhow!("Empty directive"))?;
         match directive {
-            "env" => Ok(Directive::Env),
+            "vars" => Ok(Directive::ListVars),
+            "types" => Ok(Directive::ListTypes),
             "rpc" => {
                 let url = parts.next().unwrap_or_default().to_string();
                 if url.is_empty() {
