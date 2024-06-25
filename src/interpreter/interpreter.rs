@@ -260,7 +260,7 @@ impl Interpreter {
                     let result = self.evaluate_expression(expr).await?;
                     let mut env = self.env.lock().await;
                     env.set_var(&id, result.clone());
-                    Ok(result)
+                    Ok(Value::Null)
                 }
 
                 Expression::Variable(var) => {

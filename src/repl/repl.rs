@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use super::helper::{create_editor, history_file, MyHelper};
 use super::Cli;
-use crate::interpreter::{Env, Interpreter};
+use crate::interpreter::{Env, Interpreter, Value};
 use crate::project::foundry::FoundryProject;
 
 pub struct Repl {
@@ -71,7 +71,7 @@ impl Repl {
             return;
         }
         match self.interpreter.evaluate_line(line.trim()).await {
-            Ok(None) => (),
+            Ok(None) | Ok(Some(Value::Null)) => (),
             Ok(Some(result)) => println!("{}", result),
             Err(e) => println!("Error: {:?}", e),
         }
