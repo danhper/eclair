@@ -11,7 +11,7 @@ use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use itertools::Itertools;
 
-use super::{types::Type, Env, Value};
+use super::{functions::Function, types::Type, Env, Value};
 
 fn common_to_decimals<T, F, G>(
     value: T,
@@ -61,8 +61,8 @@ fn to_decimals<T, F>(value: T, args: &[Value], func: F) -> Result<String>
 where
     F: Fn(T, Option<i32>, Option<i32>) -> String,
 {
-    let decimals = args.first().map(|v| v.to_i32()).transpose()?;
-    let precision = args.get(1).map(|v| v.to_i32()).transpose()?;
+    let decimals = args.first().map(|v| v.as_i32()).transpose()?;
+    let precision = args.get(1).map(|v| v.as_i32()).transpose()?;
     Ok(func(value, decimals, precision))
 }
 
@@ -70,11 +70,29 @@ async fn get_balance(addr: Address, provider: &RootProvider<Http<Client>>) -> Re
     Ok(provider.get_balance(addr).await?)
 }
 
-async fn concat_strings(string: String, args: &[Value]) -> Result<String> {
+fn concat_strings(string: String, args: &[Value]) -> Result<String> {
     if let Some(Value::Str(s)) = args.first() {
         Ok(format!("{}{}", string, s))
     } else {
         bail!("cannot concat {} with {:?}", string, args)
+    }
+}
+
+fn concat_arrays(arr: Vec<Value>, args: &[Value]) -> Result<Vec<Value>> {
+    if let Some(Value::Array(other)) = args.first() {
+        let mut new_arr = arr.clone();
+        new_arr.extend(other.clone());
+        Ok(new_arr)
+    } else {
+        bail!("cannot concat {:?} with {:?}", arr, args)
+    }
+}
+
+fn concat(value: &Value, args: &[Value]) -> Result<Value> {
+    match value {
+        Value::Str(s) => concat_strings(s.clone(), args).map(Value::Str),
+        Value::Array(arr) => concat_arrays(arr.clone(), args).map(Value::Array),
+        _ => bail!("cannot concat {}", value),
     }
 }
 
@@ -109,21 +127,23 @@ fn decode_calldata(name: &str, abi: &JsonAbi, args: &[Value]) -> Result<Value> {
 }
 
 fn map<'a>(
-    target: Vec<Value>,
+    target: &'a [Value],
     ty: Type,
-    args: Vec<Value>,
+    args: &'a [Value],
     env: &'a mut Env,
     provider: &'a RootProvider<Http<Client>>,
 ) -> BoxFuture<'a, Result<Value>> {
     async move {
-        let func = if let [Value::Func(f)] = &args[..] {
-            f
-        } else {
-            bail!("map function expects a single function as an argument")
-        };
+        let func_value = args
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("map function expects a single argument"))?;
         let mut values = vec![];
         for v in target {
-            let value = func.execute(&[v], env, provider).await?;
+            let value = match func_value {
+                Value::Func(func) => func.execute(&[v.clone()], env, provider).await?,
+                Value::TypeObject(type_) => type_.cast(v)?,
+                _ => bail!("map function expects a function or type as an argument"),
+            };
             values.push(value);
         }
         match ty {
@@ -131,6 +151,25 @@ fn map<'a>(
             Type::Array(_) => Ok(Value::Array(values)),
             _ => bail!("cannot map to type {}", ty),
         }
+    }
+    .boxed()
+}
+
+fn method_call<'a>(
+    name: &'a str,
+    args: &'a [Value],
+    env: &'a mut Env,
+    provider: &'a RootProvider<Http<Client>>,
+) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        let receiver = args
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("method call expects at least one argument"))?;
+        let method = match receiver {
+            Value::Contract(c) => Function::ContractCall(c.clone(), name.to_string()),
+            _ => Function::Builtin(BuiltinFunction::with_receiver(receiver, name)?),
+        };
+        method.execute(&args[1..], env, provider).await
     }
     .boxed()
 }
@@ -156,9 +195,10 @@ pub enum BuiltinFunction {
     Balance(Address),
     FormatFunc,
     Format(Box<Value>),
-    Concat(String),
+    Concat(Box<Value>),
     Decode(String, JsonAbi),
     Map(Vec<Value>, Type),
+    MethodCall(String),
     GetType,
 }
 
@@ -173,6 +213,7 @@ impl fmt::Display for BuiltinFunction {
                 let items = v.iter().map(|v| format!("{}", v)).join(", ");
                 write!(f, "{}.map", items)
             }
+            Self::MethodCall(name) => write!(f, ".{}", name),
             Self::GetType => write!(f, "type"),
             Self::FormatFunc => write!(f, "format"),
         }
@@ -190,9 +231,10 @@ impl BuiltinFunction {
 
     pub fn with_receiver(receiver: &Value, name: &str) -> Result<Self> {
         let method = match (receiver, name) {
+            (Value::This, method) => Self::MethodCall(method.to_string()),
             (Value::Addr(addr), "balance") => Self::Balance(*addr),
             (v, "format") => Self::Format(Box::new(v.clone())),
-            (Value::Str(s), "concat") => Self::Concat(s.clone()),
+            (v @ (Value::Str(_) | Value::Array(_)), "concat") => Self::Concat(Box::new(v.clone())),
             (Value::TypeObject(Type::Contract(name, abi)), "decode") => {
                 Self::Decode(name.clone(), abi.clone())
             }
@@ -200,13 +242,10 @@ impl BuiltinFunction {
                 values.clone(),
                 Type::Tuple(values.iter().map(Value::get_type).collect()),
             ),
-            (Value::Array(values), "map") => Self::Map(
-                values.clone(),
-                values
-                    .first()
-                    .map(Value::get_type)
-                    .unwrap_or(Type::Uint(256)),
-            ),
+            (Value::Array(values), "map") => {
+                let arr_type = values.first().map_or(Type::Uint(256), Value::get_type);
+                Self::Map(values.clone(), Type::Array(Box::new(arr_type)))
+            }
             _ => bail!("no method {} for type {}", name, receiver.get_type()),
         };
         Ok(method)
@@ -226,17 +265,11 @@ impl BuiltinFunction {
             Self::Balance(addr) => Ok(Value::Uint(get_balance(*addr, provider).await?)),
             Self::FormatFunc => format_func(args).map(Value::Str),
             Self::Format(v) => format(v, args).map(Value::Str),
-            Self::Concat(s) => concat_strings(s.clone(), args).await.map(Value::Str),
+            Self::Concat(v) => concat(v, args),
             Self::Decode(name, abi) => decode_calldata(name, abi, args),
+            Self::MethodCall(name) => method_call(name, args, env, provider).await,
             Self::Map(values, type_) => {
-                let result = map(
-                    values.clone(),
-                    type_.clone(),
-                    Vec::from(args),
-                    env,
-                    provider,
-                )
-                .await?;
+                let result = map(values, type_.clone(), args, env, provider).await?;
                 Ok(result)
             }
             Self::GetType => get_type(args).map(Value::TypeObject),

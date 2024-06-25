@@ -17,6 +17,7 @@ pub struct ContractInfo(pub String, pub Address, pub JsonAbi);
 #[derive(Debug, Clone)]
 pub enum Value {
     Null,
+    This,
     Bool(bool),
     Int(I256),
     Uint(U256),
@@ -49,6 +50,7 @@ impl Display for Value {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Value::Null => write!(f, "null"),
+            Value::This => write!(f, "this"),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Int(n) => write!(f, "{}", n),
             Value::Uint(n) => write!(f, "{}", n),
@@ -86,6 +88,7 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::Tuple(vs) => DynSolValue::Tuple(_values_to_dyn_sol_values(vs)?),
             Value::Array(vs) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
             Value::Null => bail!("cannot convert null to Solidity type"),
+            Value::This => bail!("cannot convert this to Solidity type"),
             Value::TypeObject(_) => bail!("cannot convert type objects to Solidity type"),
             Value::Func(_) => bail!("cannot convert function to Solidity type"),
         };
@@ -174,6 +177,7 @@ impl Value {
                 Type::Contract(name.clone(), abi.clone())
             }
             Value::Null => Type::Null,
+            Value::This => Type::This,
             Value::Func(_) => Type::Function,
             Value::TypeObject(type_) => type_.clone(),
         }
@@ -186,11 +190,19 @@ impl Value {
         }
     }
 
-    pub fn to_i32(&self) -> Result<i32> {
+    pub fn as_i32(&self) -> Result<i32> {
         match self {
             Value::Int(n) => Ok(n.as_i32()),
             Value::Uint(n) => Ok(n.to()),
             _ => bail!("cannot convert {} to i32", self.get_type()),
+        }
+    }
+
+    pub fn as_usize(&self) -> Result<usize> {
+        match self {
+            Value::Int(n) => Ok(n.as_usize()),
+            Value::Uint(n) => Ok(n.to()),
+            _ => bail!("cannot convert {} to usize", self.get_type()),
         }
     }
 }

@@ -9,6 +9,7 @@ use super::{ContractInfo, Value};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Null,
+    This,
     Address,
     Bool,
     Int(usize),
@@ -26,6 +27,7 @@ impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Null => write!(f, "null"),
+            Type::This => write!(f, "this"),
             Type::Address => write!(f, "address"),
             Type::Bool => write!(f, "bool"),
             Type::Int(size) => write!(f, "int{}", size),

@@ -266,7 +266,9 @@ impl Interpreter {
                 Expression::Variable(var) => {
                     let id = var.to_string();
                     let env = self.env.lock().await;
-                    if let Some(result) = env.get_var(&id) {
+                    if id == "_" {
+                        Ok(Value::This)
+                    } else if let Some(result) = env.get_var(&id) {
                         Ok(result.clone())
                     } else if let Some(type_) = env.get_type(&id) {
                         Ok(Value::TypeObject(type_.clone()))
@@ -301,18 +303,33 @@ impl Interpreter {
                             let subscript = subscript_opt.ok_or(anyhow!(
                                 "tuples and arrays do not support empty subscript"
                             ))?;
-                            let u256_index = match self.evaluate_expression(subscript).await? {
-                                Value::Uint(n) => n,
-                                Value::Int(n) => n.unchecked_into(),
-                                v => bail!("invalid type for subscript, expected int, got {}", v),
-                            };
-                            if u256_index.ge(&U256::from(values.len() as u64)) {
+                            let index = self.evaluate_expression(subscript).await?.as_usize()?;
+                            if index >= values.len() {
                                 bail!("index out of bounds");
                             }
-                            Ok(values[u256_index.to::<usize>()].clone())
+                            Ok(values[index].clone())
                         }
                         v => bail!("invalid type for subscript, expected tuple, got {}", v),
                     }
+                }
+
+                Expression::ArraySlice(_, arr_expr, start_expr, end_expr) => {
+                    let values = match self.evaluate_expression(arr_expr).await? {
+                        Value::Array(v) => v,
+                        v => bail!("invalid type for slice, expected tuple, got {}", v),
+                    };
+                    let start = match start_expr {
+                        Some(expr) => self.evaluate_expression(expr).await?.as_usize()?,
+                        None => 0,
+                    };
+                    let end = match end_expr {
+                        Some(expr) => self.evaluate_expression(expr).await?.as_usize()?,
+                        None => values.len(),
+                    };
+                    if end > values.len() {
+                        bail!("end index out of bounds");
+                    }
+                    Ok(Value::Array(values[start..end].to_vec()))
                 }
 
                 Expression::Add(_, lhs, rhs) => self._eval_binop_expr(lhs, rhs, "+").await,
