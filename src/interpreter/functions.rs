@@ -5,21 +5,19 @@ use alloy::{
     providers::RootProvider,
     transports::http::{Client, Http},
 };
-use anyhow::{bail, Result};
+use anyhow::Result;
 
-use super::{builtin_methods::BuiltinMethod, types::Type, value::ContractInfo, Env, Value};
+use super::{builtin_functions::BuiltinFunction, value::ContractInfo, Env, Value};
 
 #[derive(Debug, Clone)]
 pub enum Function {
-    Cast(Type),
     ContractCall(ContractInfo, String),
-    Method(BuiltinMethod),
+    Builtin(BuiltinFunction),
 }
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Function::Cast(t) => write!(f, "{}", t),
             Function::ContractCall(ContractInfo(name, addr, abi), func_name) => {
                 let arg_types = abi
                     .function(func_name)
@@ -39,7 +37,7 @@ impl Display for Function {
                     arg_types.join(",")
                 )
             }
-            Function::Method(m) => write!(f, "{}", m),
+            Function::Builtin(m) => write!(f, "{}", m),
         }
     }
 }
@@ -48,27 +46,15 @@ impl Function {
     pub async fn execute(
         &self,
         args: &[Value],
-        _env: &mut Env,
+        env: &mut Env,
         provider: &RootProvider<Http<Client>>,
     ) -> Result<Value> {
         match self {
-            Function::Cast(type_) => self._execute_cast(type_, args).await,
             Function::ContractCall(contract_info, func_name) => {
                 self._execute_contract_call(contract_info, func_name, args, provider)
                     .await
             }
-            Function::Method(m) => m.execute(args, provider).await,
-        }
-    }
-
-    async fn _execute_cast(&self, type_: &Type, args: &[Value]) -> Result<Value> {
-        match (type_, args) {
-            (Type::Contract(name, abi), [Value::Addr(addr)]) => Ok(Value::Contract(ContractInfo(
-                name.clone(),
-                *addr,
-                abi.clone(),
-            ))),
-            _ => bail!("Invalid arguments for contract cast"),
+            Function::Builtin(m) => m.execute(args, env, provider).await,
         }
     }
 

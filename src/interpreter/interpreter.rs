@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use alloy::hex::FromHex;
-use alloy::primitives::{Address, I256, U256};
+use alloy::primitives::{Address, B256, I256, U256};
 use alloy::providers::{Provider, ProviderBuilder, RootProvider};
 use alloy::transports::http::{Client, Http};
 use anyhow::{anyhow, bail, Result};
@@ -15,7 +15,7 @@ use solang_parser::pt::{Expression, Statement};
 
 use crate::project::types::Project;
 
-use super::builtin_methods::BuiltinMethod;
+use super::builtin_functions::BuiltinFunction;
 use super::functions::Function;
 use super::types::Type;
 use super::{directive::Directive, env::Env, parsing, utils::expr_as_var, value::Value};
@@ -137,6 +137,17 @@ impl Interpreter {
                 }
                 Expression::StringLiteral(strs) => Ok(Value::Str(strs[0].string.clone())),
 
+                Expression::HexNumberLiteral(_, n, _) => {
+                    let result = if n.len() == 42 {
+                        Value::Addr(Address::from_hex(n)?)
+                    } else if n.len() < 66 {
+                        Value::FixBytes(B256::from_hex(&n)?, 32)
+                    } else {
+                        Value::Bytes(Vec::from_hex(&n[2..])?)
+                    };
+                    Ok(result)
+                }
+
                 Expression::RationalNumberLiteral(_, whole, raw_fraction, raw_exponent, _) => {
                     let mut n = if whole.is_empty() {
                         U256::from(0)
@@ -246,7 +257,9 @@ impl Interpreter {
                     if let Some(result) = env.get_var(&id) {
                         Ok(result.clone())
                     } else if let Some(type_) = env.get_type(&id) {
-                        Ok(Value::Func(Function::Cast(type_.clone())))
+                        Ok(Value::TypeObject(type_.clone()))
+                    } else if let Ok(func) = BuiltinFunction::from_name(&id) {
+                        Ok(Value::Func(Function::Builtin(func)))
                     } else {
                         bail!("{} is not defined", id);
                     }
@@ -258,11 +271,12 @@ impl Interpreter {
                             Ok(Value::Func(Function::ContractCall(c, method.name.clone())))
                         }
                         v => {
-                            let method = BuiltinMethod::new(&v, &method.name)?;
+                            let method = BuiltinFunction::with_receiver(&v, &method.name)?;
+                            let mut env = self.env.lock().await;
                             if method.is_property() {
-                                Ok(method.execute(&[], &self.provider).await?)
+                                Ok(method.execute(&[], &mut env, &self.provider).await?)
                             } else {
-                                Ok(Value::Func(Function::Method(method)))
+                                Ok(Value::Func(Function::Builtin(method)))
                             }
                         }
                     }
@@ -317,27 +331,27 @@ impl Interpreter {
                 }
 
                 Expression::FunctionCall(_, func_expr, args_) => {
-                    let func = match self.evaluate_expression(func_expr).await? {
-                        Value::Func(f) => f,
-                        v => bail!("invalid type, expected function, got {}", v),
-                    };
                     let mut args = vec![];
                     for arg in args_.iter() {
                         args.push(self.evaluate_expression(Box::new(arg.clone())).await?);
                     }
-                    let mut env = self.env.lock().await;
-                    func.execute(&args, &mut env, &self.provider).await
+                    match self.evaluate_expression(func_expr).await? {
+                        Value::Func(f) => {
+                            let mut env = self.env.lock().await;
+                            f.execute(&args, &mut env, &self.provider).await
+                        }
+                        Value::TypeObject(type_) => {
+                            if let [arg] = &args[..] {
+                                type_.cast(arg)
+                            } else {
+                                bail!("cast requires a single argument")
+                            }
+                        }
+                        v => bail!("invalid type, expected function, got {}", v),
+                    }
                 }
 
-                Expression::HexNumberLiteral(_, n, _) => {
-                    let result = if n.len() == 42 {
-                        Value::Addr(Address::from_hex(n)?)
-                    } else {
-                        Value::Uint(U256::from_str_radix(&n, 16)?)
-                    };
-                    Ok(result)
-                }
-
+                Expression::Type(_, type_) => Ok(Value::TypeObject(Type::try_from(type_)?)),
                 Expression::Parenthesis(_, expr) => self.evaluate_expression(expr).await,
 
                 v => bail!("{} not supported", v),

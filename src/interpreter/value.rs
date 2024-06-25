@@ -21,10 +21,12 @@ pub enum Value {
     Uint(U256),
     Str(String),
     FixBytes(B256, usize),
+    Bytes(Vec<u8>),
     Addr(Address),
     Contract(ContractInfo),
     Tuple(Vec<Value>),
     Array(Vec<Value>),
+    TypeObject(Type),
     Func(Function),
 }
 
@@ -54,8 +56,10 @@ impl Display for Value {
                 let bytes = w[..*s].to_vec();
                 write!(f, "0x{}", hex::encode(bytes))
             }
+            Value::Bytes(bytes) => write!(f, "0x{}", hex::encode(bytes)),
             Value::Tuple(v) => write!(f, "({})", _values_to_string(v)),
             Value::Array(v) => write!(f, "[{}]", _values_to_string(v)),
+            Value::TypeObject(t) => write!(f, "{}", t),
             Value::Contract(ContractInfo(name, addr, _)) => {
                 write!(f, "{}({})", name, addr.to_checksum(None))
             }
@@ -75,9 +79,11 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::Str(s) => DynSolValue::String(s.clone()),
             Value::Addr(a) => DynSolValue::Address(*a),
             Value::FixBytes(w, s) => DynSolValue::FixedBytes(*w, *s),
+            Value::Bytes(b) => DynSolValue::Bytes(b.clone()),
             Value::Contract(ContractInfo(_, addr, _)) => DynSolValue::Address(*addr),
             Value::Tuple(vs) => DynSolValue::Tuple(_values_to_dyn_sol_values(vs)?),
             Value::Array(vs) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
+            Value::TypeObject(_) => bail!("cannot convert type objects to Solidity type"),
             Value::Func(_) => bail!("cannot convert function to Solidity type"),
         };
         Ok(v)
@@ -94,6 +100,7 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
             DynSolValue::String(s) => Ok(Value::Str(s)),
             DynSolValue::Address(a) => Ok(Value::Addr(a)),
             DynSolValue::FixedBytes(w, s) => Ok(Value::FixBytes(w, s)),
+            DynSolValue::Bytes(v) => Ok(Value::Bytes(v)),
             DynSolValue::Tuple(vs) => _dyn_sol_values_to_values(vs).map(Value::Tuple),
             DynSolValue::Array(vs) => _dyn_sol_values_to_values(vs).map(Value::Array),
             v => Err(anyhow::anyhow!("{:?} not supported", v)),
@@ -112,8 +119,10 @@ impl PartialEq for Value {
             (Value::Str(a), Value::Str(b)) => a == b,
             (Value::Addr(a), Value::Addr(b)) => a == b,
             (Value::FixBytes(a, _), Value::FixBytes(b, _)) => a == b,
+            (Value::Bytes(a), Value::Bytes(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => a == b,
             (Value::Array(a), Value::Array(b)) => a == b,
+            (Value::TypeObject(a), Value::TypeObject(b)) => a == b,
             (Value::Contract(ContractInfo(_, a, _)), Value::Contract(ContractInfo(_, b, _))) => {
                 a == b
             }
@@ -152,6 +161,7 @@ impl Value {
             Value::Str(_) => Type::String,
             Value::Addr(_) => Type::Address,
             Value::FixBytes(_, s) => Type::FixBytes(*s),
+            Value::Bytes(_) => Type::Bytes,
             Value::Tuple(vs) => Type::Tuple(vs.iter().map(Value::get_type).collect()),
             Value::Array(vs) => {
                 let t = vs.iter().map(Value::get_type).next().unwrap_or(Type::Bool);
@@ -161,6 +171,7 @@ impl Value {
                 Type::Contract(name.clone(), abi.clone())
             }
             Value::Func(_) => Type::Function,
+            Value::TypeObject(type_) => type_.clone(),
         }
     }
 
