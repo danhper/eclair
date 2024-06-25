@@ -62,8 +62,16 @@ where
     Ok(func(value, decimals, precision))
 }
 
-pub async fn get_balance(addr: Address, provider: &RootProvider<Http<Client>>) -> Result<U256> {
+async fn get_balance(addr: Address, provider: &RootProvider<Http<Client>>) -> Result<U256> {
     Ok(provider.get_balance(addr).await?)
+}
+
+async fn concat_strings(string: String, args: &[Value]) -> Result<String> {
+    if let Some(Value::Str(s)) = args.first() {
+        Ok(format!("{}{}", string, s))
+    } else {
+        bail!("cannot concat {} with {:?}", string, args)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +79,7 @@ pub enum BuiltinMethod {
     Balance(Address),
     FormatU256(U256),
     FormatI256(I256),
+    Concat(String),
 }
 
 impl fmt::Display for BuiltinMethod {
@@ -79,6 +88,7 @@ impl fmt::Display for BuiltinMethod {
             Self::Balance(addr) => write!(f, "{}.balance", addr),
             Self::FormatU256(n) => write!(f, "{}.format", n),
             Self::FormatI256(n) => write!(f, "{}.format", n),
+            Self::Concat(s) => write!(f, "{}.concat", s),
         }
     }
 }
@@ -89,6 +99,7 @@ impl BuiltinMethod {
             (Value::Addr(addr), "balance") => Self::Balance(*addr),
             (Value::Uint(n), "format") => Self::FormatU256(*n),
             (Value::Int(n), "format") => Self::FormatI256(*n),
+            (Value::Str(s), "concat") => Self::Concat(s.clone()),
             _ => bail!("no method {} for type {}", name, receiver.get_type()),
         };
         Ok(method)
@@ -107,6 +118,7 @@ impl BuiltinMethod {
             Self::Balance(addr) => Ok(Value::Uint(get_balance(*addr, provider).await?)),
             Self::FormatU256(n) => to_decimals(*n, args, uint_to_decimals).map(Value::Str),
             Self::FormatI256(n) => to_decimals(*n, args, int_to_decimals).map(Value::Str),
+            Self::Concat(s) => concat_strings(s.clone(), args).await.map(Value::Str),
         }
     }
 }
