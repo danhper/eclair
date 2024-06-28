@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
     utils::load_dotenv();
 
     let cli = Cli::try_parse()?;
-    let env = Arc::new(Mutex::new(Env::new()));
+    let env = Arc::new(Mutex::new(Env::new(&cli.rpc_url, cli.debug)));
     let mut repl = Repl::create(env, &cli).await?;
     repl.run().await;
 

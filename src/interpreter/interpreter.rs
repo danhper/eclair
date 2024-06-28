@@ -1,14 +1,11 @@
 use std::cmp::Ordering;
 use std::ops::Neg;
-use std::process::Command;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use alloy::hex::FromHex;
 use alloy::primitives::{Address, B256, I256, U256};
-use alloy::providers::{Provider, ProviderBuilder, RootProvider};
-use alloy::transports::http::{Client, Http};
 use anyhow::{anyhow, bail, Result};
 use futures::future::{BoxFuture, FutureExt};
 use solang_parser::pt::{Expression, Statement};
@@ -18,27 +15,36 @@ use crate::project::types::Project;
 use super::builtin_functions::BuiltinFunction;
 use super::functions::Function;
 use super::types::Type;
-use super::{directive::Directive, env::Env, parsing, utils::expr_as_var, value::Value};
+use super::{env::Env, parsing, utils::expr_as_var, value::Value};
 
 #[derive(Debug)]
 pub struct Interpreter {
     env: Arc<Mutex<Env>>,
-    debug: bool,
-    provider: Arc<RootProvider<Http<Client>>>,
 }
 
 unsafe impl std::marker::Send for Interpreter {}
 unsafe impl Sync for Interpreter {}
 
 impl Interpreter {
-    pub fn new(env: Arc<Mutex<Env>>, provider_url: &str, debug: bool) -> Self {
-        let rpc_url = provider_url.parse().unwrap();
-        let provider = ProviderBuilder::new().on_http(rpc_url);
+    pub async fn new(env: Arc<Mutex<Env>>) -> Self {
+        let mut interpreter = Interpreter { env };
+        interpreter._load_builtins().await;
+        interpreter
+    }
 
-        Interpreter {
-            env,
-            debug,
-            provider: Arc::new(provider),
+    async fn _load_builtins(&mut self) {
+        let mut env = self.env.lock().await;
+
+        env.set_var("_", Value::TypeObject(Type::This));
+        env.set_var("repl", Value::TypeObject(Type::Repl));
+
+        for name in BuiltinFunction::functions() {
+            env.set_var(
+                &name,
+                Value::Func(Function::Builtin(
+                    BuiltinFunction::from_name(&name).unwrap(),
+                )),
+            );
         }
     }
 
@@ -54,58 +60,12 @@ impl Interpreter {
         Ok(())
     }
 
-    pub async fn list_vars(&self) {
-        let env = self.env.lock().await;
-        let mut vars = env.list_vars();
-        vars.sort();
-        for k in vars.iter() {
-            println!("{}: {}", k, env.get_var(k).unwrap());
-        }
-    }
-
-    pub async fn list_types(&self) {
-        let env = self.env.lock().await;
-        let mut types = env.list_types();
-        types.sort();
-        for k in types.iter() {
-            println!("{}", k);
-        }
-    }
-
-    fn set_provider(&mut self, url: &str) {
-        let rpc_url = url.parse().unwrap();
-        let provider = ProviderBuilder::new().on_http(rpc_url);
-        self.provider = Arc::new(provider);
-    }
-
     pub async fn evaluate_line(&mut self, line: &str) -> Result<Option<Value>> {
-        if let Some(directive_str) = line.strip_prefix('!') {
-            if let Ok(directive) = Directive::parse(directive_str) {
-                return self._evaluate_directive(directive).await;
-            }
-        }
         let stmt = parsing::parse_statement(line)?;
-        if self.debug {
+        if self.env.lock().await.is_debug() {
             println!("{:#?}", stmt);
         }
         self.evaluate_statement(&stmt).await
-    }
-
-    async fn _evaluate_directive(&mut self, directive: Directive) -> Result<Option<Value>> {
-        match directive {
-            Directive::ListVars => self.list_vars().await,
-            Directive::ListTypes => self.list_types().await,
-            Directive::SetRpc(rpc_url) => self.set_provider(&rpc_url),
-            Directive::ShowRpc => {
-                println!("{}", self.provider.root().client().transport().url())
-            }
-            Directive::Debug => self.debug = !self.debug,
-            Directive::Exec(cmd, args) => {
-                Command::new(cmd).args(args).spawn()?;
-            }
-        }
-
-        Ok(None)
     }
 
     pub async fn evaluate_statement(&mut self, stmt: &Statement) -> Result<Option<Value>> {
@@ -266,14 +226,10 @@ impl Interpreter {
                 Expression::Variable(var) => {
                     let id = var.to_string();
                     let env = self.env.lock().await;
-                    if id == "_" {
-                        Ok(Value::This)
-                    } else if let Some(result) = env.get_var(&id) {
+                    if let Some(result) = env.get_var(&id) {
                         Ok(result.clone())
                     } else if let Some(type_) = env.get_type(&id) {
                         Ok(Value::TypeObject(type_.clone()))
-                    } else if let Ok(func) = BuiltinFunction::from_name(&id) {
-                        Ok(Value::Func(Function::Builtin(func)))
                     } else {
                         bail!("{} is not defined", id);
                     }
@@ -288,7 +244,7 @@ impl Interpreter {
                             let method = BuiltinFunction::with_receiver(&v, &method.name)?;
                             let mut env = self.env.lock().await;
                             if method.is_property() {
-                                Ok(method.execute(&[], &mut env, &self.provider).await?)
+                                Ok(method.execute(&[], &mut env).await?)
                             } else {
                                 Ok(Value::Func(Function::Builtin(method)))
                             }
@@ -367,7 +323,7 @@ impl Interpreter {
                     match self.evaluate_expression(func_expr).await? {
                         Value::Func(f) => {
                             let mut env = self.env.lock().await;
-                            f.execute(&args, &mut env, &self.provider).await
+                            f.execute(&args, &mut env).await
                         }
                         Value::TypeObject(type_) => {
                             if let [arg] = &args[..] {

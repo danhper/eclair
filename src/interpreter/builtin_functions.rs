@@ -11,7 +11,7 @@ use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use itertools::Itertools;
 
-use super::{functions::Function, types::Type, Env, Value};
+use super::{functions::Function, types::Type, Directive, Env, Value};
 
 fn common_to_decimals<T, F, G>(
     value: T,
@@ -19,51 +19,53 @@ fn common_to_decimals<T, F, G>(
     precision: Option<i32>,
     to_f64: F,
     pow: G,
-) -> String
+) -> Result<String>
 where
     T: Copy + std::ops::Div<Output = T>,
-    F: Fn(T) -> f64,
+    F: Fn(T) -> Result<f64>,
     G: Fn(u32) -> T,
 {
     let decimals = decimals.unwrap_or(18);
     let precision = precision.unwrap_or(2);
     let result = if decimals > precision {
         let downscaled = value / pow((decimals - precision - 1) as u32);
-        to_f64(downscaled) / 10f64.powi(precision + 1)
+        match to_f64(downscaled) {
+            Ok(res) => Ok(res / 10f64.powi(precision + 1)),
+            _ => to_f64(value / pow(decimals as u32)),
+        }
     } else {
         to_f64(value / pow(decimals as u32))
     };
-
-    format!("{:.prec$}", result, prec = precision as usize)
+    result.map(|result| format!("{:.prec$}", result, prec = precision as usize))
 }
 
-fn uint_to_decimals(value: U256, decimals: Option<i32>, precision: Option<i32>) -> String {
+fn uint_to_decimals(value: U256, decimals: Option<i32>, precision: Option<i32>) -> Result<String> {
     common_to_decimals(
         value,
         decimals,
         precision,
-        |v: U256| v.to::<u64>() as f64,
+        |v: U256| Ok(TryInto::<u64>::try_into(v).map(|v| v as f64)?),
         |exp| U256::from(10u64).pow(U256::from(exp)),
     )
 }
 
-fn int_to_decimals(value: I256, decimals: Option<i32>, precision: Option<i32>) -> String {
+fn int_to_decimals(value: I256, decimals: Option<i32>, precision: Option<i32>) -> Result<String> {
     common_to_decimals(
         value,
         decimals,
         precision,
-        |v: I256| v.as_i64() as f64,
+        |v: I256| Ok(TryInto::<i64>::try_into(v).map(|v| v as f64)?),
         |exp| I256::from_raw(U256::from(10u64).pow(U256::from(exp))),
     )
 }
 
 fn to_decimals<T, F>(value: T, args: &[Value], func: F) -> Result<String>
 where
-    F: Fn(T, Option<i32>, Option<i32>) -> String,
+    F: Fn(T, Option<i32>, Option<i32>) -> Result<String>,
 {
     let decimals = args.first().map(|v| v.as_i32()).transpose()?;
     let precision = args.get(1).map(|v| v.as_i32()).transpose()?;
-    Ok(func(value, decimals, precision))
+    func(value, decimals, precision)
 }
 
 async fn get_balance(addr: Address, provider: &RootProvider<Http<Client>>) -> Result<U256> {
@@ -131,7 +133,6 @@ fn map<'a>(
     ty: Type,
     args: &'a [Value],
     env: &'a mut Env,
-    provider: &'a RootProvider<Http<Client>>,
 ) -> BoxFuture<'a, Result<Value>> {
     async move {
         let func_value = args
@@ -140,7 +141,7 @@ fn map<'a>(
         let mut values = vec![];
         for v in target {
             let value = match func_value {
-                Value::Func(func) => func.execute(&[v.clone()], env, provider).await?,
+                Value::Func(func) => func.execute(&[v.clone()], env).await?,
                 Value::TypeObject(type_) => type_.cast(v)?,
                 _ => bail!("map function expects a function or type as an argument"),
             };
@@ -159,7 +160,6 @@ fn method_call<'a>(
     name: &'a str,
     args: &'a [Value],
     env: &'a mut Env,
-    provider: &'a RootProvider<Http<Client>>,
 ) -> BoxFuture<'a, Result<Value>> {
     async move {
         let receiver = args
@@ -169,7 +169,7 @@ fn method_call<'a>(
             Value::Contract(c) => Function::ContractCall(c.clone(), name.to_string()),
             _ => Function::Builtin(BuiltinFunction::with_receiver(receiver, name)?),
         };
-        method.execute(&args[1..], env, provider).await
+        method.execute(&args[1..], env).await
     }
     .boxed()
 }
@@ -199,6 +199,7 @@ pub enum BuiltinFunction {
     Decode(String, JsonAbi),
     Map(Vec<Value>, Type),
     MethodCall(String),
+    Directive(Directive),
     GetType,
 }
 
@@ -214,6 +215,7 @@ impl fmt::Display for BuiltinFunction {
                 write!(f, "{}.map", items)
             }
             Self::MethodCall(name) => write!(f, ".{}", name),
+            Self::Directive(d) => write!(f, "{}", d),
             Self::GetType => write!(f, "type"),
             Self::FormatFunc => write!(f, "format"),
         }
@@ -229,15 +231,16 @@ impl BuiltinFunction {
         }
     }
 
+    pub fn functions() -> Vec<String> {
+        vec!["format".to_string(), "type".to_string()]
+    }
+
     pub fn with_receiver(receiver: &Value, name: &str) -> Result<Self> {
         let method = match (receiver, name) {
-            (Value::This, method) => Self::MethodCall(method.to_string()),
             (Value::Addr(addr), "balance") => Self::Balance(*addr),
             (v, "format") => Self::Format(Box::new(v.clone())),
             (v @ (Value::Str(_) | Value::Array(_)), "concat") => Self::Concat(Box::new(v.clone())),
-            (Value::TypeObject(Type::Contract(name, abi)), "decode") => {
-                Self::Decode(name.clone(), abi.clone())
-            }
+
             (Value::Tuple(values), "map") => Self::Map(
                 values.clone(),
                 Type::Tuple(values.iter().map(Value::get_type).collect()),
@@ -245,6 +248,14 @@ impl BuiltinFunction {
             (Value::Array(values), "map") => {
                 let arr_type = values.first().map_or(Type::Uint(256), Value::get_type);
                 Self::Map(values.clone(), Type::Array(Box::new(arr_type)))
+            }
+
+            (Value::TypeObject(Type::This), method) => Self::MethodCall(method.to_string()),
+            (Value::TypeObject(Type::Contract(name, abi)), "decode") => {
+                Self::Decode(name.clone(), abi.clone())
+            }
+            (Value::TypeObject(Type::Repl), _) => {
+                Directive::from_name(name).map(Self::Directive)?
             }
             _ => bail!("no method {} for type {}", name, receiver.get_type()),
         };
@@ -255,24 +266,22 @@ impl BuiltinFunction {
         matches!(self, Self::Balance(_))
     }
 
-    pub async fn execute(
-        &self,
-        args: &[Value],
-        env: &mut Env,
-        provider: &RootProvider<Http<Client>>,
-    ) -> Result<Value> {
+    pub async fn execute(&self, args: &[Value], env: &mut Env) -> Result<Value> {
         match self {
-            Self::Balance(addr) => Ok(Value::Uint(get_balance(*addr, provider).await?)),
+            Self::Balance(addr) => Ok(Value::Uint(
+                get_balance(*addr, &env.get_provider().clone()).await?,
+            )),
             Self::FormatFunc => format_func(args).map(Value::Str),
             Self::Format(v) => format(v, args).map(Value::Str),
             Self::Concat(v) => concat(v, args),
             Self::Decode(name, abi) => decode_calldata(name, abi, args),
-            Self::MethodCall(name) => method_call(name, args, env, provider).await,
+            Self::MethodCall(name) => method_call(name, args, env).await,
             Self::Map(values, type_) => {
-                let result = map(values, type_.clone(), args, env, provider).await?;
+                let result = map(values, type_.clone(), args, env).await?;
                 Ok(result)
             }
             Self::GetType => get_type(args).map(Value::TypeObject),
+            Self::Directive(d) => d.execute(args, env).await,
         }
     }
 }
@@ -282,17 +291,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_uint_to_decimals() {
+    fn test_uint_to_decimals() -> Result<()> {
         let value = U256::from(10).pow(U256::from(18));
-        assert_eq!(uint_to_decimals(value, None, None), "1.00");
+        assert_eq!(uint_to_decimals(value, None, None)?, "1.00");
 
         assert_eq!(
-            uint_to_decimals(U256::from(12348000), Some(6), None),
+            uint_to_decimals(U256::from(12348000), Some(6), None)?,
             "12.35"
         );
         assert_eq!(
-            uint_to_decimals(U256::from(12348000), Some(6), Some(3)),
+            uint_to_decimals(U256::from(12348000), Some(6), Some(3))?,
             "12.348"
         );
+
+        Ok(())
     }
 }

@@ -21,6 +21,7 @@ pub enum Type {
     Tuple(Vec<Type>),
     Contract(String, JsonAbi),
     Function,
+    Repl,
 }
 
 impl Display for Type {
@@ -42,6 +43,8 @@ impl Display for Type {
             }
             Type::Contract(name, _) => write!(f, "{}", name),
             Type::Function => write!(f, "function"),
+
+            Type::Repl => write!(f, "repl"),
         }
     }
 }

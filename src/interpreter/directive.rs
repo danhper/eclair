@@ -1,44 +1,88 @@
-use anyhow::Result;
+use std::process::Command;
 
+use alloy::providers::Provider;
+use anyhow::{bail, Result};
+
+use super::{Env, Value};
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Directive {
     ListVars,
     ListTypes,
-    ShowRpc,
-    SetRpc(String),
+    Rpc,
     Debug,
-    Exec(String, Vec<String>),
+    Exec,
+}
+
+impl std::fmt::Display for Directive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Directive::ListVars => write!(f, "vars"),
+            Directive::ListTypes => write!(f, "types"),
+            Directive::Rpc => write!(f, "rpc"),
+            Directive::Debug => write!(f, "debug"),
+            Directive::Exec => write!(f, "exec"),
+        }
+    }
+}
+
+fn list_vars(env: &Env) {
+    let mut vars = env.list_vars();
+    vars.sort();
+    for k in vars.iter() {
+        println!("{}: {}", k, env.get_var(k).unwrap());
+    }
+}
+
+fn list_types(env: &Env) {
+    let mut types = env.list_types();
+    types.sort();
+    for k in types.iter() {
+        println!("{}", k);
+    }
 }
 
 impl Directive {
     pub fn all() -> Vec<String> {
-        ["!types", "!vars", "!rpc", "!debug", "!exec"]
+        ["types", "vars", "rpc", "debug", "exec"]
             .iter()
             .map(|s| s.to_string())
             .collect()
     }
 
-    pub fn parse(line: &str) -> Result<Self> {
-        let mut parts = line.split_whitespace();
-        let directive = parts.next().ok_or(anyhow::anyhow!("Empty directive"))?;
-        match directive {
+    pub async fn execute(&self, args: &[Value], env: &mut Env) -> Result<Value> {
+        match self {
+            Directive::ListVars => list_vars(env),
+            Directive::ListTypes => list_types(env),
+            Directive::Rpc => match args {
+                [] => println!("{}", env.get_provider().root().client().transport().url()),
+                [url] => env.set_provider(&url.as_string()?),
+                _ => bail!("rpc: invalid arguments"),
+            },
+            Directive::Debug => match args {
+                [] => return Ok(Value::Bool(env.is_debug())),
+                [Value::Bool(b)] => env.set_debug(*b),
+                _ => bail!("debug: invalid arguments"),
+            },
+            Directive::Exec => match args {
+                [Value::Str(cmd)] => {
+                    let splitted = cmd.split_whitespace().collect::<Vec<_>>();
+                    Command::new(splitted[0]).args(&splitted[1..]).spawn()?;
+                }
+                _ => bail!("exec: invalid arguments"),
+            },
+        }
+
+        Ok(Value::Null)
+    }
+
+    pub fn from_name(name: &str) -> Result<Self> {
+        match name {
             "vars" => Ok(Directive::ListVars),
             "types" => Ok(Directive::ListTypes),
-            "rpc" => {
-                let url = parts.next().unwrap_or_default().to_string();
-                if url.is_empty() {
-                    return Ok(Directive::ShowRpc);
-                }
-                Ok(Directive::SetRpc(url))
-            }
+            "rpc" => Ok(Directive::Rpc),
             "debug" => Ok(Directive::Debug),
-            "exec" | "e" => {
-                let cmd = parts.next().unwrap_or_default().to_string();
-                if cmd.is_empty() {
-                    return Err(anyhow::anyhow!("!exec directive requires a command"));
-                }
-                let args = parts.map(|s| s.to_string()).collect();
-                Ok(Directive::Exec(cmd, args))
-            }
+            "exec" => Ok(Directive::Exec),
             _ => Err(anyhow::anyhow!("Invalid directive")),
         }
     }

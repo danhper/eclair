@@ -20,10 +20,11 @@ pub struct Repl {
 impl Repl {
     pub async fn create(env: Arc<Mutex<Env>>, cli: &Cli) -> Result<Self> {
         let rl = create_editor(env.clone())?;
-        let mut interpreter = Interpreter::new(env, &cli.rpc_url, cli.debug);
 
         let current_dir = std::env::current_dir()?;
         let projects = project::load(&current_dir);
+
+        let mut interpreter = Interpreter::new(env).await;
         for project in projects.iter() {
             interpreter.load_project(project).await?;
         }

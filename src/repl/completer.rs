@@ -7,7 +7,7 @@ use rustyline::{
 };
 use tokio::sync::Mutex;
 
-use crate::interpreter::{ContractInfo, Directive, Env, Value};
+use crate::interpreter::{ContractInfo, Directive, Env, Type, Value};
 
 pub(crate) struct MyCompleter {
     filename_completer: FilenameCompleter,
@@ -40,6 +40,41 @@ fn is_completing_func_name(line: &str, pos: usize) -> bool {
     false
 }
 
+fn pair_from_string(s: &str) -> Pair {
+    Pair {
+        display: s.to_owned(),
+        replacement: s.to_owned(),
+    }
+}
+
+fn get_function_completion(
+    current_word: &str,
+    pos: usize,
+    env: &Env,
+) -> rustyline::Result<(usize, Vec<Pair>)> {
+    let (func_name, receiver) = current_word
+        .rsplitn(2, '.')
+        .map(|s| s.trim())
+        .collect_tuple()
+        .unwrap_or_default();
+
+    let names = match env.get_var(receiver) {
+        Some(Value::Contract(ContractInfo(_, _, abi))) => {
+            abi.functions.iter().map(|func| func.0.clone()).collect()
+        }
+        Some(Value::TypeObject(Type::Repl)) => Directive::all(),
+        _ => vec![],
+    };
+
+    let completions = names
+        .iter()
+        .map(|name| pair_from_string(name))
+        .filter(|item| item.display.starts_with(func_name))
+        .collect::<Vec<_>>();
+
+    Ok((pos - func_name.len(), completions))
+}
+
 impl rustyline::completion::Completer for MyCompleter {
     type Candidate = Pair;
 
@@ -51,22 +86,11 @@ impl rustyline::completion::Completer for MyCompleter {
     ) -> rustyline::Result<(usize, Vec<Pair>)> {
         let (current_word, current_word_start) = get_current_word(line, pos);
 
-        if current_word_start == 0 && current_word.starts_with('!') {
-            return Ok((
-                0,
-                Directive::all()
-                    .iter()
-                    .map(|s| Pair {
-                        display: s.clone(),
-                        replacement: s.clone(),
-                    })
-                    .filter(|item| item.display.starts_with(current_word))
-                    .collect(),
-            ));
-        }
-
-        if current_word.contains(path::MAIN_SEPARATOR) || line.starts_with('!') {
-            return self.filename_completer.complete(line, pos, _ctx);
+        if current_word.contains(path::MAIN_SEPARATOR) {
+            let (pos, pairs) =
+                self.filename_completer
+                    .complete(current_word, pos - current_word_start, _ctx)?;
+            return Ok((pos + current_word_start, pairs));
         }
 
         let env = self
@@ -74,38 +98,16 @@ impl rustyline::completion::Completer for MyCompleter {
             .clone()
             .try_lock_owned()
             .map_err(|_e| rustyline::error::ReadlineError::Interrupted)?;
+
+        if is_completing_func_name(line, pos) {
+            return get_function_completion(current_word, pos, &env);
+        }
+
         let mut types = env.list_types();
         let mut vars_and_types = env.list_vars();
         vars_and_types.append(&mut types);
 
-        if is_completing_func_name(line, pos) {
-            let (func_name, receiver) = current_word
-                .rsplitn(2, '.')
-                .map(|s| s.trim())
-                .collect_tuple()
-                .unwrap_or_default();
-
-            if let Some(Value::Contract(ContractInfo(_, _, abi))) = env.get_var(receiver) {
-                let completions = abi
-                    .functions
-                    .iter()
-                    .map(|func| Pair {
-                        display: func.0.clone(),
-                        replacement: func.0.clone(),
-                    })
-                    .filter(|item| item.display.starts_with(func_name))
-                    .collect::<Vec<_>>();
-                return Ok((pos - func_name.len(), completions));
-            }
-        }
-
-        let completions: Vec<_> = vars_and_types
-            .iter()
-            .map(|var| Pair {
-                display: var.to_owned(),
-                replacement: var.to_owned(),
-            })
-            .collect();
+        let completions: Vec<_> = vars_and_types.iter().map(|s| pair_from_string(s)).collect();
 
         let matches = completions
             .into_iter()

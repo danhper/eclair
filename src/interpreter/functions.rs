@@ -43,18 +43,13 @@ impl Display for Function {
 }
 
 impl Function {
-    pub async fn execute(
-        &self,
-        args: &[Value],
-        env: &mut Env,
-        provider: &RootProvider<Http<Client>>,
-    ) -> Result<Value> {
+    pub async fn execute(&self, args: &[Value], env: &mut Env) -> Result<Value> {
         match self {
             Function::ContractCall(contract_info, func_name) => {
-                self._execute_contract_call(contract_info, func_name, args, provider)
+                self._execute_contract_call(contract_info, func_name, args, &env.get_provider())
                     .await
             }
-            Function::Builtin(m) => m.execute(args, env, provider).await,
+            Function::Builtin(m) => m.execute(args, env).await,
         }
     }
 
