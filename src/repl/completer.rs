@@ -7,7 +7,7 @@ use rustyline::{
 };
 use tokio::sync::Mutex;
 
-use crate::interpreter::{ContractInfo, Directive, Env, Type, Value};
+use crate::interpreter::Env;
 
 pub(crate) struct MyCompleter {
     filename_completer: FilenameCompleter,
@@ -58,19 +58,15 @@ fn get_function_completion(
         .collect_tuple()
         .unwrap_or_default();
 
-    let names = match env.get_var(receiver) {
-        Some(Value::Contract(ContractInfo(_, _, abi))) => {
-            abi.functions.iter().map(|func| func.0.clone()).collect()
-        }
-        Some(Value::TypeObject(Type::Repl)) => Directive::all(),
-        _ => vec![],
-    };
+    let names = env
+        .get_var(receiver)
+        .map_or(vec![], |value| value.get_type().functions());
 
     let completions = names
         .iter()
+        .filter(|name| name.starts_with(func_name))
         .map(|name| pair_from_string(name))
-        .filter(|item| item.display.starts_with(func_name))
-        .collect::<Vec<_>>();
+        .collect();
 
     Ok((pos - func_name.len(), completions))
 }

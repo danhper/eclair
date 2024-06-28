@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use alloy::{
     providers::{ProviderBuilder, RootProvider},
@@ -9,7 +12,7 @@ use super::{types::Type, Value};
 
 #[derive(Debug)]
 pub struct Env {
-    variables: HashMap<String, Value>,
+    variables: Vec<HashMap<String, Value>>,
     types: HashMap<String, Type>,
     debug: bool,
     provider: Arc<RootProvider<Http<Client>>>,
@@ -22,11 +25,19 @@ impl Env {
         let rpc_url = provider_url.parse().unwrap();
         let provider = ProviderBuilder::new().on_http(rpc_url);
         Env {
-            variables: HashMap::new(),
+            variables: vec![HashMap::new()],
             types: HashMap::new(),
             provider: Arc::new(provider),
             debug,
         }
+    }
+
+    pub fn push_scope(&mut self) {
+        self.variables.push(HashMap::new());
+    }
+
+    pub fn pop_scope(&mut self) {
+        self.variables.pop();
     }
 
     pub fn set_debug(&mut self, debug: bool) {
@@ -60,14 +71,22 @@ impl Env {
     }
 
     pub fn list_vars(&self) -> Vec<String> {
-        self.variables.keys().cloned().collect()
+        let mut vars = HashSet::new();
+        for scope in &self.variables {
+            for var in scope.keys() {
+                vars.insert(var.clone());
+            }
+        }
+        Vec::from_iter(vars)
     }
 
     pub fn get_var(&self, name: &str) -> Option<&Value> {
-        self.variables.get(name)
+        let scope = self.variables.last().unwrap();
+        scope.get(name)
     }
 
     pub fn set_var(&mut self, name: &str, value: Value) {
-        self.variables.insert(name.to_string(), value);
+        let scope = self.variables.last_mut().unwrap();
+        scope.insert(name.to_string(), value);
     }
 }

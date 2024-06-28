@@ -7,7 +7,10 @@ use alloy::{
 };
 use anyhow::{bail, Result};
 use itertools::Itertools;
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    ops::{Add, Div, Mul, Rem, Sub},
+};
 
 use super::{functions::Function, types::Type};
 
@@ -111,6 +114,12 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
     }
 }
 
+impl From<u64> for Value {
+    fn from(n: u64) -> Self {
+        Value::Uint(U256::from(n))
+    }
+}
+
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -206,6 +215,82 @@ impl Value {
             Value::Int(n) => Ok(n.as_usize()),
             Value::Uint(n) => Ok(n.to()),
             _ => bail!("cannot convert {} to usize", self.get_type()),
+        }
+    }
+}
+
+impl Add for Value {
+    type Output = Result<Value>;
+
+    fn add(self, other: Self) -> Self::Output {
+        let error_msg = format!("cannot add {} and {}", self.get_type(), other.get_type());
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
+            (Value::Uint(a), Value::Uint(b)) => Ok(Value::Uint(a + b)),
+            (Value::Int(a), Value::Uint(b)) => Ok(Value::Int(a + I256::from_raw(b))),
+            (Value::Uint(a), Value::Int(b)) => Ok(Value::Int(I256::from_raw(a) + b)),
+            (Value::Str(a), Value::Str(b)) => Ok(Value::Str(a + &b)),
+            _ => bail!(error_msg),
+        }
+    }
+}
+
+impl Sub for Value {
+    type Output = Result<Value>;
+
+    fn sub(self, other: Self) -> Self::Output {
+        let error_msg = format!("cannot sub {} and {}", self.get_type(), other.get_type());
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a - b)),
+            (Value::Uint(a), Value::Uint(b)) => Ok(Value::Uint(a - b)),
+            (Value::Int(a), Value::Uint(b)) => Ok(Value::Int(a - I256::from_raw(b))),
+            (Value::Uint(a), Value::Int(b)) => Ok(Value::Int(I256::from_raw(a) - b)),
+            _ => bail!(error_msg),
+        }
+    }
+}
+
+impl Mul for Value {
+    type Output = Result<Value>;
+
+    fn mul(self, other: Self) -> Self::Output {
+        let error_msg = format!("cannot mul {} and {}", self.get_type(), other.get_type());
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a * b)),
+            (Value::Uint(a), Value::Uint(b)) => Ok(Value::Uint(a * b)),
+            (Value::Int(a), Value::Uint(b)) => Ok(Value::Int(a * I256::from_raw(b))),
+            (Value::Uint(a), Value::Int(b)) => Ok(Value::Int(I256::from_raw(a) * b)),
+            _ => bail!(error_msg),
+        }
+    }
+}
+
+impl Div for Value {
+    type Output = Result<Value>;
+
+    fn div(self, other: Self) -> Self::Output {
+        let error_msg = format!("cannot div {} and {}", self.get_type(), other.get_type());
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a / b)),
+            (Value::Uint(a), Value::Uint(b)) => Ok(Value::Uint(a / b)),
+            (Value::Int(a), Value::Uint(b)) => Ok(Value::Int(a / I256::from_raw(b))),
+            (Value::Uint(a), Value::Int(b)) => Ok(Value::Int(I256::from_raw(a) / b)),
+            _ => bail!(error_msg),
+        }
+    }
+}
+
+impl Rem for Value {
+    type Output = Result<Value>;
+
+    fn rem(self, other: Self) -> Self::Output {
+        let error_msg = format!("cannot rem {} and {}", self.get_type(), other.get_type());
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a % b)),
+            (Value::Uint(a), Value::Uint(b)) => Ok(Value::Uint(a % b)),
+            (Value::Int(a), Value::Uint(b)) => Ok(Value::Int(a % I256::from_raw(b))),
+            (Value::Uint(a), Value::Int(b)) => Ok(Value::Int(I256::from_raw(a) % b)),
+            _ => bail!(error_msg),
         }
     }
 }

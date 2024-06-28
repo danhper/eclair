@@ -1,50 +1,69 @@
 use anyhow::{anyhow, Result};
-use solang_parser::pt::{ContractPart, SourceUnitPart, Statement};
+use itertools::Itertools;
+use solang_parser::pt::{ContractDefinition, ContractPart, SourceUnitPart, Statement};
 
-fn wrap_statement(stmt: &str) -> String {
-    let mut statement = stmt.to_owned();
-    if !statement.ends_with(';') {
-        statement = format!("{};", statement);
-    }
+fn wrap_contract(function: &str) -> String {
     format!(
         r#"contract ReplContract {{
-    function replFunction() external {{
-        {}
-    }}
+            {}
 }}
 "#,
-        statement
+        function
     )
 }
 
-pub fn parse_statement(raw_stmt: &str) -> Result<Statement> {
-    let code = wrap_statement(raw_stmt);
-    let (tree, _comments) =
-        solang_parser::parse(&code, 0).map_err(|d| {
-            anyhow!(
-                "Parse error: {}",
-                d.iter()
-                    .map(|d| format!("{:?}", d))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            )
-        })?;
-
-    let function_parts = match &tree.0[0] {
-        SourceUnitPart::ContractDefinition(def) => def.parts.clone(),
-        _ => return Err(anyhow!("Parse error: {}", code)),
-    };
-    let func = match &function_parts[0] {
-        ContractPart::FunctionDefinition(def) => def.body.clone().unwrap(),
-        _ => return Err(anyhow!("Parse error: {}", code)),
-    };
-    let statements = match &func {
-        Statement::Block { statements, .. } => statements.clone(),
-        _ => return Err(anyhow!("Parse error: {}", code)),
-    };
-
-    if statements.len() != 1 {
-        return Err(anyhow!("should only contain one statement"));
+fn wrap_statement(stmt: &str) -> String {
+    let mut statement = stmt.to_owned();
+    if !statement.ends_with(';') && !statement.ends_with('}') {
+        statement = format!("{};", statement);
     }
-    Ok(statements[0].clone())
+    wrap_contract(&format!(
+        r#"function replFunction() external {{
+        {}
+}}
+"#,
+        statement
+    ))
+}
+
+#[derive(Debug)]
+pub enum ParsedCode {
+    Statements(Vec<Statement>),
+    ContractDefinition(ContractDefinition),
+}
+
+fn parse_code(code: &str) -> Result<ContractDefinition> {
+    match solang_parser::parse(code, 0) {
+        Ok((tree, _comments)) => match &tree.0[0] {
+            SourceUnitPart::ContractDefinition(def) => Ok(*def.clone()),
+            _ => Err(anyhow!("parse error: {}", code)),
+        },
+        Err(e) => Err(anyhow!(
+            "parse error: {}",
+            e.iter().map(|d| d.message.clone()).join("\n")
+        )),
+    }
+}
+
+pub fn parse_line(input: &str) -> Result<ParsedCode> {
+    match parse_code(&wrap_statement(input)) {
+        Ok(ContractDefinition { parts, .. }) => {
+            let func = match &parts[0] {
+                ContractPart::FunctionDefinition(def) => {
+                    def.body.clone().expect("require function body")
+                }
+                _ => return Err(anyhow!("parse error: {}", input)),
+            };
+            let statements = match &func {
+                Statement::Block { statements, .. } => statements.clone(),
+                _ => return Err(anyhow!("parse error: {}", input)),
+            };
+
+            Ok(ParsedCode::Statements(statements.clone()))
+        }
+        Err(e) => match parse_code(&wrap_contract(input)) {
+            Ok(def @ ContractDefinition { .. }) => Ok(ParsedCode::ContractDefinition(def)),
+            Err(_) => Err(e),
+        },
+    }
 }

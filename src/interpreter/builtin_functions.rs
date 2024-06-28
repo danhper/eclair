@@ -201,6 +201,7 @@ pub enum BuiltinFunction {
     MethodCall(String),
     Directive(Directive),
     GetType,
+    Log,
 }
 
 impl fmt::Display for BuiltinFunction {
@@ -215,9 +216,10 @@ impl fmt::Display for BuiltinFunction {
                 write!(f, "{}.map", items)
             }
             Self::MethodCall(name) => write!(f, ".{}", name),
-            Self::Directive(d) => write!(f, "{}", d),
             Self::GetType => write!(f, "type"),
             Self::FormatFunc => write!(f, "format"),
+            Self::Directive(d) => write!(f, "repl.{}", d),
+            Self::Log => write!(f, "console.log"),
         }
     }
 }
@@ -257,6 +259,7 @@ impl BuiltinFunction {
             (Value::TypeObject(Type::Repl), _) => {
                 Directive::from_name(name).map(Self::Directive)?
             }
+            (Value::TypeObject(Type::Console), "log") => Self::Log,
             _ => bail!("no method {} for type {}", name, receiver.get_type()),
         };
         Ok(method)
@@ -282,6 +285,10 @@ impl BuiltinFunction {
             }
             Self::GetType => get_type(args).map(Value::TypeObject),
             Self::Directive(d) => d.execute(args, env).await,
+            Self::Log => {
+                args.iter().for_each(|arg| println!("{}", arg));
+                Ok(Value::Null)
+            }
         }
     }
 }

@@ -8,33 +8,38 @@ use tokio::sync::Mutex;
 
 use super::helper::{create_editor, history_file, MyHelper};
 use super::Cli;
-use crate::interpreter::{Env, Interpreter, Value};
+use crate::interpreter;
 use crate::project;
 
 pub struct Repl {
     rl: Editor<MyHelper, FileHistory>,
-    interpreter: crate::interpreter::Interpreter,
+    env: Arc<Mutex<interpreter::Env>>,
     history_file: Option<PathBuf>,
 }
 
 impl Repl {
-    pub async fn create(env: Arc<Mutex<Env>>, cli: &Cli) -> Result<Self> {
+    pub async fn create(env: Arc<Mutex<interpreter::Env>>, cli: &Cli) -> Result<Self> {
         let rl = create_editor(env.clone())?;
-
-        let current_dir = std::env::current_dir()?;
-        let projects = project::load(&current_dir);
-
-        let mut interpreter = Interpreter::new(env).await;
-        for project in projects.iter() {
-            interpreter.load_project(project).await?;
-        }
-
         let history_file = cli.history_file.clone().or(history_file());
-        Ok(Repl {
+        let mut repl = Repl {
             rl,
-            interpreter,
+            env,
             history_file,
-        })
+        };
+        repl._initialize_env().await?;
+
+        Ok(repl)
+    }
+
+    async fn _initialize_env(&mut self) -> Result<()> {
+        let mut env = self.env.lock().await;
+        let current_dir = std::env::current_dir()?;
+        let projects = project::load(current_dir);
+        interpreter::load_builtins(&mut env);
+        for project in projects.iter() {
+            interpreter::load_project(&mut env, project)?;
+        }
+        Ok(())
     }
 
     pub async fn run(&mut self) {
@@ -73,8 +78,9 @@ impl Repl {
         if line.is_empty() {
             return;
         }
-        match self.interpreter.evaluate_line(line.trim()).await {
-            Ok(None) | Ok(Some(Value::Null)) => (),
+        let mut env = self.env.lock().await;
+        match interpreter::evaluate_line(&mut env, line.trim()).await {
+            Ok(None) | Ok(Some(interpreter::Value::Null)) => (),
             Ok(Some(result)) => println!("{}", result),
             Err(e) => println!("Error: {:?}", e),
         }

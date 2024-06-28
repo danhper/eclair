@@ -5,6 +5,6 @@ pub(crate) fn expr_as_var(expr: &Expression) -> Result<String> {
     if let Expression::Variable(id) = expr {
         Ok(id.to_string())
     } else {
-        bail!("left hand side invalid or not supported");
+        bail!("expected variable, found {:?}", expr);
     }
 }

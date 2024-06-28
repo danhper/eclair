@@ -4,7 +4,7 @@ use alloy::json_abi::JsonAbi;
 use anyhow::{bail, Result};
 use itertools::Itertools;
 
-use super::{ContractInfo, Value};
+use super::{ContractInfo, Directive, Value};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -22,6 +22,7 @@ pub enum Type {
     Contract(String, JsonAbi),
     Function,
     Repl,
+    Console,
 }
 
 impl Display for Type {
@@ -45,6 +46,7 @@ impl Display for Type {
             Type::Function => write!(f, "function"),
 
             Type::Repl => write!(f, "repl"),
+            Type::Console => write!(f, "console"),
         }
     }
 }
@@ -80,6 +82,15 @@ impl Type {
             ))),
             (type_, value) if type_ == &value.get_type() => Ok(value.clone()),
             _ => bail!("cannot cast {} to {} (yet?)", value.get_type(), self),
+        }
+    }
+
+    pub fn functions(&self) -> Vec<String> {
+        match self {
+            Type::Contract(_, abi) => abi.functions.keys().map(|s| s.to_string()).collect(),
+            Type::Console => vec!["log".to_string()],
+            Type::Repl => Directive::all(),
+            _ => vec![],
         }
     }
 }
