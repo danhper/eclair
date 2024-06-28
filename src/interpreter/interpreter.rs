@@ -42,7 +42,7 @@ impl Interpreter {
         }
     }
 
-    pub async fn load_project(&mut self, project: Box<dyn Project>) -> Result<()> {
+    pub async fn load_project(&mut self, project: &Project) -> Result<()> {
         let mut env = self.env.lock().await;
         for contract_name in project.contract_names().iter() {
             let contract = project.get_contract(contract_name);

@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use super::helper::{create_editor, history_file, MyHelper};
 use super::Cli;
 use crate::interpreter::{Env, Interpreter, Value};
-use crate::project::foundry::FoundryProject;
+use crate::project;
 
 pub struct Repl {
     rl: Editor<MyHelper, FileHistory>,
@@ -21,11 +21,13 @@ impl Repl {
     pub async fn create(env: Arc<Mutex<Env>>, cli: &Cli) -> Result<Self> {
         let rl = create_editor(env.clone())?;
         let mut interpreter = Interpreter::new(env, &cli.rpc_url, cli.debug);
+
         let current_dir = std::env::current_dir()?;
-        if FoundryProject::is_valid(&current_dir) {
-            let project = FoundryProject::load(&current_dir)?;
-            interpreter.load_project(Box::new(project)).await?;
+        let projects = project::load(&current_dir);
+        for project in projects.iter() {
+            interpreter.load_project(project).await?;
         }
+
         let history_file = cli.history_file.clone().or(history_file());
         Ok(Repl {
             rl,

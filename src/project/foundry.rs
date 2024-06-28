@@ -1,84 +1,46 @@
-use alloy::json_abi::JsonAbi;
+use super::loader::ProjectLoader;
 use anyhow::{anyhow, bail, Result};
 use serde_json::Value;
-use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
+use std::path::{Path, PathBuf};
 
-pub struct FoundryProject {
-    abis: HashMap<String, JsonAbi>,
+pub struct FoundryProjectLoader;
+
+impl FoundryProjectLoader {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new() -> Box<dyn ProjectLoader> {
+        Box::new(FoundryProjectLoader {})
+    }
 }
 
-impl FoundryProject {
-    pub fn load<P: AsRef<Path>>(directory: P) -> Result<Self> {
-        if !Self::is_valid(&directory) {
-            return Err(anyhow::anyhow!("Invalid project"));
-        }
-        let mut project = FoundryProject::new();
-        project._load_abis_from_directory(&directory)?;
-        Ok(project)
+impl ProjectLoader for FoundryProjectLoader {
+    fn name(&self) -> &'static str {
+        "foundry"
     }
 
-    fn new() -> Self {
-        FoundryProject {
-            abis: HashMap::new(),
-        }
+    fn abi_dirs(&self) -> Vec<PathBuf> {
+        vec![Path::new("out").to_path_buf()]
     }
 
-    pub fn is_valid<P: AsRef<Path>>(directory: P) -> bool {
-        Path::new(directory.as_ref()).join("foundry.toml").is_file()
-    }
-
-    fn _load_abis_from_directory<P: AsRef<Path>>(&mut self, directory: P) -> Result<()> {
-        let files = glob::glob(
-            Path::new(directory.as_ref())
-                .join("out")
-                .join("**/*.json")
-                .to_str()
-                .unwrap(),
-        )?;
-        for file in files {
-            let file = file?;
-            let filepath = file.to_str().unwrap();
-            if filepath.contains(".t.sol/") || filepath.contains(".s.sol/") {
-                continue;
-            }
-            self._load_abi_from_file(filepath)?;
-        }
-        Ok(())
-    }
-
-    fn _load_abi_from_file(&mut self, filepath: &str) -> Result<()> {
-        let file = File::open(filepath)?;
-        let reader = BufReader::new(file);
-
-        let json: Value = serde_json::from_reader(reader)?;
+    fn get_contract_name(&self, json: &Value) -> Result<String> {
         let targets = json["metadata"]["settings"]["compilationTarget"]
             .as_object()
-            .ok_or(anyhow!("invalid compilation target {}", filepath))?;
+            .ok_or(anyhow!("invalid compilation target"))?;
         if targets.len() != 1 {
             bail!("invalid compilation target");
         }
-        let contract_name = targets.values().next().unwrap().as_str().unwrap();
-        self.abis.insert(
-            contract_name.to_string(),
-            JsonAbi::from_json_str(&json["abi"].to_string())?,
-            // serde_json::from_value(json["abi"].clone())?, // TODO: figure out why this doesn't work
-        );
-        Ok(())
-    }
-}
-
-impl Default for FoundryProject {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl super::types::Project for FoundryProject {
-    fn get_contract(&self, name: &str) -> JsonAbi {
-        self.abis.get(name).expect("Contract not found").clone()
+        let target = targets.values().next().unwrap();
+        target
+            .as_str()
+            .ok_or(anyhow!("invalid compilation target"))
+            .map(|s| s.to_string())
     }
 
-    fn contract_names(&self) -> Vec<String> {
-        self.abis.keys().cloned().collect()
+    fn should_exclude_file(&self, path: &Path) -> bool {
+        path.to_str()
+            .map_or(true, |f| f.contains(".s.sol") || f.contains(".t.sol"))
+    }
+
+    fn is_valid(&self, directory: &Path) -> bool {
+        directory.join("foundry.toml").is_file()
     }
 }
