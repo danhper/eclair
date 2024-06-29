@@ -1,3 +1,4 @@
+mod assignment;
 mod builtin_functions;
 mod directive;
 mod env;
@@ -6,7 +7,6 @@ mod functions;
 mod interpreter;
 mod parsing;
 mod types;
-mod utils;
 mod value;
 
 pub use directive::Directive;

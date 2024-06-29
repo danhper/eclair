@@ -11,11 +11,12 @@ use solang_parser::pt::{ContractPart, Expression, Statement};
 
 use crate::project::types::Project;
 
+use super::assignment::Lhs;
 use super::builtin_functions::BuiltinFunction;
 use super::functions::{Function, UserDefinedFunction};
 use super::parsing::ParsedCode;
 use super::types::Type;
-use super::{env::Env, parsing, utils::expr_as_var, value::Value};
+use super::{env::Env, parsing, value::Value};
 
 pub fn load_builtins(env: &mut Env) {
     env.set_var("_", Value::TypeObject(Type::This));
@@ -182,19 +183,6 @@ pub fn evaluate_statement(
     .boxed()
 }
 
-async fn modify_variable<F>(env: &mut Env, id: &str, f: F) -> Result<(Value, Value)>
-where
-    F: FnOnce(Value) -> Result<Value>,
-{
-    let current = env
-        .get_var(id)
-        .ok_or(anyhow!("{} is not defined", id))?
-        .clone();
-    let new_value = f(current.clone())?;
-    env.set_var(id, new_value.clone());
-    Ok((current, new_value))
-}
-
 pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_, Result<Value>> {
     async move {
         match *expr {
@@ -211,24 +199,30 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::StringLiteral(strs) => Ok(Value::Str(strs[0].string.clone())),
 
             Expression::PreIncrement(_, expr) => {
-                let id = expr_as_var(&expr)?;
-                let (v, _) = modify_variable(env, &id, |v| v + 1.into()).await?;
-                Ok(v)
+                let current_value = evaluate_expression(env, expr.clone()).await?;
+                let lhs = Lhs::try_from_expr(expr.as_ref().clone())?;
+                let new_value = (current_value + 1.into())?;
+                lhs.execute_assign(new_value.clone(), env)?;
+                Ok(new_value)
             }
             Expression::PreDecrement(_, expr) => {
-                let id = expr_as_var(&expr)?;
-                let (v, _) = modify_variable(env, &id, |v| v - 1.into()).await?;
-                Ok(v)
+                let current_value = evaluate_expression(env, expr.clone()).await?;
+                let lhs = Lhs::try_from_expr(expr.as_ref().clone())?;
+                let new_value = (current_value - 1.into())?;
+                lhs.execute_assign(new_value.clone(), env)?;
+                Ok(new_value)
             }
             Expression::PostIncrement(_, expr) => {
-                let id = expr_as_var(&expr)?;
-                let (v, _) = modify_variable(env, &id, |v| v + 1.into()).await?;
-                Ok(v)
+                let current_value = evaluate_expression(env, expr.clone()).await?;
+                let lhs = Lhs::try_from_expr(expr.as_ref().clone())?;
+                lhs.execute_assign((current_value.clone() + 1.into())?, env)?;
+                Ok(current_value)
             }
             Expression::PostDecrement(_, expr) => {
-                let id = expr_as_var(&expr)?;
-                let (_, v) = modify_variable(env, &id, |v| v - 1.into()).await?;
-                Ok(v)
+                let current_value = evaluate_expression(env, expr.clone()).await?;
+                let lhs = Lhs::try_from_expr(expr.as_ref().clone())?;
+                lhs.execute_assign((current_value.clone() - 1.into())?, env)?;
+                Ok(current_value)
             }
 
             Expression::HexNumberLiteral(_, n, _) => {
@@ -334,10 +328,10 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 v => bail!("invalid type for negate, expected uint, got {}", v),
             },
 
-            Expression::Assign(_, var, expr) => {
-                let id = expr_as_var(&var)?;
+            Expression::Assign(_, lhs_expr, expr) => {
+                let lhs = Lhs::try_from_expr(lhs_expr.as_ref().clone())?;
                 let result = evaluate_expression(env, expr).await?;
-                env.set_var(&id, result.clone());
+                lhs.execute_assign(result, env)?;
                 Ok(Value::Null)
             }
 
@@ -372,6 +366,14 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                         }
                     }
                 }
+            }
+
+            Expression::ArrayLiteral(_, exprs) => {
+                let mut values = vec![];
+                for expr in exprs.iter() {
+                    values.push(evaluate_expression(env, Box::new(expr.clone())).await?);
+                }
+                Ok(Value::Array(values))
             }
 
             Expression::ArraySubscript(_, expr, subscript_opt) => {
@@ -437,7 +439,11 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             }
 
             Expression::NamedFunctionCall(_, name_expr, args) => {
-                let id = expr_as_var(&name_expr)?;
+                let id = if let Expression::Variable(id) = name_expr.as_ref() {
+                    id.to_string()
+                } else {
+                    bail!("expected variable, found {:?}", name_expr);
+                };
                 let mut fields = BTreeMap::new();
                 for arg in args.iter() {
                     let value = evaluate_expression(env, Box::new(arg.expr.clone())).await?;

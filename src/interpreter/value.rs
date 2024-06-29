@@ -228,6 +228,16 @@ impl Value {
         }
     }
 
+    pub fn is_builtin(&self) -> bool {
+        matches!(
+            self,
+            Value::TypeObject(Type::This)
+                | Value::TypeObject(Type::Console)
+                | Value::TypeObject(Type::Repl)
+                | Value::Func(Function::Builtin(_))
+        )
+    }
+
     pub fn as_address(&self) -> Result<Address> {
         match self {
             Value::Addr(addr) => Ok(*addr),
@@ -263,6 +273,15 @@ impl Value {
             Value::Int(n) => Ok(n.as_u64()),
             Value::Uint(n) => Ok(n.to()),
             _ => bail!("cannot convert {} to u64", self.get_type()),
+        }
+    }
+
+    pub fn get_items(&self) -> Result<Vec<Value>> {
+        match self {
+            Value::Array(items) => Ok(items.clone()),
+            Value::Tuple(items) => Ok(items.clone()),
+            Value::NamedTuple(_, items) => Ok(items.values().cloned().collect()),
+            _ => bail!("{} is not iterable", self.get_type()),
         }
     }
 

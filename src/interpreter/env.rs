@@ -85,6 +85,11 @@ impl Env {
         scope.get(name)
     }
 
+    pub fn get_var_mut(&mut self, name: &str) -> Option<&mut Value> {
+        let scope = self.variables.last_mut().unwrap();
+        scope.get_mut(name)
+    }
+
     pub fn set_var(&mut self, name: &str, value: Value) {
         let scope = self.variables.last_mut().unwrap();
         scope.insert(name.to_string(), value);

@@ -94,6 +94,7 @@ impl Type {
         match self {
             Type::Contract(_, abi) => abi.functions.keys().map(|s| s.to_string()).collect(),
             Type::Console => vec!["log".to_string()],
+            Type::NamedTuple(_, fields) => fields.keys().map(|s| s.to_string()).collect(),
             Type::Repl => Directive::all(),
             _ => vec![],
         }
