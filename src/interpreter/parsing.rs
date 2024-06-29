@@ -46,6 +46,10 @@ fn parse_code(code: &str) -> Result<ContractDefinition> {
     }
 }
 
+pub fn parse_contract(input: &str) -> Result<ContractDefinition> {
+    parse_code(&wrap_contract(input))
+}
+
 pub fn parse_input(input: &str) -> Result<ParsedCode> {
     match parse_code(&wrap_statement(input)) {
         Ok(ContractDefinition { parts, .. }) => {
@@ -62,9 +66,8 @@ pub fn parse_input(input: &str) -> Result<ParsedCode> {
 
             Ok(ParsedCode::Statements(statements.clone()))
         }
-        Err(e) => match parse_code(&wrap_contract(input)) {
-            Ok(def @ ContractDefinition { .. }) => Ok(ParsedCode::ContractDefinition(def)),
-            Err(_) => Err(e),
-        },
+        Err(e) => parse_contract(input)
+            .map(ParsedCode::ContractDefinition)
+            .map_err(|_| e),
     }
 }

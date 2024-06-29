@@ -118,9 +118,8 @@ impl Display for Function {
 }
 
 impl Function {
-    pub async fn execute(&self, args: &[Value], env: &mut Env) -> Result<Value> {
-        env.push_scope();
-        let result = match self {
+    pub async fn execute_in_current_scope(&self, args: &[Value], env: &mut Env) -> Result<Value> {
+        match self {
             Function::ContractCall(contract_info, func_name) => {
                 self._execute_contract_call(contract_info, func_name, args, &env.get_provider())
                     .await
@@ -153,7 +152,12 @@ impl Function {
                     .await
                     .map(|v| v.unwrap_or(Value::Null))
             }
-        };
+        }
+    }
+
+    pub async fn execute(&self, args: &[Value], env: &mut Env) -> Result<Value> {
+        env.push_scope();
+        let result = self.execute_in_current_scope(args, env).await;
         env.pop_scope();
         result
     }

@@ -45,7 +45,7 @@ impl Repl {
         let init_files = get_init_files(init_file_name);
         for init_file in init_files.iter() {
             let code = std::fs::read_to_string(init_file)?;
-            interpreter::evaluate_code(&mut env, &code).await?;
+            interpreter::evaluate_setup(&mut env, &code).await?;
         }
 
         Ok(())

@@ -85,6 +85,11 @@ impl Env {
         scope.get(name)
     }
 
+    pub fn delete_var(&mut self, name: &str) {
+        let scope = self.variables.last_mut().unwrap();
+        scope.remove(name);
+    }
+
     pub fn get_var_mut(&mut self, name: &str) -> Option<&mut Value> {
         let scope = self.variables.last_mut().unwrap();
         scope.get_mut(name)

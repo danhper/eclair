@@ -18,6 +18,8 @@ use super::parsing::ParsedCode;
 use super::types::Type;
 use super::{env::Env, parsing, value::Value};
 
+pub const SETUP_FUNCTION_NAME: &str = "setUp";
+
 pub fn load_builtins(env: &mut Env) {
     env.set_var("_", Value::TypeObject(Type::This));
     env.set_var("repl", Value::TypeObject(Type::Repl));
@@ -44,6 +46,18 @@ pub fn load_project(env: &mut Env, project: &Project) -> Result<()> {
     Ok(())
 }
 
+pub async fn evaluate_setup(env: &mut Env, code: &str) -> Result<()> {
+    let def = parsing::parse_contract(code)?;
+    evaluate_contract_parts(env, &def.parts).await?;
+    let setup = env.get_var(SETUP_FUNCTION_NAME).cloned();
+    if let Some(Value::Func(func @ Function::UserDefined(_))) = setup {
+        func.execute_in_current_scope(&[], env).await?;
+        env.delete_var(SETUP_FUNCTION_NAME)
+    }
+
+    Ok(())
+}
+
 pub async fn evaluate_code(env: &mut Env, code: &str) -> Result<Option<Value>> {
     let parsed = parsing::parse_input(code)?;
 
@@ -58,12 +72,20 @@ pub async fn evaluate_code(env: &mut Env, code: &str) -> Result<Option<Value>> {
             if env.is_debug() {
                 println!("{:#?}", def);
             }
-            for part in def.parts.iter() {
-                evaluate_contract_part(env, part).await?;
-            }
+            evaluate_contract_parts(env, &def.parts).await?;
             Ok(None)
         }
     }
+}
+
+pub async fn evaluate_contract_parts(
+    env: &mut Env,
+    parts: &[solang_parser::pt::ContractPart],
+) -> Result<()> {
+    for part in parts.iter() {
+        evaluate_contract_part(env, part).await?;
+    }
+    Ok(())
 }
 
 pub async fn evaluate_contract_part(
