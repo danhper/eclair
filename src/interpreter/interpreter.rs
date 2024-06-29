@@ -73,6 +73,15 @@ pub async fn evaluate_contract_part(
             let func = UserDefinedFunction::try_from(def.as_ref().clone())?;
             env.set_var(&func.name, Value::Func(Function::UserDefined(func.clone())));
         }
+        ContractPart::VariableDefinition(def) => {
+            let id = def.name.clone().ok_or(anyhow!("invalid declaration"))?.name;
+            if let Some(expr) = &def.initializer {
+                let result = evaluate_expression(env, Box::new(expr.clone())).await?;
+                env.set_var(&id, result.clone());
+            } else {
+                bail!("declarations need rhs")
+            }
+        }
         v => bail!("{} not supported", v),
     }
     Ok(())
