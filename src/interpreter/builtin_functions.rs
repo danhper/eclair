@@ -190,11 +190,21 @@ fn format_func(args: &[Value]) -> Result<String> {
     format(receiver, &args[1..])
 }
 
+fn mul_div_args(args: &[Value]) -> Result<(Value, u64)> {
+    match args {
+        [v2] => Ok((v2.clone(), 18)),
+        [v2, d] => Ok((v2.clone(), d.as_u64()?)),
+        _ => bail!("mul function expects one or two arguments"),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum BuiltinFunction {
     Balance(Address),
     FormatFunc,
     Format(Box<Value>),
+    Mul(Box<Value>),
+    Div(Box<Value>),
     Concat(Box<Value>),
     Decode(String, JsonAbi),
     Map(Vec<Value>, Type),
@@ -210,6 +220,8 @@ impl fmt::Display for BuiltinFunction {
             Self::Balance(addr) => write!(f, "{}.balance", addr),
             Self::Format(v) => write!(f, "{}.format", v),
             Self::Concat(s) => write!(f, "{}.concat", s),
+            Self::Mul(v) => write!(f, "{}.mul", v),
+            Self::Div(v) => write!(f, "{}.div", v),
             Self::Decode(name, _) => write!(f, "{}.decode(bytes)", name),
             Self::Map(v, _) => {
                 let items = v.iter().map(|v| format!("{}", v)).join(", ");
@@ -240,8 +252,13 @@ impl BuiltinFunction {
     pub fn with_receiver(receiver: &Value, name: &str) -> Result<Self> {
         let method = match (receiver, name) {
             (Value::Addr(addr), "balance") => Self::Balance(*addr),
+
             (v, "format") => Self::Format(Box::new(v.clone())),
+
             (v @ (Value::Str(_) | Value::Array(_)), "concat") => Self::Concat(Box::new(v.clone())),
+
+            (v @ Value::Uint(_) | v @ Value::Int(_), "mul") => Self::Mul(Box::new(v.clone())),
+            (v @ Value::Uint(_) | v @ Value::Int(_), "div") => Self::Div(Box::new(v.clone())),
 
             (Value::Tuple(values), "map") => Self::Map(
                 values.clone(),
@@ -277,6 +294,14 @@ impl BuiltinFunction {
             Self::FormatFunc => format_func(args).map(Value::Str),
             Self::Format(v) => format(v, args).map(Value::Str),
             Self::Concat(v) => concat(v, args),
+            Self::Mul(v) => {
+                let (value, decimals) = mul_div_args(args)?;
+                (v.as_ref().clone() * value.clone())? / Value::decimal_multiplier(decimals as u8)
+            }
+            Self::Div(v) => {
+                let (value, decimals) = mul_div_args(args)?;
+                (v.as_ref().clone() * Value::decimal_multiplier(decimals as u8))? / value.clone()
+            }
             Self::Decode(name, abi) => decode_calldata(name, abi, args),
             Self::MethodCall(name) => method_call(name, args, env).await,
             Self::Map(values, type_) => {

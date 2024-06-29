@@ -217,6 +217,18 @@ impl Value {
             _ => bail!("cannot convert {} to usize", self.get_type()),
         }
     }
+
+    pub fn as_u64(&self) -> Result<u64> {
+        match self {
+            Value::Int(n) => Ok(n.as_u64()),
+            Value::Uint(n) => Ok(n.to()),
+            _ => bail!("cannot convert {} to u64", self.get_type()),
+        }
+    }
+
+    pub fn decimal_multiplier(decimals: u8) -> Value {
+        Value::Uint(U256::from(10).pow(U256::from(decimals)))
+    }
 }
 
 impl Add for Value {
