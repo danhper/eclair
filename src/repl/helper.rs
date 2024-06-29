@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -11,8 +10,6 @@ use tokio::sync::Mutex;
 
 use crate::interpreter::Env;
 use crate::repl::completer::MyCompleter;
-
-const SOREPL_HISTORY_FILE_NAME: &str = ".sorepl_history.txt";
 
 #[derive(Helper, Completer, Hinter, Validator)]
 pub(crate) struct MyHelper {
@@ -35,10 +32,6 @@ impl MyHelper {
     pub fn set_prompt(&mut self, prompt: &str) {
         prompt.clone_into(&mut self.colored_prompt)
     }
-}
-
-pub fn history_file() -> Option<PathBuf> {
-    foundry_config::Config::foundry_dir().map(|p| p.join(SOREPL_HISTORY_FILE_NAME))
 }
 
 pub(crate) fn create_editor(env: Arc<Mutex<Env>>) -> Result<Editor<MyHelper, FileHistory>> {

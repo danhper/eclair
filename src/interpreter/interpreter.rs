@@ -42,8 +42,8 @@ pub fn load_project(env: &mut Env, project: &Project) -> Result<()> {
     Ok(())
 }
 
-pub async fn evaluate_line(env: &mut Env, line: &str) -> Result<Option<Value>> {
-    let parsed = parsing::parse_line(line)?;
+pub async fn evaluate_code(env: &mut Env, code: &str) -> Result<Option<Value>> {
+    let parsed = parsing::parse_input(code)?;
 
     match parsed {
         ParsedCode::Statements(stmts) => {
@@ -73,7 +73,7 @@ pub async fn evaluate_contract_part(
             let func = UserDefinedFunction::try_from(def.as_ref().clone())?;
             env.set_var(&func.name, Value::Func(Function::UserDefined(func.clone())));
         }
-        _ => bail!("not supported"),
+        v => bail!("{} not supported", v),
     }
     Ok(())
 }

@@ -14,7 +14,8 @@ fn wrap_contract(function: &str) -> String {
 
 fn wrap_statement(stmt: &str) -> String {
     let mut statement = stmt.to_owned();
-    if !statement.ends_with(';') && !statement.ends_with('}') {
+    let last_non_whitespace = statement.trim_end().chars().last().unwrap_or(';');
+    if last_non_whitespace != ';' && last_non_whitespace != '}' {
         statement = format!("{};", statement);
     }
     wrap_contract(&format!(
@@ -45,7 +46,7 @@ fn parse_code(code: &str) -> Result<ContractDefinition> {
     }
 }
 
-pub fn parse_line(input: &str) -> Result<ParsedCode> {
+pub fn parse_input(input: &str) -> Result<ParsedCode> {
     match parse_code(&wrap_statement(input)) {
         Ok(ContractDefinition { parts, .. }) => {
             let func = match &parts[0] {

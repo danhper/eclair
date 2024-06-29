@@ -21,4 +21,8 @@ pub struct Cli {
     /// File where to store history
     #[arg(long, value_name = "FILE", env = "SOREPL_HISTORY_FILE")]
     pub history_file: Option<PathBuf>,
+
+    /// File where to store history
+    #[arg(long, value_name = "FILE_NAME", env = "INIT_FILE_NAME")]
+    pub init_file_name: Option<PathBuf>,
 }

@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::helper::{create_editor, history_file, MyHelper};
+use super::config::{get_init_files, history_file};
+use super::helper::{create_editor, MyHelper};
 use super::Cli;
 use crate::interpreter;
 use crate::project;
@@ -26,12 +27,13 @@ impl Repl {
             env,
             history_file,
         };
-        repl._initialize_env().await?;
+
+        repl._initialize_env(&cli.init_file_name).await?;
 
         Ok(repl)
     }
 
-    async fn _initialize_env(&mut self) -> Result<()> {
+    async fn _initialize_env(&mut self, init_file_name: &Option<PathBuf>) -> Result<()> {
         let mut env = self.env.lock().await;
         let current_dir = std::env::current_dir()?;
         let projects = project::load(current_dir);
@@ -39,6 +41,13 @@ impl Repl {
         for project in projects.iter() {
             interpreter::load_project(&mut env, project)?;
         }
+
+        let init_files = get_init_files(init_file_name);
+        for init_file in init_files.iter() {
+            let code = std::fs::read_to_string(init_file)?;
+            interpreter::evaluate_code(&mut env, &code).await?;
+        }
+
         Ok(())
     }
 
@@ -79,7 +88,7 @@ impl Repl {
             return;
         }
         let mut env = self.env.lock().await;
-        match interpreter::evaluate_line(&mut env, line.trim()).await {
+        match interpreter::evaluate_code(&mut env, line.trim()).await {
             Ok(None) | Ok(Some(interpreter::Value::Null)) => (),
             Ok(Some(result)) => println!("{}", result),
             Err(e) => println!("Error: {:?}", e),
