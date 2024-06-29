@@ -8,6 +8,7 @@ use alloy::{
 use anyhow::{bail, Result};
 use itertools::Itertools;
 use std::{
+    collections::BTreeMap,
     fmt::{self, Display, Formatter},
     ops::{Add, Div, Mul, Rem, Sub},
 };
@@ -29,6 +30,7 @@ pub enum Value {
     Addr(Address),
     Contract(ContractInfo),
     Tuple(Vec<Value>),
+    NamedTuple(String, BTreeMap<String, Value>),
     Array(Vec<Value>),
     TypeObject(Type),
     Func(Function),
@@ -36,6 +38,13 @@ pub enum Value {
 
 fn _values_to_string(values: &[Value]) -> String {
     values.iter().map(|v| format!("{}", v)).join(", ")
+}
+
+fn _format_struct_fields(fields: &BTreeMap<String, Value>) -> String {
+    fields
+        .iter()
+        .map(|(k, v)| format!("{}: {}", k, v))
+        .join(", ")
 }
 
 fn _values_to_dyn_sol_values(values: &[Value]) -> Result<Vec<DynSolValue>> {
@@ -62,6 +71,7 @@ impl Display for Value {
                 write!(f, "0x{}", hex::encode(bytes))
             }
             Value::Bytes(bytes) => write!(f, "0x{}", hex::encode(bytes)),
+            Value::NamedTuple(name, v) => write!(f, "{} {{ {} }}", name, _format_struct_fields(v)),
             Value::Tuple(v) => write!(f, "({})", _values_to_string(v)),
             Value::Array(v) => write!(f, "[{}]", _values_to_string(v)),
             Value::TypeObject(t) => write!(f, "{}", t),
@@ -86,6 +96,19 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::FixBytes(w, s) => DynSolValue::FixedBytes(*w, *s),
             Value::Bytes(b) => DynSolValue::Bytes(b.clone()),
             Value::Contract(ContractInfo(_, addr, _)) => DynSolValue::Address(*addr),
+            Value::NamedTuple(name, vs) => {
+                let prop_names = vs.iter().map(|(k, _)| k.clone()).collect();
+                let tuple = vs
+                    .iter()
+                    .map(|(_, v)| DynSolValue::try_from(v))
+                    .collect::<Result<Vec<_>>>()?;
+
+                DynSolValue::CustomStruct {
+                    name: name.clone(),
+                    prop_names,
+                    tuple,
+                }
+            }
             Value::Tuple(vs) => DynSolValue::Tuple(_values_to_dyn_sol_values(vs)?),
             Value::Array(vs) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
             Value::Null => bail!("cannot convert null to Solidity type"),
@@ -102,6 +125,7 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
     fn try_from(value: alloy::dyn_abi::DynSolValue) -> Result<Self, Self::Error> {
         match value {
             DynSolValue::Bool(b) => Ok(Value::Bool(b)),
+            DynSolValue::Int(n, _) => Ok(Value::Int(n)),
             DynSolValue::Uint(n, _) => Ok(Value::Uint(n)),
             DynSolValue::String(s) => Ok(Value::Str(s)),
             DynSolValue::Address(a) => Ok(Value::Addr(a)),
@@ -109,6 +133,18 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
             DynSolValue::Bytes(v) => Ok(Value::Bytes(v)),
             DynSolValue::Tuple(vs) => _dyn_sol_values_to_values(vs).map(Value::Tuple),
             DynSolValue::Array(vs) => _dyn_sol_values_to_values(vs).map(Value::Array),
+            DynSolValue::CustomStruct {
+                name,
+                prop_names,
+                tuple,
+            } => {
+                let vs = prop_names
+                    .into_iter()
+                    .zip(tuple)
+                    .map(|(k, dv)| Value::try_from(dv).map(|v| (k.clone(), v)))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(Value::NamedTuple(name, BTreeMap::from_iter(vs)))
+            }
             v => Err(anyhow::anyhow!("{:?} not supported", v)),
         }
     }
@@ -174,6 +210,10 @@ impl Value {
             Value::Addr(_) => Type::Address,
             Value::FixBytes(_, s) => Type::FixBytes(*s),
             Value::Bytes(_) => Type::Bytes,
+            Value::NamedTuple(name, vs) => Type::NamedTuple(
+                name.clone(),
+                vs.iter().map(|(k, v)| (k.clone(), v.get_type())).collect(),
+            ),
             Value::Tuple(vs) => Type::Tuple(vs.iter().map(Value::get_type).collect()),
             Value::Array(vs) => {
                 let t = vs.iter().map(Value::get_type).next().unwrap_or(Type::Bool);

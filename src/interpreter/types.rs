@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::BTreeMap, fmt::Display};
 
 use alloy::json_abi::JsonAbi;
 use anyhow::{bail, Result};
@@ -18,6 +18,7 @@ pub enum Type {
     Bytes,
     String,
     Array(Box<Type>),
+    NamedTuple(String, BTreeMap<String, Type>),
     Tuple(Vec<Type>),
     Contract(String, JsonAbi),
     Function,
@@ -38,6 +39,10 @@ impl Display for Type {
             Type::Bytes => write!(f, "bytes"),
             Type::String => write!(f, "string"),
             Type::Array(t) => write!(f, "{}[]", t),
+            Type::NamedTuple(name, t) => {
+                let items = t.iter().map(|(k, v)| format!("{}: {}", k, v)).join(", ");
+                write!(f, "{} {{{}}}", name, items)
+            }
             Type::Tuple(t) => {
                 let items = t.iter().map(|v| format!("{}", v)).join(", ");
                 write!(f, "({})", items)

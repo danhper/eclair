@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 use std::str::FromStr;
 
@@ -356,6 +357,12 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                     Value::Contract(c) => {
                         Ok(Value::Func(Function::ContractCall(c, method.name.clone())))
                     }
+                    Value::NamedTuple(_, fields) => {
+                        let field = fields
+                            .get(&method.name)
+                            .ok_or(anyhow!("field {} not found", method.name))?;
+                        Ok(field.clone())
+                    }
                     v => {
                         let method = BuiltinFunction::with_receiver(&v, &method.name)?;
                         if method.is_property() {
@@ -427,6 +434,16 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                     }
                     _ => bail!("{} not supported for {} and {}", "^", left, right),
                 }
+            }
+
+            Expression::NamedFunctionCall(_, name_expr, args) => {
+                let id = expr_as_var(&name_expr)?;
+                let mut fields = BTreeMap::new();
+                for arg in args.iter() {
+                    let value = evaluate_expression(env, Box::new(arg.expr.clone())).await?;
+                    fields.insert(arg.name.name.clone(), value);
+                }
+                Ok(Value::NamedTuple(id, fields))
             }
 
             Expression::FunctionCall(_, func_expr, args_) => {
