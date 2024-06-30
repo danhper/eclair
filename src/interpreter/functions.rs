@@ -1,10 +1,15 @@
 use std::fmt::Display;
 
 use alloy::{
-    contract::{ContractInstance, Interface},
+    contract::{CallBuilder, ContractInstance, Interface},
     dyn_abi::Specifier,
-    providers::RootProvider,
-    transports::http::{Client, Http},
+    json_abi::StateMutability,
+    network::Network,
+    providers::{Provider, RootProvider},
+    transports::{
+        http::{Client, Http},
+        Transport,
+    },
 };
 use anyhow::{anyhow, bail, Result};
 use solang_parser::pt::{Expression, Identifier, Parameter, Statement};
@@ -75,17 +80,39 @@ impl TryFrom<solang_parser::pt::FunctionDefinition> for UserDefinedFunction {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ContractCallMode {
+    Default,
+    Encode,
+    Call,
+    Send,
+}
+
+impl TryFrom<&str> for ContractCallMode {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &str) -> Result<Self> {
+        match s {
+            "encode" => Ok(ContractCallMode::Encode),
+            "call" => Ok(ContractCallMode::Call),
+            "send" => Ok(ContractCallMode::Send),
+            _ => bail!("{} does not exist for contract call", s),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Function {
-    ContractCall(ContractInfo, String),
+    ContractCall(ContractInfo, String, ContractCallMode),
     Builtin(BuiltinFunction),
     UserDefined(UserDefinedFunction),
+    FieldAccess(Box<Value>, String),
 }
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Function::ContractCall(ContractInfo(name, addr, abi), func_name) => {
+            Function::ContractCall(ContractInfo(name, addr, abi), func_name, mode) => {
                 let arg_types = abi
                     .function(func_name)
                     .map(|f| {
@@ -95,15 +122,22 @@ impl Display for Function {
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
+                let suffix = if mode == &ContractCallMode::Encode {
+                    ".encode"
+                } else {
+                    ""
+                };
                 write!(
                     f,
-                    "{}({}).{}({})",
+                    "{}({}).{}({}){}",
                     name,
                     addr,
                     func_name,
-                    arg_types.join(",")
+                    arg_types.join(","),
+                    suffix
                 )
             }
+            Function::FieldAccess(v, n) => write!(f, "{}.{}", v, n),
             Function::Builtin(m) => write!(f, "{}", m),
             Function::UserDefined(func) => {
                 let formatted_params = func
@@ -119,12 +153,42 @@ impl Display for Function {
 }
 
 impl Function {
+    pub fn with_receiver(receiver: &Value, name: &str) -> Result<Self> {
+        let func = match receiver {
+            Value::Contract(c) => {
+                Function::ContractCall(c.clone(), name.to_string(), ContractCallMode::Default)
+            }
+            v @ Value::NamedTuple(..) => {
+                Function::FieldAccess(Box::new(v.clone()), name.to_string())
+            }
+
+            Value::Func(Function::ContractCall(contract, method, _mode)) => Function::ContractCall(
+                contract.clone(),
+                method.to_string(),
+                ContractCallMode::try_from(name)?,
+            ),
+
+            v => {
+                let method = BuiltinFunction::with_receiver(v, name)?;
+                Function::Builtin(method)
+            }
+        };
+        Ok(func)
+    }
+
     pub async fn execute_in_current_scope(&self, args: &[Value], env: &mut Env) -> Result<Value> {
         match self {
-            Function::ContractCall(contract_info, func_name) => {
-                self._execute_contract_call(contract_info, func_name, args, &env.get_provider())
-                    .await
+            Function::ContractCall(contract_info, func_name, mode) => {
+                self._execute_contract_interaction(
+                    contract_info,
+                    func_name,
+                    mode,
+                    args,
+                    &env.get_provider(),
+                )
+                .await
             }
+            Function::FieldAccess(f, v) => f.get_field(v),
             Function::Builtin(m) => m.execute(args, env).await,
             Function::UserDefined(func) => {
                 if args.len() != func.params.len() {
@@ -156,6 +220,15 @@ impl Function {
         }
     }
 
+    pub fn is_property(&self) -> bool {
+        match self {
+            Function::ContractCall(_, _, _) => false,
+            Function::FieldAccess(_, _) => true,
+            Function::Builtin(m) => m.is_property(),
+            Function::UserDefined(_) => false,
+        }
+    }
+
     pub async fn execute(&self, args: &[Value], env: &mut Env) -> Result<Value> {
         env.push_scope();
         let result = self.execute_in_current_scope(args, env).await;
@@ -163,10 +236,11 @@ impl Function {
         result
     }
 
-    async fn _execute_contract_call(
+    async fn _execute_contract_interaction(
         &self,
         contract_info: &ContractInfo,
         func_name: &str,
+        mode: &ContractCallMode,
         args: &[Value],
         provider: &RootProvider<Http<Client>>,
     ) -> Result<Value> {
@@ -178,8 +252,8 @@ impl Function {
         ))?;
         let contract = ContractInstance::new(*addr, provider.clone(), Interface::new(abi.clone()));
         let mut call_result = Ok(Value::Null);
-        for func in funcs.iter() {
-            let types = func
+        for func_abi in funcs.iter() {
+            let types = func_abi
                 .inputs
                 .iter()
                 .map(|t| t.resolve().map(Type::from).map_err(|e| anyhow!(e)))
@@ -190,24 +264,55 @@ impl Function {
                         .iter()
                         .map(|arg| arg.try_into())
                         .collect::<Result<Vec<_>>>()?;
-                    let result = contract
-                        .function_from_selector(&func.selector(), &tokens)?
-                        .call()
-                        .await?;
-                    let return_values = result
-                        .into_iter()
-                        .map(Value::try_from)
-                        .collect::<Result<Vec<_>>>()?;
-                    if return_values.len() == 1 {
-                        return Ok(return_values.into_iter().next().unwrap());
-                    } else {
-                        return Ok(Value::Tuple(return_values));
+                    let func = contract.function_from_selector(&func_abi.selector(), &tokens)?;
+                    let is_view = func_abi.state_mutability == StateMutability::Pure
+                        || func_abi.state_mutability == StateMutability::View;
+                    match mode {
+                        ContractCallMode::Default => {
+                            if is_view {
+                                call_result = self._execute_contract_call(func).await;
+                            } else {
+                                call_result = Ok(Value::Null);
+                            }
+                        }
+                        ContractCallMode::Encode => {
+                            let encoded = func.calldata();
+                            call_result = Ok(Value::Bytes(encoded[..].to_vec()));
+                        }
+                        ContractCallMode::Call => {
+                            call_result = self._execute_contract_call(func).await
+                        }
+                        ContractCallMode::Send => {
+                            let tx = func.send().await?;
+                            call_result = Ok(Value::from(tx.tx_hash()));
+                        }
                     }
                 }
                 Err(e) => call_result = Err(e),
             }
         }
         call_result
+    }
+
+    async fn _execute_contract_call<T, P, N>(
+        &self,
+        func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    ) -> Result<Value>
+    where
+        T: Transport + Clone,
+        P: Provider<T, N>,
+        N: Network,
+    {
+        let result = func.call().await?;
+        let return_values = result
+            .into_iter()
+            .map(Value::try_from)
+            .collect::<Result<Vec<_>>>()?;
+        if return_values.len() == 1 {
+            Ok(return_values.into_iter().next().unwrap())
+        } else {
+            Ok(Value::Tuple(return_values))
+        }
     }
 
     fn _unify_types(&self, args: &[Value], types: &[Type]) -> Result<Vec<Value>> {

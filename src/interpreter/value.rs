@@ -168,6 +168,21 @@ impl From<u128> for Value {
     }
 }
 
+impl<const N: usize> From<alloy::primitives::FixedBytes<N>> for Value {
+    fn from(bytes: alloy::primitives::FixedBytes<N>) -> Self {
+        Value::FixBytes(B256::from_slice(&bytes[..]), N)
+    }
+}
+
+impl<T> From<&T> for Value
+where
+    T: Into<Value> + Clone,
+{
+    fn from(t: &T) -> Self {
+        t.clone().into()
+    }
+}
+
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -243,8 +258,7 @@ impl Value {
     pub fn is_builtin(&self) -> bool {
         matches!(
             self,
-            Value::TypeObject(Type::This)
-                | Value::TypeObject(Type::Console)
+            Value::TypeObject(Type::Console)
                 | Value::TypeObject(Type::Repl)
                 | Value::Func(Function::Builtin(_))
         )
@@ -285,6 +299,16 @@ impl Value {
             Value::Int(n) => Ok(n.as_u64()),
             Value::Uint(n) => Ok(n.to()),
             _ => bail!("cannot convert {} to u64", self.get_type()),
+        }
+    }
+
+    pub fn get_field(&self, field: &str) -> Result<Value> {
+        match self {
+            Value::NamedTuple(_, fields) => fields
+                .get(field)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("field {} not found", field)),
+            _ => bail!("{} is not a struct", self.get_type()),
         }
     }
 

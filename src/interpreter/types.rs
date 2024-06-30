@@ -13,7 +13,6 @@ use super::{block_functions::BlockFunction, ContractInfo, Directive, Value};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Null,
-    This,
     Address,
     Bool,
     Int(usize),
@@ -35,7 +34,6 @@ impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Null => write!(f, "null"),
-            Type::This => write!(f, "this"),
             Type::Address => write!(f, "address"),
             Type::Bool => write!(f, "bool"),
             Type::Int(size) => write!(f, "int{}", size),
@@ -67,8 +65,8 @@ impl From<DynSolType> for Type {
         match type_ {
             DynSolType::Address => Type::Address,
             DynSolType::Bool => Type::Bool,
-            DynSolType::Int(size) => Type::Int(size as usize),
-            DynSolType::Uint(size) => Type::Uint(size as usize),
+            DynSolType::Int(size) => Type::Int(size),
+            DynSolType::Uint(size) => Type::Uint(size),
             DynSolType::Bytes => Type::Bytes,
             DynSolType::FixedBytes(s) => Type::FixBytes(s),
             DynSolType::String => Type::String,

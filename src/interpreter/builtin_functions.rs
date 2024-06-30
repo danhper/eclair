@@ -12,9 +12,7 @@ use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use itertools::Itertools;
 
-use super::{
-    block_functions::BlockFunction, functions::Function, types::Type, Directive, Env, Value,
-};
+use super::{block_functions::BlockFunction, types::Type, Directive, Env, Value};
 
 fn common_to_decimals<T, F, G>(
     value: T,
@@ -159,24 +157,6 @@ fn map<'a>(
     .boxed()
 }
 
-fn method_call<'a>(
-    name: &'a str,
-    args: &'a [Value],
-    env: &'a mut Env,
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let receiver = args
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("method call expects at least one argument"))?;
-        let method = match receiver {
-            Value::Contract(c) => Function::ContractCall(c.clone(), name.to_string()),
-            _ => Function::Builtin(BuiltinFunction::with_receiver(receiver, name)?),
-        };
-        method.execute(&args[1..], env).await
-    }
-    .boxed()
-}
-
 fn format_bytes(bytes: &[u8]) -> String {
     let mut stripped_bytes = bytes;
     let last_0 = bytes.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
@@ -229,7 +209,6 @@ pub enum BuiltinFunction {
     Concat(Box<Value>),
     Decode(String, JsonAbi),
     Map(Vec<Value>, Type),
-    MethodCall(String),
     Directive(Directive),
     GetType,
     Log,
@@ -251,7 +230,6 @@ impl fmt::Display for BuiltinFunction {
                 let items = v.iter().map(|v| format!("{}", v)).join(", ");
                 write!(f, "{}.map", items)
             }
-            Self::MethodCall(name) => write!(f, ".{}", name),
             Self::GetType => write!(f, "type"),
             Self::FormatFunc => write!(f, "format"),
             Self::Directive(d) => write!(f, "repl.{}", d),
@@ -301,7 +279,6 @@ impl BuiltinFunction {
                 Self::Min(t.clone())
             }
 
-            (Value::TypeObject(Type::This), method) => Self::MethodCall(method.to_string()),
             (Value::TypeObject(Type::Contract(name, abi)), "decode") => {
                 Self::Decode(name.clone(), abi.clone())
             }
@@ -312,6 +289,7 @@ impl BuiltinFunction {
                 BlockFunction::from_name(name).map(Self::Block)?
             }
             (Value::TypeObject(Type::Console), "log") => Self::Log,
+
             _ => bail!("no method {} for type {}", name, receiver.get_type()),
         };
         Ok(method)
@@ -347,7 +325,6 @@ impl BuiltinFunction {
             Self::Min(t) => t.min(),
 
             Self::Decode(name, abi) => decode_calldata(name, abi, args),
-            Self::MethodCall(name) => method_call(name, args, env).await,
             Self::Map(values, type_) => {
                 let result = map(values, type_.clone(), args, env).await?;
                 Ok(result)

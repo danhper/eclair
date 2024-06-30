@@ -21,7 +21,6 @@ use super::{env::Env, parsing, value::Value};
 pub const SETUP_FUNCTION_NAME: &str = "setUp";
 
 pub fn load_builtins(env: &mut Env) {
-    env.set_var("_", Value::TypeObject(Type::This));
     env.set_var("repl", Value::TypeObject(Type::Repl));
     env.set_var("console", Value::TypeObject(Type::Console));
     env.set_var("block", Value::TypeObject(Type::Block));
@@ -370,24 +369,12 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             }
 
             Expression::MemberAccess(_, receiver_expr, method) => {
-                match evaluate_expression(env, receiver_expr).await? {
-                    Value::Contract(c) => {
-                        Ok(Value::Func(Function::ContractCall(c, method.name.clone())))
-                    }
-                    Value::NamedTuple(_, fields) => {
-                        let field = fields
-                            .get(&method.name)
-                            .ok_or(anyhow!("field {} not found", method.name))?;
-                        Ok(field.clone())
-                    }
-                    v => {
-                        let method = BuiltinFunction::with_receiver(&v, &method.name)?;
-                        if method.is_property() {
-                            Ok(method.execute(&[], env).await?)
-                        } else {
-                            Ok(Value::Func(Function::Builtin(method)))
-                        }
-                    }
+                let receiver = evaluate_expression(env, receiver_expr).await?;
+                let function = Function::with_receiver(&receiver, &method.name)?;
+                if function.is_property() {
+                    Ok(function.execute(&[], env).await?)
+                } else {
+                    Ok(Value::Func(function))
                 }
             }
 
