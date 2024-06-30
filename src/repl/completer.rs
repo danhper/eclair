@@ -7,7 +7,7 @@ use rustyline::{
 };
 use tokio::sync::Mutex;
 
-use crate::interpreter::Env;
+use crate::interpreter::{Env, Type};
 
 pub(crate) struct MyCompleter {
     filename_completer: FilenameCompleter,
@@ -100,8 +100,10 @@ impl rustyline::completion::Completer for MyCompleter {
         }
 
         let mut types = env.list_types();
+        let mut builtins = Type::builtins();
         let mut vars_and_types = env.list_vars();
         vars_and_types.append(&mut types);
+        vars_and_types.append(&mut builtins);
 
         let completions: Vec<_> = vars_and_types.iter().map(|s| pair_from_string(s)).collect();
 

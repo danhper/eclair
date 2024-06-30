@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fmt::Display};
 
 use alloy::{
     json_abi::JsonAbi,
-    primitives::{I256, U256},
+    primitives::{Address, B256, I256, U160, U256},
 };
 use anyhow::{bail, Result};
 use itertools::Itertools;
@@ -83,15 +83,51 @@ impl TryFrom<solang_parser::pt::Type> for Type {
 }
 
 impl Type {
+    pub fn builtins() -> Vec<String> {
+        vec![
+            "address".to_string(),
+            "bool".to_string(),
+            "int8".to_string(),
+            "int16".to_string(),
+            "int32".to_string(),
+            "int64".to_string(),
+            "int128".to_string(),
+            "int256".to_string(),
+            "uint8".to_string(),
+            "uint16".to_string(),
+            "uint32".to_string(),
+            "uint64".to_string(),
+            "uint128".to_string(),
+            "uint256".to_string(),
+            "bytes".to_string(),
+            "string".to_string(),
+        ]
+    }
+
     pub fn cast(&self, value: &Value) -> Result<Value> {
         match (self, value) {
+            (type_, value) if type_ == &value.get_type() => Ok(value.clone()),
             (Type::Contract(name, abi), Value::Addr(addr)) => Ok(Value::Contract(ContractInfo(
                 name.clone(),
                 *addr,
                 abi.clone(),
             ))),
-            (type_, value) if type_ == &value.get_type() => Ok(value.clone()),
-            _ => bail!("cannot cast {} to {} (yet?)", value.get_type(), self),
+            (Type::Address, Value::Contract(ContractInfo(_, addr, _))) => Ok(Value::Addr(*addr)),
+            (Type::Address, Value::Uint(v)) => Ok(Value::Addr(Address::from(v.to::<U160>()))),
+            (Type::Address, Value::Int(v)) if v.is_zero() => Ok(Value::Addr(Address::ZERO)),
+            (Type::Address, Value::Int(_)) => {
+                bail!("cannot only cast cast zero address from int")
+            }
+            (Type::String, Value::Bytes(v)) => {
+                Ok(Value::Str(String::from_utf8_lossy(v).to_string()))
+            }
+            (Type::Bytes, Value::Str(v)) => Ok(Value::Bytes(v.as_bytes().to_vec())),
+            (Type::FixBytes(size), Value::Bytes(v)) => {
+                let mut new_vector = v.clone();
+                new_vector.resize(32, 0);
+                Ok(Value::FixBytes(B256::from_slice(&new_vector), *size))
+            }
+            _ => bail!("cannot cast {} to {}", value.get_type(), self),
         }
     }
 
