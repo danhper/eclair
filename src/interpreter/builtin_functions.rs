@@ -2,6 +2,7 @@ use core::fmt;
 
 use alloy::{
     dyn_abi::JsonAbiExt,
+    hex,
     json_abi::JsonAbi,
     primitives::{Address, FixedBytes, I256, U256},
     providers::{Provider, RootProvider},
@@ -176,12 +177,28 @@ fn method_call<'a>(
     .boxed()
 }
 
+fn format_bytes(bytes: &[u8]) -> String {
+    let mut stripped_bytes = bytes;
+    let last_0 = bytes.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
+    if last_0 > 0 {
+        stripped_bytes = &bytes[..last_0];
+    }
+    let is_diplayable = bytes.iter().all(|c| c.is_ascii());
+    if is_diplayable {
+        return String::from_utf8_lossy(stripped_bytes).to_string();
+    } else {
+        format!("0x{}", hex::encode(bytes))
+    }
+}
+
 fn format(value: &Value, args: &[Value]) -> Result<String> {
     match value {
         Value::Uint(n) => to_decimals(*n, args, uint_to_decimals),
         Value::Int(n) => to_decimals(*n, args, int_to_decimals),
         Value::Str(s) => Ok(s.clone()),
-        _ => bail!("cannot format {}", value),
+        Value::Bytes(b) => Ok(format_bytes(b)),
+        Value::FixBytes(b, _) => Ok(format_bytes(&b.0)),
+        v => Ok(format!("{}", v)),
     }
 }
 

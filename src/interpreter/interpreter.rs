@@ -391,6 +391,19 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 }
             }
 
+            Expression::List(_, items) => {
+                let mut values = vec![];
+                for (_, item) in items.iter() {
+                    match item {
+                        Some(item) => {
+                            values.push(evaluate_expression(env, Box::new(item.ty.clone())).await?);
+                        }
+                        None => values.push(Value::Null),
+                    }
+                }
+                Ok(Value::Tuple(values))
+            }
+
             Expression::ArrayLiteral(_, exprs) => {
                 let mut values = vec![];
                 for expr in exprs.iter() {

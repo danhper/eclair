@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fmt::Display};
 
 use alloy::{
+    dyn_abi::DynSolType,
     json_abi::JsonAbi,
     primitives::{Address, B256, I256, U160, U256},
 };
@@ -57,6 +58,42 @@ impl Display for Type {
             Type::Repl => write!(f, "repl"),
             Type::Block => write!(f, "block"),
             Type::Console => write!(f, "console"),
+        }
+    }
+}
+
+impl From<DynSolType> for Type {
+    fn from(type_: DynSolType) -> Self {
+        match type_ {
+            DynSolType::Address => Type::Address,
+            DynSolType::Bool => Type::Bool,
+            DynSolType::Int(size) => Type::Int(size as usize),
+            DynSolType::Uint(size) => Type::Uint(size as usize),
+            DynSolType::Bytes => Type::Bytes,
+            DynSolType::FixedBytes(s) => Type::FixBytes(s),
+            DynSolType::String => Type::String,
+            DynSolType::Function => Type::Function,
+            DynSolType::Array(t) => Type::Array(Box::new(t.as_ref().clone().into())),
+            DynSolType::FixedArray(t, _) => Type::Array(Box::new(t.as_ref().clone().into())),
+            DynSolType::Tuple(types) => {
+                Type::Tuple(types.iter().map(|t| Type::from(t.clone())).collect())
+            }
+            DynSolType::CustomStruct {
+                name,
+                prop_names,
+                tuple,
+            } => Type::NamedTuple(
+                name,
+                prop_names
+                    .into_iter()
+                    .zip(
+                        tuple
+                            .iter()
+                            .map(|t| Type::from(t.clone()))
+                            .collect::<Vec<_>>(),
+                    )
+                    .collect(),
+            ),
         }
     }
 }
@@ -122,9 +159,10 @@ impl Type {
                 Ok(Value::Str(String::from_utf8_lossy(v).to_string()))
             }
             (Type::Bytes, Value::Str(v)) => Ok(Value::Bytes(v.as_bytes().to_vec())),
+            (type_ @ Type::FixBytes(_), Value::Str(_)) => type_.cast(&Type::Bytes.cast(value)?),
             (Type::FixBytes(size), Value::Bytes(v)) => {
                 let mut new_vector = v.clone();
-                new_vector.resize(32, 0);
+                new_vector.resize(*size, 0);
                 Ok(Value::FixBytes(B256::from_slice(&new_vector), *size))
             }
             _ => bail!("cannot cast {} to {}", value.get_type(), self),

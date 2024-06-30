@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use alloy::{
     contract::{ContractInstance, Interface},
+    dyn_abi::Specifier,
     providers::RootProvider,
     transports::http::{Client, Http},
 };
@@ -169,21 +170,68 @@ impl Function {
         args: &[Value],
         provider: &RootProvider<Http<Client>>,
     ) -> Result<Value> {
-        let ContractInfo(_name, addr, abi) = &contract_info;
+        let ContractInfo(name, addr, abi) = &contract_info;
+        let funcs = abi.function(func_name).ok_or(anyhow!(
+            "function {} not found in {}",
+            func_name,
+            name
+        ))?;
         let contract = ContractInstance::new(*addr, provider.clone(), Interface::new(abi.clone()));
-        let tokens = args
-            .iter()
-            .map(|arg| arg.try_into())
-            .collect::<Result<Vec<_>>>()?;
-        let result = contract.function(func_name, &tokens)?.call().await?;
-        let return_values = result
-            .into_iter()
-            .map(Value::try_from)
-            .collect::<Result<Vec<_>>>()?;
-        if return_values.len() == 1 {
-            Ok(return_values.into_iter().next().unwrap())
-        } else {
-            Ok(Value::Tuple(return_values))
+        let mut call_result = Ok(Value::Null);
+        for func in funcs.iter() {
+            let types = func
+                .inputs
+                .iter()
+                .map(|t| t.resolve().map(Type::from).map_err(|e| anyhow!(e)))
+                .collect::<Result<Vec<Type>>>()?;
+            match self._unify_types(args, &types) {
+                Ok(values) => {
+                    let tokens = values
+                        .iter()
+                        .map(|arg| arg.try_into())
+                        .collect::<Result<Vec<_>>>()?;
+                    let result = contract
+                        .function_from_selector(&func.selector(), &tokens)?
+                        .call()
+                        .await?;
+                    let return_values = result
+                        .into_iter()
+                        .map(Value::try_from)
+                        .collect::<Result<Vec<_>>>()?;
+                    if return_values.len() == 1 {
+                        return Ok(return_values.into_iter().next().unwrap());
+                    } else {
+                        return Ok(Value::Tuple(return_values));
+                    }
+                }
+                Err(e) => call_result = Err(e),
+            }
         }
+        call_result
+    }
+
+    fn _unify_types(&self, args: &[Value], types: &[Type]) -> Result<Vec<Value>> {
+        if args.len() != types.len() {
+            bail!(
+                "function {} expects {} arguments, but got {}",
+                self,
+                types.len(),
+                args.len()
+            );
+        }
+        let mut result = Vec::new();
+        for (i, (arg, type_)) in args.iter().zip(types).enumerate() {
+            match type_.cast(arg) {
+                Ok(v) => result.push(v),
+                Err(_) => bail!(
+                    "expected {} argument {} to be {}, but got {}",
+                    self,
+                    i,
+                    type_,
+                    arg.get_type()
+                ),
+            }
+        }
+        Ok(result)
     }
 }
