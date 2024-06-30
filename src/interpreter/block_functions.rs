@@ -1,4 +1,4 @@
-use alloy::{eips::BlockId, providers::Provider, rpc::types::BlockTransactionsKind};
+use alloy::{eips::BlockId, rpc::types::BlockTransactionsKind};
 use anyhow::{anyhow, bail, Result};
 
 use super::{Env, Value};
@@ -45,13 +45,12 @@ impl BlockFunction {
             bail!("block.{} does not take arguments", self);
         }
         match self {
-            BlockFunction::ChainId => Ok(env.get_provider().root().get_chain_id().await?.into()),
-            BlockFunction::BaseFee => Ok(env.get_provider().root().get_gas_price().await?.into()),
-            BlockFunction::Number => Ok(env.get_provider().root().get_block_number().await?.into()),
+            BlockFunction::ChainId => Ok(env.get_provider().get_chain_id().await?.into()),
+            BlockFunction::BaseFee => Ok(env.get_provider().get_gas_price().await?.into()),
+            BlockFunction::Number => Ok(env.get_provider().get_block_number().await?.into()),
             BlockFunction::Timestamp => {
                 let latest_block = env
                     .get_provider()
-                    .root()
                     .get_block(BlockId::latest(), BlockTransactionsKind::Hashes)
                     .await?
                     .ok_or(anyhow!("latest block not found"))?;

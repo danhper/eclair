@@ -5,11 +5,8 @@ use alloy::{
     dyn_abi::Specifier,
     json_abi::StateMutability,
     network::Network,
-    providers::{Provider, RootProvider},
-    transports::{
-        http::{Client, Http},
-        Transport,
-    },
+    providers::Provider,
+    transports::Transport,
 };
 use anyhow::{anyhow, bail, Result};
 use solang_parser::pt::{Expression, Identifier, Parameter, Statement};
@@ -179,14 +176,8 @@ impl Function {
     pub async fn execute_in_current_scope(&self, args: &[Value], env: &mut Env) -> Result<Value> {
         match self {
             Function::ContractCall(contract_info, func_name, mode) => {
-                self._execute_contract_interaction(
-                    contract_info,
-                    func_name,
-                    mode,
-                    args,
-                    &env.get_provider(),
-                )
-                .await
+                self._execute_contract_interaction(contract_info, func_name, mode, args, env)
+                    .await
             }
             Function::FieldAccess(f, v) => f.get_field(v),
             Function::Builtin(m) => m.execute(args, env).await,
@@ -242,7 +233,7 @@ impl Function {
         func_name: &str,
         mode: &ContractCallMode,
         args: &[Value],
-        provider: &RootProvider<Http<Client>>,
+        env: &Env,
     ) -> Result<Value> {
         let ContractInfo(name, addr, abi) = &contract_info;
         let funcs = abi.function(func_name).ok_or(anyhow!(
@@ -250,7 +241,11 @@ impl Function {
             func_name,
             name
         ))?;
-        let contract = ContractInstance::new(*addr, provider.clone(), Interface::new(abi.clone()));
+        let contract = ContractInstance::new(
+            *addr,
+            env.get_provider().root().clone(),
+            Interface::new(abi.clone()),
+        );
         let mut call_result = Ok(Value::Null);
         for func_abi in funcs.iter() {
             let types = func_abi
@@ -272,7 +267,7 @@ impl Function {
                             if is_view {
                                 call_result = self._execute_contract_call(func).await;
                             } else {
-                                call_result = Ok(Value::Null);
+                                call_result = self._execute_contract_send(func).await
                             }
                         }
                         ContractCallMode::Encode => {
@@ -283,8 +278,7 @@ impl Function {
                             call_result = self._execute_contract_call(func).await
                         }
                         ContractCallMode::Send => {
-                            let tx = func.send().await?;
-                            call_result = Ok(Value::from(tx.tx_hash()));
+                            call_result = self._execute_contract_send(func).await
                         }
                     }
                 }
@@ -292,6 +286,19 @@ impl Function {
             }
         }
         call_result
+    }
+
+    async fn _execute_contract_send<T, P, N>(
+        &self,
+        func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    ) -> Result<Value>
+    where
+        T: Transport + Clone,
+        P: Provider<T, N>,
+        N: Network,
+    {
+        let tx = func.send().await?;
+        Ok(Value::from(tx.tx_hash()))
     }
 
     async fn _execute_contract_call<T, P, N>(

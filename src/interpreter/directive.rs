@@ -13,6 +13,7 @@ pub enum Directive {
     Debug,
     Exec,
     Connected,
+    LoadPrivateKey,
 }
 
 impl std::fmt::Display for Directive {
@@ -24,6 +25,7 @@ impl std::fmt::Display for Directive {
             Directive::Debug => write!(f, "debug"),
             Directive::Exec => write!(f, "exec"),
             Directive::Connected => write!(f, "connected"),
+            Directive::LoadPrivateKey => write!(f, "loadPrivateKey"),
         }
     }
 }
@@ -46,10 +48,18 @@ fn list_types(env: &Env) {
 
 impl Directive {
     pub fn all() -> Vec<String> {
-        ["types", "vars", "rpc", "debug", "exec", "connected"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
+        [
+            "types",
+            "vars",
+            "rpc",
+            "debug",
+            "exec",
+            "connected",
+            "loadPrivateKey",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
     }
 
     pub fn is_property(&self) -> bool {
@@ -69,7 +79,7 @@ impl Directive {
             }
             Directive::Rpc => match args {
                 [] => println!("{}", env.get_provider().root().client().transport().url()),
-                [url] => env.set_provider(&url.as_string()?),
+                [url] => env.set_provider_url(&url.as_string()?)?,
                 _ => bail!("rpc: invalid arguments"),
             },
             Directive::Debug => match args {
@@ -84,6 +94,16 @@ impl Directive {
                 }
                 _ => bail!("exec: invalid arguments"),
             },
+            Directive::LoadPrivateKey => match args {
+                [Value::Str(key)] => {
+                    env.set_private_key(key.as_str())?;
+                }
+                [] => {
+                    let key = rpassword::prompt_password("Enter private key: ")?;
+                    env.set_private_key(key.as_str())?;
+                }
+                _ => bail!("loadPrivateKey: invalid arguments"),
+            },
         }
 
         Ok(Value::Null)
@@ -97,6 +117,7 @@ impl Directive {
             "debug" => Ok(Directive::Debug),
             "exec" => Ok(Directive::Exec),
             "connected" => Ok(Directive::Connected),
+            "loadPrivateKey" => Ok(Directive::LoadPrivateKey),
             _ => Err(anyhow::anyhow!("Invalid directive")),
         }
     }

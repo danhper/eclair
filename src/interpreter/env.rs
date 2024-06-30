@@ -4,18 +4,20 @@ use std::{
 };
 
 use alloy::{
-    providers::{ProviderBuilder, RootProvider},
+    network::{Ethereum, EthereumWallet},
+    providers::{Provider, ProviderBuilder},
+    signers::local::PrivateKeySigner,
     transports::http::{Client, Http},
 };
+use anyhow::Result;
 
 use super::{types::Type, Value};
 
-#[derive(Debug)]
 pub struct Env {
     variables: Vec<HashMap<String, Value>>,
     types: HashMap<String, Type>,
     debug: bool,
-    provider: Arc<RootProvider<Http<Client>>>,
+    provider: Arc<dyn Provider<Http<Client>, Ethereum>>,
 }
 
 unsafe impl std::marker::Send for Env {}
@@ -48,14 +50,28 @@ impl Env {
         self.debug
     }
 
-    pub fn get_provider(&self) -> Arc<RootProvider<Http<Client>>> {
+    pub fn get_provider(&self) -> Arc<dyn Provider<Http<Client>, Ethereum>> {
         self.provider.clone()
     }
 
-    pub fn set_provider(&mut self, url: &str) {
-        let rpc_url = url.parse().unwrap();
+    pub fn set_provider_url(&mut self, url: &str) -> Result<()> {
+        let rpc_url = url.parse()?;
         let provider = ProviderBuilder::new().on_http(rpc_url);
         self.provider = Arc::new(provider);
+        Ok(())
+    }
+
+    pub fn get_rpc_url(&self) -> String {
+        self.provider.client().transport().url().to_string()
+    }
+
+    pub fn set_private_key(&mut self, private_key: &str) -> Result<()> {
+        let rpc_url = self.get_rpc_url().parse()?;
+        let signer: PrivateKeySigner = private_key.parse()?;
+        let wallet = EthereumWallet::from(signer);
+        let provider = ProviderBuilder::new().wallet(wallet).on_http(rpc_url);
+        self.provider = Arc::new(provider);
+        Ok(())
     }
 
     pub fn set_type(&mut self, name: &str, type_: Type) {

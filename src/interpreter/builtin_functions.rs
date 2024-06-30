@@ -5,8 +5,6 @@ use alloy::{
     hex,
     json_abi::JsonAbi,
     primitives::{Address, FixedBytes, I256, U256},
-    providers::{Provider, RootProvider},
-    transports::http::{Client, Http},
 };
 use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
@@ -67,10 +65,6 @@ where
     let decimals = args.first().map(|v| v.as_i32()).transpose()?;
     let precision = args.get(1).map(|v| v.as_i32()).transpose()?;
     func(value, decimals, precision)
-}
-
-async fn get_balance(addr: Address, provider: &RootProvider<Http<Client>>) -> Result<U256> {
-    Ok(provider.get_balance(addr).await?)
 }
 
 fn concat_strings(string: String, args: &[Value]) -> Result<String> {
@@ -305,9 +299,7 @@ impl BuiltinFunction {
 
     pub async fn execute(&self, args: &[Value], env: &mut Env) -> Result<Value> {
         match self {
-            Self::Balance(addr) => Ok(Value::Uint(
-                get_balance(*addr, &env.get_provider().clone()).await?,
-            )),
+            Self::Balance(addr) => Ok(Value::Uint(env.get_provider().get_balance(*addr).await?)),
             Self::FormatFunc => format_func(args).map(Value::Str),
             Self::Format(v) => format(v, args).map(Value::Str),
             Self::Concat(v) => concat(v, args),
