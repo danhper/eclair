@@ -24,6 +24,7 @@ pub fn load_builtins(env: &mut Env) {
     env.set_var("_", Value::TypeObject(Type::This));
     env.set_var("repl", Value::TypeObject(Type::Repl));
     env.set_var("console", Value::TypeObject(Type::Console));
+    env.set_var("block", Value::TypeObject(Type::Block));
 
     for name in BuiltinFunction::functions() {
         env.set_var(

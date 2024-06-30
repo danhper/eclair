@@ -12,6 +12,7 @@ pub enum Directive {
     Rpc,
     Debug,
     Exec,
+    Connected,
 }
 
 impl std::fmt::Display for Directive {
@@ -22,6 +23,7 @@ impl std::fmt::Display for Directive {
             Directive::Rpc => write!(f, "rpc"),
             Directive::Debug => write!(f, "debug"),
             Directive::Exec => write!(f, "exec"),
+            Directive::Connected => write!(f, "connected"),
         }
     }
 }
@@ -44,16 +46,27 @@ fn list_types(env: &Env) {
 
 impl Directive {
     pub fn all() -> Vec<String> {
-        ["types", "vars", "rpc", "debug", "exec"]
+        ["types", "vars", "rpc", "debug", "exec", "connected"]
             .iter()
             .map(|s| s.to_string())
             .collect()
+    }
+
+    pub fn is_property(&self) -> bool {
+        matches!(
+            self,
+            Directive::Connected | Directive::ListVars | Directive::ListTypes
+        )
     }
 
     pub async fn execute(&self, args: &[Value], env: &mut Env) -> Result<Value> {
         match self {
             Directive::ListVars => list_vars(env),
             Directive::ListTypes => list_types(env),
+            Directive::Connected => {
+                let res = env.get_provider().root().get_chain_id().await.is_ok();
+                return Ok(Value::Bool(res));
+            }
             Directive::Rpc => match args {
                 [] => println!("{}", env.get_provider().root().client().transport().url()),
                 [url] => env.set_provider(&url.as_string()?),
@@ -83,6 +96,7 @@ impl Directive {
             "rpc" => Ok(Directive::Rpc),
             "debug" => Ok(Directive::Debug),
             "exec" => Ok(Directive::Exec),
+            "connected" => Ok(Directive::Connected),
             _ => Err(anyhow::anyhow!("Invalid directive")),
         }
     }

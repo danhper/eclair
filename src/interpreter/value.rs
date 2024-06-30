@@ -150,8 +150,20 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
     }
 }
 
+impl From<i32> for Value {
+    fn from(n: i32) -> Self {
+        Value::Int(n.try_into().unwrap())
+    }
+}
+
 impl From<u64> for Value {
     fn from(n: u64) -> Self {
+        Value::Uint(U256::from(n))
+    }
+}
+
+impl From<u128> for Value {
+    fn from(n: u128) -> Self {
         Value::Uint(U256::from(n))
     }
 }

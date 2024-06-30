@@ -4,7 +4,7 @@ use alloy::json_abi::JsonAbi;
 use anyhow::{bail, Result};
 use itertools::Itertools;
 
-use super::{ContractInfo, Directive, Value};
+use super::{block_functions::BlockFunction, ContractInfo, Directive, Value};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -23,6 +23,7 @@ pub enum Type {
     Contract(String, JsonAbi),
     Function,
     Repl,
+    Block,
     Console,
 }
 
@@ -51,6 +52,7 @@ impl Display for Type {
             Type::Function => write!(f, "function"),
 
             Type::Repl => write!(f, "repl"),
+            Type::Block => write!(f, "block"),
             Type::Console => write!(f, "console"),
         }
     }
@@ -96,6 +98,7 @@ impl Type {
             Type::Console => vec!["log".to_string()],
             Type::NamedTuple(_, fields) => fields.keys().map(|s| s.to_string()).collect(),
             Type::Repl => Directive::all(),
+            Type::Block => BlockFunction::all(),
             _ => vec![],
         }
     }

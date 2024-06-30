@@ -1,4 +1,5 @@
 mod assignment;
+mod block_functions;
 mod builtin_functions;
 mod directive;
 mod env;

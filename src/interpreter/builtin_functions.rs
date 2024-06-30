@@ -11,7 +11,9 @@ use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use itertools::Itertools;
 
-use super::{functions::Function, types::Type, Directive, Env, Value};
+use super::{
+    block_functions::BlockFunction, functions::Function, types::Type, Directive, Env, Value,
+};
 
 fn common_to_decimals<T, F, G>(
     value: T,
@@ -212,6 +214,7 @@ pub enum BuiltinFunction {
     Directive(Directive),
     GetType,
     Log,
+    Block(BlockFunction),
 }
 
 impl fmt::Display for BuiltinFunction {
@@ -231,6 +234,7 @@ impl fmt::Display for BuiltinFunction {
             Self::GetType => write!(f, "type"),
             Self::FormatFunc => write!(f, "format"),
             Self::Directive(d) => write!(f, "repl.{}", d),
+            Self::Block(func) => write!(f, "block.{}", func),
             Self::Log => write!(f, "console.log"),
         }
     }
@@ -276,6 +280,9 @@ impl BuiltinFunction {
             (Value::TypeObject(Type::Repl), _) => {
                 Directive::from_name(name).map(Self::Directive)?
             }
+            (Value::TypeObject(Type::Block), _) => {
+                BlockFunction::from_name(name).map(Self::Block)?
+            }
             (Value::TypeObject(Type::Console), "log") => Self::Log,
             _ => bail!("no method {} for type {}", name, receiver.get_type()),
         };
@@ -283,7 +290,11 @@ impl BuiltinFunction {
     }
 
     pub fn is_property(&self) -> bool {
-        matches!(self, Self::Balance(_))
+        match self {
+            Self::Balance(_) | Self::Block(_) => true,
+            Self::Directive(d) => d.is_property(),
+            _ => false,
+        }
     }
 
     pub async fn execute(&self, args: &[Value], env: &mut Env) -> Result<Value> {
@@ -310,6 +321,7 @@ impl BuiltinFunction {
             }
             Self::GetType => get_type(args).map(Value::TypeObject),
             Self::Directive(d) => d.execute(args, env).await,
+            Self::Block(f) => f.execute(args, env).await,
             Self::Log => {
                 args.iter().for_each(|arg| println!("{}", arg));
                 Ok(Value::Null)
