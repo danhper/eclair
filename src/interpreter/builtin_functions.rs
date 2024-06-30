@@ -207,6 +207,8 @@ pub enum BuiltinFunction {
     Format(Box<Value>),
     Mul(Box<Value>),
     Div(Box<Value>),
+    Min(Type),
+    Max(Type),
     Concat(Box<Value>),
     Decode(String, JsonAbi),
     Map(Vec<Value>, Type),
@@ -225,6 +227,8 @@ impl fmt::Display for BuiltinFunction {
             Self::Concat(s) => write!(f, "{}.concat", s),
             Self::Mul(v) => write!(f, "{}.mul", v),
             Self::Div(v) => write!(f, "{}.div", v),
+            Self::Min(t) => write!(f, "{}.min", t),
+            Self::Max(t) => write!(f, "{}.max", t),
             Self::Decode(name, _) => write!(f, "{}.decode(bytes)", name),
             Self::Map(v, _) => {
                 let items = v.iter().map(|v| format!("{}", v)).join(", ");
@@ -273,6 +277,13 @@ impl BuiltinFunction {
                 Self::Map(values.clone(), Type::Array(Box::new(arr_type)))
             }
 
+            (Value::TypeObject(t @ Type::Int(_)) | Value::TypeObject(t @ Type::Uint(_)), "max") => {
+                Self::Max(t.clone())
+            }
+            (Value::TypeObject(t @ Type::Int(_)) | Value::TypeObject(t @ Type::Uint(_)), "min") => {
+                Self::Min(t.clone())
+            }
+
             (Value::TypeObject(Type::This), method) => Self::MethodCall(method.to_string()),
             (Value::TypeObject(Type::Contract(name, abi)), "decode") => {
                 Self::Decode(name.clone(), abi.clone())
@@ -291,7 +302,7 @@ impl BuiltinFunction {
 
     pub fn is_property(&self) -> bool {
         match self {
-            Self::Balance(_) | Self::Block(_) => true,
+            Self::Balance(_) | Self::Block(_) | Self::Min(_) | Self::Max(_) => true,
             Self::Directive(d) => d.is_property(),
             _ => false,
         }
@@ -305,6 +316,7 @@ impl BuiltinFunction {
             Self::FormatFunc => format_func(args).map(Value::Str),
             Self::Format(v) => format(v, args).map(Value::Str),
             Self::Concat(v) => concat(v, args),
+
             Self::Mul(v) => {
                 let (value, decimals) = mul_div_args(args)?;
                 (v.as_ref().clone() * value.clone())? / Value::decimal_multiplier(decimals as u8)
@@ -313,6 +325,10 @@ impl BuiltinFunction {
                 let (value, decimals) = mul_div_args(args)?;
                 (v.as_ref().clone() * Value::decimal_multiplier(decimals as u8))? / value.clone()
             }
+
+            Self::Max(t) => t.max(),
+            Self::Min(t) => t.min(),
+
             Self::Decode(name, abi) => decode_calldata(name, abi, args),
             Self::MethodCall(name) => method_call(name, args, env).await,
             Self::Map(values, type_) => {
