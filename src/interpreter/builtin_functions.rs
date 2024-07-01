@@ -10,7 +10,11 @@ use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use itertools::Itertools;
 
-use super::{block_functions::BlockFunction, types::Type, Directive, Env, Value};
+use super::{
+    block_functions::BlockFunction,
+    types::{ContractInfo, Type},
+    Directive, Env, Value,
+};
 
 fn common_to_decimals<T, F, G>(
     value: T,
@@ -273,7 +277,7 @@ impl BuiltinFunction {
                 Self::Min(t.clone())
             }
 
-            (Value::TypeObject(Type::Contract(name, abi)), "decode") => {
+            (Value::TypeObject(Type::Contract(ContractInfo(name, abi))), "decode") => {
                 Self::Decode(name.clone(), abi.clone())
             }
             (Value::TypeObject(Type::Repl), _) => {

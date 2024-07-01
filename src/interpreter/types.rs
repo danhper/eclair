@@ -8,7 +8,29 @@ use alloy::{
 use anyhow::{bail, Result};
 use itertools::Itertools;
 
-use super::{block_functions::BlockFunction, ContractInfo, Directive, Value};
+use super::{
+    block_functions::BlockFunction,
+    functions::{ContractCallMode, Function},
+    Directive, Value,
+};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContractInfo(pub String, pub JsonAbi);
+
+impl ContractInfo {
+    pub fn create_call(&self, name: &str, addr: Address) -> Result<Function> {
+        let _func = self
+            .1
+            .function(name)
+            .ok_or_else(|| anyhow::anyhow!("function {} not found in contract {}", name, self.0))?;
+        Ok(Function::ContractCall(
+            self.clone(),
+            addr,
+            name.to_string(),
+            ContractCallMode::Default,
+        ))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -23,7 +45,7 @@ pub enum Type {
     Array(Box<Type>),
     NamedTuple(String, BTreeMap<String, Type>),
     Tuple(Vec<Type>),
-    Contract(String, JsonAbi),
+    Contract(ContractInfo),
     Function,
     Repl,
     Block,
@@ -50,7 +72,7 @@ impl Display for Type {
                 let items = t.iter().map(|v| format!("{}", v)).join(", ");
                 write!(f, "({})", items)
             }
-            Type::Contract(name, _) => write!(f, "{}", name),
+            Type::Contract(ContractInfo(name, _)) => write!(f, "{}", name),
             Type::Function => write!(f, "function"),
 
             Type::Repl => write!(f, "repl"),
@@ -142,12 +164,8 @@ impl Type {
     pub fn cast(&self, value: &Value) -> Result<Value> {
         match (self, value) {
             (type_, value) if type_ == &value.get_type() => Ok(value.clone()),
-            (Type::Contract(name, abi), Value::Addr(addr)) => Ok(Value::Contract(ContractInfo(
-                name.clone(),
-                *addr,
-                abi.clone(),
-            ))),
-            (Type::Address, Value::Contract(ContractInfo(_, addr, _))) => Ok(Value::Addr(*addr)),
+            (Type::Contract(info), Value::Addr(addr)) => Ok(Value::Contract(info.clone(), *addr)),
+            (Type::Address, Value::Contract(_, addr)) => Ok(Value::Addr(*addr)),
             (Type::Address, Value::Uint(v)) => Ok(Value::Addr(Address::from(v.to::<U160>()))),
             (Type::Address, Value::Int(v)) if v.is_zero() => Ok(Value::Addr(Address::ZERO)),
             (Type::Address, Value::Int(_)) => {
@@ -163,13 +181,33 @@ impl Type {
                 new_vector.resize(*size, 0);
                 Ok(Value::FixBytes(B256::from_slice(&new_vector), *size))
             }
+            (Type::NamedTuple(name, types_), Value::Tuple(values)) => {
+                let mut new_values = BTreeMap::new();
+                for (key, value) in types_.iter().zip(values.iter()) {
+                    new_values.insert(key.0.clone(), key.1.cast(value)?);
+                }
+                Ok(Value::NamedTuple(name.to_string(), new_values))
+            }
+            (Type::Array(t), Value::Array(v)) => v
+                .iter()
+                .map(|value| t.cast(value))
+                .collect::<Result<Vec<_>>>()
+                .map(Value::Array),
+            (Type::Tuple(types), Value::Tuple(v)) => v
+                .iter()
+                .zip(types.iter())
+                .map(|(value, t)| t.cast(value))
+                .collect::<Result<Vec<_>>>()
+                .map(Value::Array),
             _ => bail!("cannot cast {} to {}", value.get_type(), self),
         }
     }
 
     pub fn functions(&self) -> Vec<String> {
         match self {
-            Type::Contract(_, abi) => abi.functions.keys().map(|s| s.to_string()).collect(),
+            Type::Contract(ContractInfo(_, abi)) => {
+                abi.functions.keys().map(|s| s.to_string()).collect()
+            }
             Type::Console => vec!["log".to_string()],
             Type::NamedTuple(_, fields) => fields.keys().map(|s| s.to_string()).collect(),
             Type::Repl => Directive::all(),

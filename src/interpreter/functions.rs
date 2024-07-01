@@ -5,6 +5,7 @@ use alloy::{
     dyn_abi::Specifier,
     json_abi::StateMutability,
     network::Network,
+    primitives::Address,
     providers::Provider,
     transports::Transport,
 };
@@ -12,7 +13,7 @@ use anyhow::{anyhow, bail, Result};
 use solang_parser::pt::{Expression, Identifier, Parameter, Statement};
 
 use super::{
-    builtin_functions::BuiltinFunction, evaluate_statement, value::ContractInfo, Env, Type, Value,
+    builtin_functions::BuiltinFunction, evaluate_statement, types::ContractInfo, Env, Type, Value,
 };
 
 #[derive(Debug, Clone)]
@@ -100,7 +101,7 @@ impl TryFrom<&str> for ContractCallMode {
 
 #[derive(Debug, Clone)]
 pub enum Function {
-    ContractCall(ContractInfo, String, ContractCallMode),
+    ContractCall(ContractInfo, Address, String, ContractCallMode),
     Builtin(BuiltinFunction),
     UserDefined(UserDefinedFunction),
     FieldAccess(Box<Value>, String),
@@ -109,7 +110,7 @@ pub enum Function {
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Function::ContractCall(ContractInfo(name, addr, abi), func_name, mode) => {
+            Function::ContractCall(ContractInfo(name, abi), addr, func_name, mode) => {
                 let arg_types = abi
                     .function(func_name)
                     .map(|f| {
@@ -152,18 +153,19 @@ impl Display for Function {
 impl Function {
     pub fn with_receiver(receiver: &Value, name: &str) -> Result<Self> {
         let func = match receiver {
-            Value::Contract(c) => {
-                Function::ContractCall(c.clone(), name.to_string(), ContractCallMode::Default)
-            }
+            Value::Contract(c, addr) => c.create_call(name, *addr)?,
             v @ Value::NamedTuple(..) => {
                 Function::FieldAccess(Box::new(v.clone()), name.to_string())
             }
 
-            Value::Func(Function::ContractCall(contract, method, _mode)) => Function::ContractCall(
-                contract.clone(),
-                method.to_string(),
-                ContractCallMode::try_from(name)?,
-            ),
+            Value::Func(Function::ContractCall(contract, addr, method, _mode)) => {
+                Function::ContractCall(
+                    contract.clone(),
+                    *addr,
+                    method.to_string(),
+                    ContractCallMode::try_from(name)?,
+                )
+            }
 
             v => {
                 let method = BuiltinFunction::with_receiver(v, name)?;
@@ -175,8 +177,8 @@ impl Function {
 
     pub async fn execute_in_current_scope(&self, args: &[Value], env: &mut Env) -> Result<Value> {
         match self {
-            Function::ContractCall(contract_info, func_name, mode) => {
-                self._execute_contract_interaction(contract_info, func_name, mode, args, env)
+            Function::ContractCall(contract_info, addr, func_name, mode) => {
+                self._execute_contract_interaction(contract_info, addr, func_name, mode, args, env)
                     .await
             }
             Function::FieldAccess(f, v) => f.get_field(v),
@@ -213,7 +215,7 @@ impl Function {
 
     pub fn is_property(&self) -> bool {
         match self {
-            Function::ContractCall(_, _, _) => false,
+            Function::ContractCall(_, _, _, _) => false,
             Function::FieldAccess(_, _) => true,
             Function::Builtin(m) => m.is_property(),
             Function::UserDefined(_) => false,
@@ -230,12 +232,13 @@ impl Function {
     async fn _execute_contract_interaction(
         &self,
         contract_info: &ContractInfo,
+        addr: &Address,
         func_name: &str,
         mode: &ContractCallMode,
         args: &[Value],
         env: &Env,
     ) -> Result<Value> {
-        let ContractInfo(name, addr, abi) = &contract_info;
+        let ContractInfo(name, abi) = &contract_info;
         let funcs = abi.function(func_name).ok_or(anyhow!(
             "function {} not found in {}",
             func_name,
@@ -335,12 +338,13 @@ impl Function {
         for (i, (arg, type_)) in args.iter().zip(types).enumerate() {
             match type_.cast(arg) {
                 Ok(v) => result.push(v),
-                Err(_) => bail!(
-                    "expected {} argument {} to be {}, but got {}",
+                Err(e) => bail!(
+                    "expected {} argument {} to be {}, but got {} ({})",
                     self,
                     i,
                     type_,
-                    arg.get_type()
+                    arg.get_type(),
+                    e
                 ),
             }
         }

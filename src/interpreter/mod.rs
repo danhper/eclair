@@ -13,5 +13,5 @@ mod value;
 pub use directive::Directive;
 pub use env::Env;
 pub use interpreter::*;
-pub use types::Type;
-pub use value::{ContractInfo, Value};
+pub use types::{ContractInfo, Type};
+pub use value::Value;

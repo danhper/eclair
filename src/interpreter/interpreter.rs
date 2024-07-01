@@ -40,7 +40,10 @@ pub fn load_project(env: &mut Env, project: &Project) -> Result<()> {
         let contract = project.get_contract(contract_name);
         env.set_type(
             contract_name,
-            Type::Contract(contract_name.clone(), contract.clone()),
+            Type::Contract(super::types::ContractInfo(
+                contract_name.clone(),
+                contract.clone(),
+            )),
         );
     }
     Ok(())

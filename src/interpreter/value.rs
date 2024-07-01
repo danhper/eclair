@@ -1,8 +1,6 @@
-// use alloy::abi::Token;
 use alloy::{
     dyn_abi::DynSolValue,
     hex,
-    json_abi::JsonAbi,
     primitives::{Address, B256, I256, U256},
 };
 use anyhow::{bail, Result};
@@ -13,10 +11,10 @@ use std::{
     ops::{Add, Div, Mul, Rem, Sub},
 };
 
-use super::{functions::Function, types::Type};
-
-#[derive(Debug, Clone)]
-pub struct ContractInfo(pub String, pub Address, pub JsonAbi);
+use super::{
+    functions::Function,
+    types::{ContractInfo, Type},
+};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -28,7 +26,7 @@ pub enum Value {
     FixBytes(B256, usize),
     Bytes(Vec<u8>),
     Addr(Address),
-    Contract(ContractInfo),
+    Contract(ContractInfo, Address),
     Tuple(Vec<Value>),
     NamedTuple(String, BTreeMap<String, Value>),
     Array(Vec<Value>),
@@ -75,7 +73,7 @@ impl Display for Value {
             Value::Tuple(v) => write!(f, "({})", _values_to_string(v)),
             Value::Array(v) => write!(f, "[{}]", _values_to_string(v)),
             Value::TypeObject(t) => write!(f, "{}", t),
-            Value::Contract(ContractInfo(name, addr, _)) => {
+            Value::Contract(ContractInfo(name, _), addr) => {
                 write!(f, "{}({})", name, addr.to_checksum(None))
             }
             Value::Func(func) => write!(f, "{}", func),
@@ -95,7 +93,7 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::Addr(a) => DynSolValue::Address(*a),
             Value::FixBytes(w, s) => DynSolValue::FixedBytes(*w, *s),
             Value::Bytes(b) => DynSolValue::Bytes(b.clone()),
-            Value::Contract(ContractInfo(_, addr, _)) => DynSolValue::Address(*addr),
+            Value::Contract(_, addr) => DynSolValue::Address(*addr),
             Value::NamedTuple(name, vs) => {
                 let prop_names = vs.iter().map(|(k, _)| k.clone()).collect();
                 let tuple = vs
@@ -198,9 +196,7 @@ impl PartialEq for Value {
             (Value::Tuple(a), Value::Tuple(b)) => a == b,
             (Value::Array(a), Value::Array(b)) => a == b,
             (Value::TypeObject(a), Value::TypeObject(b)) => a == b,
-            (Value::Contract(ContractInfo(_, a, _)), Value::Contract(ContractInfo(_, b, _))) => {
-                a == b
-            }
+            (Value::Contract(_, a), Value::Contract(_, b)) => a == b,
             _ => false,
         }
     }
@@ -219,9 +215,7 @@ impl PartialOrd for Value {
             (Value::FixBytes(a, _), Value::FixBytes(b, _)) => a.partial_cmp(b),
             (Value::Tuple(a), Value::Tuple(b)) => a.partial_cmp(b),
             (Value::Array(a), Value::Array(b)) => a.partial_cmp(b),
-            (Value::Contract(ContractInfo(_, a, _)), Value::Contract(ContractInfo(_, b, _))) => {
-                a.partial_cmp(b)
-            }
+            (Value::Contract(_, a), Value::Contract(_, b)) => a.partial_cmp(b),
             _ => None,
         }
     }
@@ -246,9 +240,7 @@ impl Value {
                 let t = vs.iter().map(Value::get_type).next().unwrap_or(Type::Bool);
                 Type::Array(Box::new(t))
             }
-            Value::Contract(ContractInfo(name, _, abi)) => {
-                Type::Contract(name.clone(), abi.clone())
-            }
+            Value::Contract(c, _) => Type::Contract(c.clone()),
             Value::Null => Type::Null,
             Value::Func(_) => Type::Function,
             Value::TypeObject(type_) => type_.clone(),
