@@ -97,18 +97,30 @@ impl Env {
     }
 
     pub fn get_var(&self, name: &str) -> Option<&Value> {
-        let scope = self.variables.last().unwrap();
-        scope.get(name)
-    }
-
-    pub fn delete_var(&mut self, name: &str) {
-        let scope = self.variables.last_mut().unwrap();
-        scope.remove(name);
+        for scope in self.variables.iter().rev() {
+            if let Some(value) = scope.get(name) {
+                return Some(value);
+            }
+        }
+        None
     }
 
     pub fn get_var_mut(&mut self, name: &str) -> Option<&mut Value> {
-        let scope = self.variables.last_mut().unwrap();
-        scope.get_mut(name)
+        for scope in self.variables.iter_mut().rev() {
+            if let Some(value) = scope.get_mut(name) {
+                return Some(value);
+            }
+        }
+        None
+    }
+
+    pub fn delete_var(&mut self, name: &str) {
+        for scope in self.variables.iter_mut().rev() {
+            if scope.contains_key(name) {
+                scope.remove(name);
+                return;
+            }
+        }
     }
 
     pub fn set_var(&mut self, name: &str, value: Value) {
