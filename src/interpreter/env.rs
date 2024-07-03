@@ -68,11 +68,8 @@ impl Env {
     }
 
     pub async fn load_ledger(&mut self, index: usize) -> Result<()> {
+        self.init_ledger().await?;
         let chain_id = self.provider.root().get_chain_id().await.unwrap_or(1);
-        if self.ledger.is_none() {
-            let ledger = Ledger::init().await?;
-            self.ledger = Some(Arc::new(Mutex::new(ledger)));
-        }
         let signer = LedgerSigner::new(
             self.ledger.as_ref().unwrap().clone(),
             HDPath::LedgerLive(index),
@@ -83,10 +80,7 @@ impl Env {
     }
 
     pub async fn list_ledger_wallets(&mut self, count: usize) -> Result<Vec<Address>> {
-        if self.ledger.is_none() {
-            let ledger = Ledger::init().await?;
-            self.ledger = Some(Arc::new(Mutex::new(ledger)));
-        }
+        self.init_ledger().await?;
         let signer = LedgerSigner::new(
             self.ledger.as_ref().unwrap().clone(),
             HDPath::LedgerLive(0),
@@ -114,29 +108,6 @@ impl Env {
     pub fn set_private_key(&mut self, private_key: &str) -> Result<()> {
         let signer: PrivateKeySigner = private_key.parse()?;
         self.set_wallet(signer)
-    }
-
-    fn set_wallet<S>(&mut self, signer: S) -> Result<()>
-    where
-        S: TxSigner<Signature> + Send + Sync + 'static,
-    {
-        let wallet = EthereumWallet::from(signer);
-        self.wallet = Some(wallet.clone());
-        self.set_provider(Some(wallet), &self.get_rpc_url())
-    }
-
-    fn set_provider(&mut self, wallet: Option<EthereumWallet>, url: &str) -> Result<()> {
-        let rpc_url = url.parse()?;
-
-        let builder = ProviderBuilder::new().with_recommended_fillers();
-        let provider = if let Some(wallet) = wallet {
-            Arc::new(builder.wallet(wallet.clone()).on_http(rpc_url))
-                as Arc<dyn Provider<Http<Client>, Ethereum>>
-        } else {
-            Arc::new(builder.on_http(rpc_url))
-        };
-        self.provider = provider;
-        Ok(())
     }
 
     pub fn set_type(&mut self, name: &str, type_: Type) {
@@ -191,5 +162,36 @@ impl Env {
     pub fn set_var(&mut self, name: &str, value: Value) {
         let scope = self.variables.last_mut().unwrap();
         scope.insert(name.to_string(), value);
+    }
+
+    fn set_wallet<S>(&mut self, signer: S) -> Result<()>
+    where
+        S: TxSigner<Signature> + Send + Sync + 'static,
+    {
+        let wallet = EthereumWallet::from(signer);
+        self.wallet = Some(wallet.clone());
+        self.set_provider(Some(wallet), &self.get_rpc_url())
+    }
+
+    fn set_provider(&mut self, wallet: Option<EthereumWallet>, url: &str) -> Result<()> {
+        let rpc_url = url.parse()?;
+
+        let builder = ProviderBuilder::new().with_recommended_fillers();
+        let provider = if let Some(wallet) = wallet {
+            Arc::new(builder.wallet(wallet.clone()).on_http(rpc_url))
+                as Arc<dyn Provider<Http<Client>, Ethereum>>
+        } else {
+            Arc::new(builder.on_http(rpc_url))
+        };
+        self.provider = provider;
+        Ok(())
+    }
+
+    async fn init_ledger(&mut self) -> Result<()> {
+        if self.ledger.is_none() {
+            let ledger = Ledger::init().await?;
+            self.ledger = Some(Arc::new(Mutex::new(ledger)));
+        }
+        Ok(())
     }
 }
