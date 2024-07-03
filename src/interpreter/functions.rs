@@ -285,6 +285,7 @@ impl Function {
                             call_result = self._execute_contract_send(addr, func, env).await
                         }
                     }
+                    break;
                 }
                 Err(e) => call_result = Err(e),
             }
