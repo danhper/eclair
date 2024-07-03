@@ -9,7 +9,7 @@ use anyhow::{anyhow, bail, Result};
 use futures::future::{BoxFuture, FutureExt};
 use solang_parser::pt::{ContractPart, Expression, Statement};
 
-use crate::project::types::Project;
+use crate::loaders::types::Project;
 
 use super::assignment::Lhs;
 use super::builtin_functions::BuiltinFunction;

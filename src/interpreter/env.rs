@@ -67,9 +67,17 @@ impl Env {
         self.set_provider(self.wallet.clone(), url)
     }
 
+    pub async fn get_chain_id(&self) -> Result<u64> {
+        self.provider
+            .root()
+            .get_chain_id()
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn load_ledger(&mut self, index: usize) -> Result<()> {
         self.init_ledger().await?;
-        let chain_id = self.provider.root().get_chain_id().await.unwrap_or(1);
+        let chain_id = self.get_chain_id().await?;
         let signer = LedgerSigner::new(
             self.ledger.as_ref().unwrap().clone(),
             HDPath::LedgerLive(index),

@@ -1,4 +1,4 @@
 pub mod interpreter;
-pub mod project;
+pub mod loaders;
 pub mod repl;
 mod vendor;

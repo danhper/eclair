@@ -10,7 +10,7 @@ use super::config::{get_init_files, history_file};
 use super::helper::{create_editor, MyHelper};
 use super::Cli;
 use crate::interpreter;
-use crate::project;
+use crate::loaders;
 
 pub struct Repl {
     rl: Editor<MyHelper, FileHistory>,
@@ -36,7 +36,7 @@ impl Repl {
     async fn _initialize_env(&mut self, init_file_name: &Option<PathBuf>) -> Result<()> {
         let mut env = self.env.lock().await;
         let current_dir = std::env::current_dir()?;
-        let projects = project::load(current_dir);
+        let projects = loaders::load(current_dir);
         interpreter::load_builtins(&mut env);
         for project in projects.iter() {
             interpreter::load_project(&mut env, project)?;

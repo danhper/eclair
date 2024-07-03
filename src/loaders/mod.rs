@@ -1,4 +1,5 @@
 mod brownie;
+pub mod etherscan;
 mod foundry;
 mod hardhat;
 mod loader;

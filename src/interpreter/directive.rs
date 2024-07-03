@@ -3,7 +3,9 @@ use std::process::Command;
 use alloy::providers::Provider;
 use anyhow::{bail, Result};
 
-use super::{Env, Value};
+use crate::loaders::etherscan;
+
+use super::{ContractInfo, Env, Type, Value};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Directive {
@@ -12,6 +14,7 @@ pub enum Directive {
     Rpc,
     Debug,
     Exec,
+    FetchAbi,
     Connected,
     Account,
     LoadPrivateKey,
@@ -28,6 +31,7 @@ impl std::fmt::Display for Directive {
             Directive::Debug => write!(f, "debug"),
             Directive::Exec => write!(f, "exec"),
             Directive::Connected => write!(f, "connected"),
+            Directive::FetchAbi => write!(f, "fetchAbi"),
             Directive::LoadPrivateKey => write!(f, "loadPrivateKey"),
             Directive::Account => write!(f, "account"),
             Directive::LoadLedger => write!(f, "loadLedger"),
@@ -60,6 +64,7 @@ impl Directive {
             Directive::Rpc,
             Directive::Debug,
             Directive::Exec,
+            Directive::FetchAbi,
             Directive::Connected,
             Directive::Account,
             Directive::LoadPrivateKey,
@@ -99,6 +104,16 @@ impl Directive {
                     Command::new(splitted[0]).args(&splitted[1..]).spawn()?;
                 }
                 _ => bail!("exec: invalid arguments"),
+            },
+            Directive::FetchAbi => match args {
+                [Value::Str(name), Value::Addr(address)] => {
+                    let chain_id = env.get_chain_id().await?;
+                    let abi = etherscan::load_abi(chain_id, &address.to_string()).await?;
+                    let contract_info = ContractInfo(name.to_string(), abi);
+                    env.set_type(name, Type::Contract(contract_info.clone()));
+                    return Ok(Value::Contract(contract_info, *address));
+                }
+                _ => bail!("fetchAbi: invalid arguments"),
             },
             Directive::Account => {
                 let account = env.get_default_sender();
@@ -154,6 +169,7 @@ impl Directive {
             "exec" => Ok(Directive::Exec),
             "connected" => Ok(Directive::Connected),
             "account" => Ok(Directive::Account),
+            "fetchAbi" => Ok(Directive::FetchAbi),
             "loadPrivateKey" => Ok(Directive::LoadPrivateKey),
             "listLedgerWallets" => Ok(Directive::ListLedgerWallets),
             "loadLedger" => Ok(Directive::LoadLedger),
