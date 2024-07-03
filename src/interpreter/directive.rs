@@ -3,7 +3,7 @@ use std::process::Command;
 use alloy::providers::Provider;
 use anyhow::{bail, Result};
 
-use crate::loaders::etherscan;
+use crate::loaders;
 
 use super::{ContractInfo, Env, Type, Value};
 
@@ -14,6 +14,7 @@ pub enum Directive {
     Rpc,
     Debug,
     Exec,
+    LoadAbi,
     FetchAbi,
     Connected,
     Account,
@@ -31,6 +32,7 @@ impl std::fmt::Display for Directive {
             Directive::Debug => write!(f, "debug"),
             Directive::Exec => write!(f, "exec"),
             Directive::Connected => write!(f, "connected"),
+            Directive::LoadAbi => write!(f, "loadAbi"),
             Directive::FetchAbi => write!(f, "fetchAbi"),
             Directive::LoadPrivateKey => write!(f, "loadPrivateKey"),
             Directive::Account => write!(f, "account"),
@@ -64,6 +66,7 @@ impl Directive {
             Directive::Rpc,
             Directive::Debug,
             Directive::Exec,
+            Directive::LoadAbi,
             Directive::FetchAbi,
             Directive::Connected,
             Directive::Account,
@@ -105,10 +108,22 @@ impl Directive {
                 }
                 _ => bail!("exec: invalid arguments"),
             },
+            Directive::LoadAbi => {
+                let (name, filepath, key) = match args {
+                    [Value::Str(name), Value::Str(filepath)] => (name, filepath, None),
+                    [Value::Str(name), Value::Str(filepath), Value::Str(key)] => {
+                        (name, filepath, Some(key.as_str()))
+                    }
+                    _ => bail!("fetchAbi: invalid arguments"),
+                };
+                let abi = loaders::file::load_abi(filepath, key)?;
+                let contract_info = ContractInfo(name.to_string(), abi);
+                env.set_type(name, Type::Contract(contract_info.clone()));
+            }
             Directive::FetchAbi => match args {
                 [Value::Str(name), Value::Addr(address)] => {
                     let chain_id = env.get_chain_id().await?;
-                    let abi = etherscan::load_abi(chain_id, &address.to_string()).await?;
+                    let abi = loaders::etherscan::load_abi(chain_id, &address.to_string()).await?;
                     let contract_info = ContractInfo(name.to_string(), abi);
                     env.set_type(name, Type::Contract(contract_info.clone()));
                     return Ok(Value::Contract(contract_info, *address));
@@ -169,6 +184,7 @@ impl Directive {
             "exec" => Ok(Directive::Exec),
             "connected" => Ok(Directive::Connected),
             "account" => Ok(Directive::Account),
+            "loadAbi" => Ok(Directive::LoadAbi),
             "fetchAbi" => Ok(Directive::FetchAbi),
             "loadPrivateKey" => Ok(Directive::LoadPrivateKey),
             "listLedgerWallets" => Ok(Directive::ListLedgerWallets),

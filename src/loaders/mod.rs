@@ -1,5 +1,6 @@
 mod brownie;
 pub mod etherscan;
+pub mod file;
 mod foundry;
 mod hardhat;
 mod loader;
