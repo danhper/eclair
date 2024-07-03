@@ -13,7 +13,10 @@ pub enum Directive {
     Debug,
     Exec,
     Connected,
+    Account,
     LoadPrivateKey,
+    LoadLedger,
+    ListLedgerWallets,
 }
 
 impl std::fmt::Display for Directive {
@@ -26,6 +29,9 @@ impl std::fmt::Display for Directive {
             Directive::Exec => write!(f, "exec"),
             Directive::Connected => write!(f, "connected"),
             Directive::LoadPrivateKey => write!(f, "loadPrivateKey"),
+            Directive::Account => write!(f, "account"),
+            Directive::LoadLedger => write!(f, "loadLedger"),
+            Directive::ListLedgerWallets => write!(f, "listLedgerWallets"),
         }
     }
 }
@@ -47,25 +53,25 @@ fn list_types(env: &Env) {
 }
 
 impl Directive {
-    pub fn all() -> Vec<String> {
-        [
-            "types",
-            "vars",
-            "rpc",
-            "debug",
-            "exec",
-            "connected",
-            "loadPrivateKey",
+    pub fn all() -> Vec<Directive> {
+        vec![
+            Directive::ListVars,
+            Directive::ListTypes,
+            Directive::Rpc,
+            Directive::Debug,
+            Directive::Exec,
+            Directive::Connected,
+            Directive::Account,
+            Directive::LoadPrivateKey,
+            Directive::LoadLedger,
+            Directive::ListLedgerWallets,
         ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect()
     }
 
     pub fn is_property(&self) -> bool {
         matches!(
             self,
-            Directive::Connected | Directive::ListVars | Directive::ListTypes
+            Directive::Connected | Directive::ListVars | Directive::ListTypes | Directive::Account
         )
     }
 
@@ -94,19 +100,49 @@ impl Directive {
                 }
                 _ => bail!("exec: invalid arguments"),
             },
+            Directive::Account => {
+                let account = env.get_default_sender();
+                return Ok(account.map(Value::Addr).unwrap_or(Value::Null));
+            }
             Directive::LoadPrivateKey => match args {
                 [Value::Str(key)] => {
                     env.set_private_key(key.as_str())?;
+                    return Ok(self.get_default_sender(env));
                 }
                 [] => {
                     let key = rpassword::prompt_password("Enter private key: ")?;
                     env.set_private_key(key.as_str())?;
+                    return Ok(self.get_default_sender(env));
                 }
                 _ => bail!("loadPrivateKey: invalid arguments"),
             },
+            Directive::ListLedgerWallets => {
+                let count = match args {
+                    [] => 5,
+                    [value] => value.as_usize()?,
+                    _ => bail!("listLedgerWallets: invalid arguments"),
+                };
+                let wallets = env.list_ledger_wallets(count).await?;
+                return Ok(Value::Array(wallets.into_iter().map(Value::Addr).collect()));
+            }
+            Directive::LoadLedger => {
+                let index = match args {
+                    [] => 0,
+                    [value] => value.as_usize()?,
+                    _ => bail!("loadLedger: invalid arguments"),
+                };
+                env.load_ledger(index).await?;
+                return Ok(self.get_default_sender(env));
+            }
         }
 
         Ok(Value::Null)
+    }
+
+    fn get_default_sender(&self, env: &Env) -> Value {
+        env.get_default_sender()
+            .map(Value::Addr)
+            .unwrap_or(Value::Null)
     }
 
     pub fn from_name(name: &str) -> Result<Self> {
@@ -117,7 +153,10 @@ impl Directive {
             "debug" => Ok(Directive::Debug),
             "exec" => Ok(Directive::Exec),
             "connected" => Ok(Directive::Connected),
+            "account" => Ok(Directive::Account),
             "loadPrivateKey" => Ok(Directive::LoadPrivateKey),
+            "listLedgerWallets" => Ok(Directive::ListLedgerWallets),
+            "loadLedger" => Ok(Directive::LoadLedger),
             _ => Err(anyhow::anyhow!("Invalid directive")),
         }
     }

@@ -83,6 +83,7 @@ dependencies = [
  "alloy-rpc-types 0.1.2",
  "alloy-serde 0.1.2",
  "alloy-signer 0.1.2",
+ "alloy-signer-ledger 0.1.3",
  "alloy-signer-local",
  "alloy-transport 0.1.2",
  "alloy-transport-http 0.1.2",
@@ -675,7 +676,25 @@ dependencies = [
  "alloy-signer 0.1.0",
  "alloy-sol-types",
  "async-trait",
- "coins-ledger",
+ "coins-ledger 0.10.1",
+ "futures-util",
+ "semver 1.0.23",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "alloy-signer-ledger"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3eb31f033976724d10f90633477436f5e3757b04283c475a750a77e82422aa36"
+dependencies = [
+ "alloy-consensus 0.1.2",
+ "alloy-network 0.1.2",
+ "alloy-primitives",
+ "alloy-signer 0.1.2",
+ "async-trait",
+ "coins-ledger 0.11.1",
  "futures-util",
  "semver 1.0.23",
  "thiserror",
@@ -1853,6 +1872,29 @@ dependencies = [
  "cfg-if",
  "getrandom",
  "hex",
+ "hidapi-rusb",
+ "js-sys",
+ "log",
+ "nix 0.26.4",
+ "once_cell",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
+name = "coins-ledger"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "166ef757aa936b45f3e5d39c344047f65ef7d25a50067246a498021a816d074b"
+dependencies = [
+ "async-trait",
+ "byteorder",
+ "cfg-if",
+ "const-hex",
+ "getrandom",
  "hidapi-rusb",
  "js-sys",
  "log",
@@ -3065,7 +3107,7 @@ dependencies = [
  "alloy-network 0.1.0",
  "alloy-primitives",
  "alloy-signer 0.1.0",
- "alloy-signer-ledger",
+ "alloy-signer-ledger 0.1.0",
  "alloy-signer-trezor",
  "alloy-signer-wallet",
  "alloy-sol-types",
@@ -5863,15 +5905,19 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "anyhow",
+ "async-trait",
  "chisel",
  "clap",
+ "coins-ledger 0.11.1",
  "foundry-cli",
  "foundry-config",
  "futures",
+ "futures-util",
  "glob",
  "itertools 0.13.0",
  "rpassword",
  "rustyline 14.0.0",
+ "semver 1.0.23",
  "serde_json",
  "solang-parser",
  "tokio",

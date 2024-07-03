@@ -1,16 +1,20 @@
+use futures_util::lock::Mutex;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
 
 use alloy::{
-    network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet},
+    network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet, TxSigner},
     primitives::Address,
     providers::{Provider, ProviderBuilder},
-    signers::local::PrivateKeySigner,
+    signers::{ledger::HDPath, local::PrivateKeySigner, Signature},
     transports::http::{Client, Http},
 };
 use anyhow::Result;
+use coins_ledger::{transports::LedgerAsync, Ledger};
+
+use crate::vendor::ledger_signer::LedgerSigner;
 
 use super::{types::Type, Value};
 
@@ -20,6 +24,7 @@ pub struct Env {
     debug: bool,
     provider: Arc<dyn Provider<Http<Client>, Ethereum>>,
     wallet: Option<EthereumWallet>,
+    ledger: Option<Arc<Mutex<Ledger>>>,
 }
 
 unsafe impl std::marker::Send for Env {}
@@ -33,6 +38,7 @@ impl Env {
             types: HashMap::new(),
             provider: Arc::new(provider),
             wallet: None,
+            ledger: None,
             debug,
         }
     }
@@ -58,13 +64,41 @@ impl Env {
     }
 
     pub fn set_provider_url(&mut self, url: &str) -> Result<()> {
-        let rpc_url = url.parse()?;
-        let provider = ProviderBuilder::new()
-            .with_recommended_fillers()
-            .on_http(rpc_url);
-        self.provider = Arc::new(provider);
-        self.wallet = None;
-        Ok(())
+        self.set_provider(self.wallet.clone(), url)
+    }
+
+    pub async fn load_ledger(&mut self, index: usize) -> Result<()> {
+        let chain_id = self.provider.root().get_chain_id().await.unwrap_or(1);
+        if self.ledger.is_none() {
+            let ledger = Ledger::init().await?;
+            self.ledger = Some(Arc::new(Mutex::new(ledger)));
+        }
+        let signer = LedgerSigner::new(
+            self.ledger.as_ref().unwrap().clone(),
+            HDPath::LedgerLive(index),
+            Some(chain_id),
+        )
+        .await?;
+        self.set_wallet(signer)
+    }
+
+    pub async fn list_ledger_wallets(&mut self, count: usize) -> Result<Vec<Address>> {
+        if self.ledger.is_none() {
+            let ledger = Ledger::init().await?;
+            self.ledger = Some(Arc::new(Mutex::new(ledger)));
+        }
+        let signer = LedgerSigner::new(
+            self.ledger.as_ref().unwrap().clone(),
+            HDPath::LedgerLive(0),
+            None,
+        )
+        .await?;
+        let mut wallets = vec![signer.address()];
+        for i in 1..count {
+            let addr = signer.get_address_with_path(&HDPath::LedgerLive(i)).await?;
+            wallets.push(addr);
+        }
+        Ok(wallets)
     }
 
     pub fn get_rpc_url(&self) -> String {
@@ -78,16 +112,30 @@ impl Env {
     }
 
     pub fn set_private_key(&mut self, private_key: &str) -> Result<()> {
-        let rpc_url = self.get_rpc_url().parse()?;
         let signer: PrivateKeySigner = private_key.parse()?;
-        let wallet = EthereumWallet::from(signer);
+        self.set_wallet(signer)
+    }
 
-        let provider = ProviderBuilder::new()
-            .with_recommended_fillers()
-            .wallet(wallet.clone())
-            .on_http(rpc_url);
-        self.wallet = Some(wallet);
-        self.provider = Arc::new(provider);
+    fn set_wallet<S>(&mut self, signer: S) -> Result<()>
+    where
+        S: TxSigner<Signature> + Send + Sync + 'static,
+    {
+        let wallet = EthereumWallet::from(signer);
+        self.wallet = Some(wallet.clone());
+        self.set_provider(Some(wallet), &self.get_rpc_url())
+    }
+
+    fn set_provider(&mut self, wallet: Option<EthereumWallet>, url: &str) -> Result<()> {
+        let rpc_url = url.parse()?;
+
+        let builder = ProviderBuilder::new().with_recommended_fillers();
+        let provider = if let Some(wallet) = wallet {
+            Arc::new(builder.wallet(wallet.clone()).on_http(rpc_url))
+                as Arc<dyn Provider<Http<Client>, Ethereum>>
+        } else {
+            Arc::new(builder.on_http(rpc_url))
+        };
+        self.provider = provider;
         Ok(())
     }
 

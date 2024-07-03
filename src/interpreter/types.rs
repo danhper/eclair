@@ -210,7 +210,10 @@ impl Type {
             }
             Type::Console => vec!["log".to_string()],
             Type::NamedTuple(_, fields) => fields.keys().map(|s| s.to_string()).collect(),
-            Type::Repl => Directive::all(),
+            Type::Repl => Directive::all()
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect(),
             Type::Block => BlockFunction::all(),
             Type::Uint(_) | Type::Int(_) => {
                 vec!["format".to_string()]
