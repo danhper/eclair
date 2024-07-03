@@ -4,9 +4,10 @@ use alloy::{
     contract::{CallBuilder, ContractInstance, Interface},
     dyn_abi::Specifier,
     json_abi::StateMutability,
-    network::Network,
+    network::{Network, TransactionBuilder},
     primitives::Address,
     providers::Provider,
+    rpc::types::{TransactionInput, TransactionRequest},
     transports::Transport,
 };
 use anyhow::{anyhow, bail, Result};
@@ -270,7 +271,7 @@ impl Function {
                             if is_view {
                                 call_result = self._execute_contract_call(func).await;
                             } else {
-                                call_result = self._execute_contract_send(func).await
+                                call_result = self._execute_contract_send(addr, func, env).await
                             }
                         }
                         ContractCallMode::Encode => {
@@ -281,7 +282,7 @@ impl Function {
                             call_result = self._execute_contract_call(func).await
                         }
                         ContractCallMode::Send => {
-                            call_result = self._execute_contract_send(func).await
+                            call_result = self._execute_contract_send(addr, func, env).await
                         }
                     }
                 }
@@ -293,14 +294,26 @@ impl Function {
 
     async fn _execute_contract_send<T, P, N>(
         &self,
+        addr: &Address,
         func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+        env: &Env,
     ) -> Result<Value>
     where
         T: Transport + Clone,
         P: Provider<T, N>,
         N: Network,
     {
-        let tx = func.send().await?;
+        let data = func.calldata();
+        let input = TransactionInput::new(data.clone());
+        let from_ = env
+            .get_default_sender()
+            .ok_or(anyhow!("no wallet connected"))?;
+        let tx_req = TransactionRequest::default()
+            .with_from(from_)
+            .with_to(*addr)
+            .input(input);
+        let provider = env.get_provider();
+        let tx = provider.send_transaction(tx_req).await?;
         Ok(Value::from(tx.tx_hash()))
     }
 
