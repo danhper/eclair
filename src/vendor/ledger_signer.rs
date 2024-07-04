@@ -17,11 +17,6 @@ use coins_ledger::{
 };
 use futures_util::lock::Mutex;
 
-#[cfg(feature = "eip712")]
-use alloy_dyn_abi::TypedData;
-#[cfg(feature = "eip712")]
-use alloy_sol_types::{Eip712Domain, SolStruct};
-
 pub(crate) const P1_FIRST: u8 = 0x00;
 
 #[repr(u8)]
@@ -132,26 +127,6 @@ impl Signer for LedgerSigner {
         self.sign_payload(INS::SIGN_PERSONAL_MESSAGE, &payload)
             .await
             .map_err(alloy::signers::Error::other)
-    }
-
-    #[cfg(feature = "eip712")]
-    #[inline]
-    async fn sign_typed_data<T: SolStruct + Send + Sync>(
-        &self,
-        payload: &T,
-        domain: &Eip712Domain,
-    ) -> Result<Signature> {
-        self.sign_typed_data_(&payload.eip712_hash_struct(), domain)
-            .await
-            .map_err(alloy_signer::Error::other)
-    }
-
-    #[cfg(feature = "eip712")]
-    #[inline]
-    async fn sign_dynamic_typed_data(&self, payload: &TypedData) -> Result<Signature> {
-        self.sign_typed_data_(&payload.hash_struct()?, &payload.domain)
-            .await
-            .map_err(alloy_signer::Error::other)
     }
 
     #[inline]
@@ -271,30 +246,6 @@ impl LedgerSigner {
         let mut payload = Self::path_to_bytes(&self.derivation);
         payload.extend_from_slice(tx_rlp);
         self.sign_payload(INS::SIGN, &payload).await
-    }
-
-    #[cfg(feature = "eip712")]
-    async fn sign_typed_data_(
-        &self,
-        hash_struct: &B256,
-        domain: &Eip712Domain,
-    ) -> Result<Signature, LedgerError> {
-        // See comment for v1.6.0 requirement
-        // https://github.com/LedgerHQ/app-ethereum/issues/105#issuecomment-765316999
-        const EIP712_MIN_VERSION: &str = ">=1.6.0";
-        let req = semver::VersionReq::parse(EIP712_MIN_VERSION).unwrap();
-        let version = self.version().await?;
-
-        // Enforce app version is greater than EIP712_MIN_VERSION
-        if !req.matches(&version) {
-            return Err(LedgerError::UnsupportedAppVersion(EIP712_MIN_VERSION));
-        }
-
-        let mut data = Self::path_to_bytes(&self.derivation);
-        data.extend_from_slice(domain.separator().as_slice());
-        data.extend_from_slice(hash_struct.as_slice());
-
-        self.sign_payload(INS::SIGN_ETH_EIP_712, &data).await
     }
 
     /// Helper function for signing either transaction data, personal messages or EIP712 derived
