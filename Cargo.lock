@@ -2390,6 +2390,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "eclair"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "async-trait",
+ "chisel",
+ "clap",
+ "coins-ledger 0.11.1",
+ "foundry-cli",
+ "foundry-config",
+ "futures",
+ "futures-util",
+ "glob",
+ "itertools 0.13.0",
+ "rpassword",
+ "rustyline 14.0.0",
+ "semver 1.0.23",
+ "serde_json",
+ "solang-parser",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "either"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5897,31 +5922,6 @@ dependencies = [
  "phf",
  "thiserror",
  "unicode-xid",
-]
-
-[[package]]
-name = "sorepl"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "anyhow",
- "async-trait",
- "chisel",
- "clap",
- "coins-ledger 0.11.1",
- "foundry-cli",
- "foundry-config",
- "futures",
- "futures-util",
- "glob",
- "itertools 0.13.0",
- "rpassword",
- "rustyline 14.0.0",
- "semver 1.0.23",
- "serde_json",
- "solang-parser",
- "tokio",
- "url",
 ]
 
 [[package]]

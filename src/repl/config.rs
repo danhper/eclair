@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
-const SOREPL_HISTORY_FILE_NAME: &str = ".sorepl_history.txt";
-const DEFAULT_INIT_FILE: &str = ".sorepl_init.sol";
+const ECLAIR_HISTORY_FILE_NAME: &str = ".eclair_history.txt";
+const DEFAULT_INIT_FILE: &str = ".eclair_init.sol";
 
 pub fn history_file() -> Option<PathBuf> {
-    foundry_config::Config::foundry_dir().map(|p| p.join(SOREPL_HISTORY_FILE_NAME))
+    foundry_config::Config::foundry_dir().map(|p| p.join(ECLAIR_HISTORY_FILE_NAME))
 }
 
 pub fn get_init_files(init_file_name: &Option<PathBuf>) -> Vec<PathBuf> {
