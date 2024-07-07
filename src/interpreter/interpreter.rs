@@ -416,6 +416,16 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                         }
                         Ok(values[index].clone())
                     }
+                    Value::TypeObject(type_) => match subscript_opt {
+                        Some(subscript) => {
+                            let value = evaluate_expression(env, subscript).await?;
+                            Ok(Value::TypeObject(Type::FixedArray(
+                                Box::new(type_),
+                                value.as_usize()?,
+                            )))
+                        }
+                        None => Ok(Value::TypeObject(Type::Array(Box::new(type_)))),
+                    },
                     v => bail!("invalid type for subscript, expected tuple, got {}", v),
                 }
             }

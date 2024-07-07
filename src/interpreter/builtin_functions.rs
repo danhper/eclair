@@ -1,7 +1,7 @@
 use core::fmt;
 
 use alloy::{
-    dyn_abi::{DynSolValue, JsonAbiExt},
+    dyn_abi::{DynSolType, DynSolValue, JsonAbiExt},
     hex,
     json_abi::JsonAbi,
     primitives::{Address, FixedBytes, B256, I256, U256},
@@ -204,6 +204,20 @@ fn abi_encode(args: &[Value]) -> Result<Value> {
     Ok(Value::Bytes(abi_encoded))
 }
 
+fn abi_decode(args: &[Value]) -> Result<Value> {
+    let (data, sol_type) = match args {
+        [Value::Bytes(data_), type_ @ Value::Tuple(_)] => {
+            (data_, DynSolType::try_from(type_.get_type())?)
+        }
+        [Value::Bytes(data_), Value::TypeObject(ty)] => {
+            (data_, DynSolType::Tuple(vec![ty.clone().try_into()?]))
+        }
+        _ => bail!("abi.decode function expects bytes and tuple of types as argument"),
+    };
+    let decoded = sol_type.abi_decode(data)?;
+    decoded.try_into()
+}
+
 fn abi_encode_packed(args: &[Value]) -> Result<Value> {
     let arr = Value::Tuple(args.to_vec());
     let dyn_sol = DynSolValue::try_from(&arr)?;
@@ -246,6 +260,7 @@ pub enum BuiltinFunction {
     ReadReceipt(Receipt, String),
     AbiEncode,
     AbiEncodePacked,
+    AbiDecode,
 }
 
 impl fmt::Display for BuiltinFunction {
@@ -272,6 +287,7 @@ impl fmt::Display for BuiltinFunction {
             Self::Log => write!(f, "console.log"),
             Self::AbiEncode => write!(f, "abi.encode"),
             Self::AbiEncodePacked => write!(f, "abi.encodePacked"),
+            Self::AbiDecode => write!(f, "abi.decode"),
         }
     }
 }
@@ -333,6 +349,7 @@ impl BuiltinFunction {
 
             (Value::TypeObject(Type::Abi), "encode") => Self::AbiEncode,
             (Value::TypeObject(Type::Abi), "encodePacked") => Self::AbiEncodePacked,
+            (Value::TypeObject(Type::Abi), "decode") => Self::AbiDecode,
 
             _ => bail!("no method {} for type {}", name, receiver.get_type()),
         };
@@ -375,6 +392,7 @@ impl BuiltinFunction {
 
             Self::AbiEncode => abi_encode(args),
             Self::AbiEncodePacked => abi_encode_packed(args),
+            Self::AbiDecode => abi_decode(args),
 
             Self::Decode(name, abi) => decode_calldata(name, abi, args),
             Self::Map(values, type_) => {

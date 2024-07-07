@@ -103,6 +103,7 @@ pub enum Type {
     Bytes,
     String,
     Array(Box<Type>),
+    FixedArray(Box<Type>, usize),
     NamedTuple(String, BTreeMap<String, Type>),
     Tuple(Vec<Type>),
     Contract(ContractInfo),
@@ -127,6 +128,7 @@ impl Display for Type {
             Type::Bytes => write!(f, "bytes"),
             Type::String => write!(f, "string"),
             Type::Array(t) => write!(f, "{}[]", t),
+            Type::FixedArray(t, s) => write!(f, "{}[{}]", t, s),
             Type::NamedTuple(name, t) => {
                 let items = t.iter().map(|(k, v)| format!("{}: {}", k, v)).join(", ");
                 write!(f, "{} {{{}}}", name, items)
@@ -160,7 +162,9 @@ impl From<DynSolType> for Type {
             DynSolType::String => Type::String,
             DynSolType::Function => Type::Function,
             DynSolType::Array(t) => Type::Array(Box::new(t.as_ref().clone().into())),
-            DynSolType::FixedArray(t, _) => Type::Array(Box::new(t.as_ref().clone().into())),
+            DynSolType::FixedArray(t, s) => {
+                Type::FixedArray(Box::new(t.as_ref().clone().into()), s)
+            }
             DynSolType::Tuple(types) => {
                 Type::Tuple(types.iter().map(|t| Type::from(t.clone())).collect())
             }
@@ -201,6 +205,40 @@ impl TryFrom<solang_parser::pt::Type> for Type {
             solang_parser::pt::Type::AddressPayable => Ok(Type::Address),
             solang_parser::pt::Type::Mapping { .. } => bail!("mapping type is not supported yet"),
             solang_parser::pt::Type::Payable { .. } => bail!("payable type is not supported yet"),
+        }
+    }
+}
+
+impl TryFrom<Type> for DynSolType {
+    type Error = anyhow::Error;
+
+    fn try_from(type_: Type) -> std::result::Result<Self, Self::Error> {
+        match type_ {
+            Type::Address => Ok(DynSolType::Address),
+            Type::Bool => Ok(DynSolType::Bool),
+            Type::Int(size) => Ok(DynSolType::Int(size)),
+            Type::Uint(size) => Ok(DynSolType::Uint(size)),
+            Type::FixBytes(size) => Ok(DynSolType::FixedBytes(size)),
+            Type::Bytes => Ok(DynSolType::Bytes),
+            Type::String => Ok(DynSolType::String),
+            Type::Function => Ok(DynSolType::Function),
+            Type::Array(t) => Ok(DynSolType::Array(Box::new((*t).try_into()?))),
+            Type::FixedArray(t, s) => Ok(DynSolType::FixedArray(Box::new((*t).try_into()?), s)),
+            Type::NamedTuple(name, fields) => Ok(DynSolType::CustomStruct {
+                name,
+                prop_names: fields.keys().cloned().collect(),
+                tuple: fields
+                    .values()
+                    .map(|t| t.clone().try_into())
+                    .collect::<Result<Vec<_>>>()?,
+            }),
+            Type::Tuple(types) => Ok(DynSolType::Tuple(
+                types
+                    .into_iter()
+                    .map(|t| t.try_into())
+                    .collect::<Result<Vec<_>>>()?,
+            )),
+            _ => bail!("type {} is not supported", type_),
         }
     }
 }
