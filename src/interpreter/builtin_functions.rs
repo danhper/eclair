@@ -4,7 +4,8 @@ use alloy::{
     dyn_abi::JsonAbiExt,
     hex,
     json_abi::JsonAbi,
-    primitives::{Address, FixedBytes, I256, U256},
+    primitives::{Address, FixedBytes, B256, I256, U256},
+    providers::PendingTransactionBuilder,
 };
 use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
@@ -12,6 +13,7 @@ use itertools::Itertools;
 
 use super::{
     block_functions::BlockFunction,
+    types::Receipt,
     types::{ContractInfo, Type},
     Directive, Env, Value,
 };
@@ -195,6 +197,21 @@ fn mul_div_args(args: &[Value]) -> Result<(Value, u64)> {
     }
 }
 
+async fn wait_for_receipt(tx: B256, env: &mut Env, args: &[Value]) -> Result<Value> {
+    let provider = env.get_provider();
+    let tx = PendingTransactionBuilder::new(provider.root(), tx);
+    if args.len() > 1 {
+        bail!("get_receipt function expects at most one argument")
+    }
+    let timeout = args.first().map_or(Ok(30), |v| v.as_u64())?;
+    let receipt = tx
+        .with_required_confirmations(1)
+        .with_timeout(Some(std::time::Duration::from_secs(timeout)))
+        .get_receipt()
+        .await?;
+    Ok(Value::TransactionReceipt(receipt.into()))
+}
+
 #[derive(Debug, Clone)]
 pub enum BuiltinFunction {
     Balance(Address),
@@ -211,6 +228,8 @@ pub enum BuiltinFunction {
     GetType,
     Log,
     Block(BlockFunction),
+    GetReceipt(B256),
+    ReadReceipt(Receipt, String),
 }
 
 impl fmt::Display for BuiltinFunction {
@@ -232,6 +251,8 @@ impl fmt::Display for BuiltinFunction {
             Self::FormatFunc => write!(f, "format"),
             Self::Directive(d) => write!(f, "repl.{}", d),
             Self::Block(func) => write!(f, "block.{}", func),
+            Self::GetReceipt(tx) => write!(f, "{}.get_receipt", Value::FixBytes(*tx, 32)),
+            Self::ReadReceipt(receipt, name) => write!(f, "{}.{}", receipt, name),
             Self::Log => write!(f, "console.log"),
         }
     }
@@ -277,6 +298,10 @@ impl BuiltinFunction {
                 Self::Min(t.clone())
             }
 
+            (Value::Transaction(tx), "getReceipt") => Self::GetReceipt(*tx),
+
+            (Value::TransactionReceipt(r), name) => Self::ReadReceipt(r.clone(), name.to_string()),
+
             (Value::TypeObject(Type::Contract(ContractInfo(name, abi))), "decode") => {
                 Self::Decode(name.clone(), abi.clone())
             }
@@ -295,7 +320,11 @@ impl BuiltinFunction {
 
     pub fn is_property(&self) -> bool {
         match self {
-            Self::Balance(_) | Self::Block(_) | Self::Min(_) | Self::Max(_) => true,
+            Self::Balance(_)
+            | Self::Block(_)
+            | Self::Min(_)
+            | Self::Max(_)
+            | Self::ReadReceipt(_, _) => true,
             Self::Directive(d) => d.is_property(),
             _ => false,
         }
@@ -328,6 +357,8 @@ impl BuiltinFunction {
             Self::GetType => get_type(args).map(Value::TypeObject),
             Self::Directive(d) => d.execute(args, env).await,
             Self::Block(f) => f.execute(args, env).await,
+            Self::GetReceipt(tx) => wait_for_receipt(*tx, env, args).await,
+            Self::ReadReceipt(receipt, name) => receipt.get(name),
             Self::Log => {
                 args.iter().for_each(|arg| println!("{}", arg));
                 Ok(Value::Null)

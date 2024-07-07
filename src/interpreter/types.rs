@@ -4,6 +4,7 @@ use alloy::{
     dyn_abi::DynSolType,
     json_abi::JsonAbi,
     primitives::{Address, B256, I256, U160, U256},
+    rpc::types::TransactionReceipt,
 };
 use anyhow::{bail, Result};
 use itertools::Itertools;
@@ -32,6 +33,65 @@ impl ContractInfo {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Receipt {
+    tx_hash: B256,
+    block_hash: B256,
+    block_number: u64,
+    status: bool,
+    gas_used: u128,
+    effective_gas_price: u128,
+}
+
+impl Receipt {
+    pub fn get(&self, field: &str) -> Result<Value> {
+        let result = match field {
+            "tx_hash" => Value::FixBytes(self.tx_hash, 32),
+            "block_hash" => Value::FixBytes(self.block_hash, 32),
+            "block_number" => Value::Uint(U256::from(self.block_number)),
+            "status" => Value::Bool(self.status),
+            "gas_used" => Value::Uint(U256::from(self.gas_used)),
+            "effective_gas_price" => Value::Uint(U256::from(self.effective_gas_price)),
+            _ => bail!("receipt has no field {}", field),
+        };
+        Ok(result)
+    }
+
+    pub fn keys() -> Vec<String> {
+        vec![
+            "tx_hash".to_string(),
+            "block_hash".to_string(),
+            "block_number".to_string(),
+            "status".to_string(),
+            "gas_used".to_string(),
+            "effective_gas_price".to_string(),
+        ]
+    }
+}
+
+impl From<TransactionReceipt> for Receipt {
+    fn from(receipt: TransactionReceipt) -> Self {
+        Receipt {
+            tx_hash: receipt.transaction_hash,
+            block_hash: receipt.block_hash.unwrap_or_default(),
+            block_number: receipt.block_number.unwrap_or(0),
+            status: receipt.status(),
+            gas_used: receipt.gas_used,
+            effective_gas_price: receipt.effective_gas_price,
+        }
+    }
+}
+
+impl Display for Receipt {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "tx_hash: {}, block_hash: {}, block_number: {}, status: {}, gas_used: {}, gas_price: {}",
+            self.tx_hash, self.block_hash, self.block_number, self.status, self.gas_used, self.effective_gas_price
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Null,
@@ -46,6 +106,8 @@ pub enum Type {
     NamedTuple(String, BTreeMap<String, Type>),
     Tuple(Vec<Type>),
     Contract(ContractInfo),
+    Transaction,
+    TransactionReceipt,
     Function,
     Repl,
     Block,
@@ -74,6 +136,8 @@ impl Display for Type {
             }
             Type::Contract(ContractInfo(name, _)) => write!(f, "{}", name),
             Type::Function => write!(f, "function"),
+            Type::Transaction => write!(f, "transaction"),
+            Type::TransactionReceipt => write!(f, "transactionReceipt"),
 
             Type::Repl => write!(f, "repl"),
             Type::Block => write!(f, "block"),
@@ -158,6 +222,7 @@ impl Type {
             "uint256".to_string(),
             "bytes".to_string(),
             "string".to_string(),
+            "Transaction".to_string(),
         ]
     }
 
@@ -174,6 +239,7 @@ impl Type {
             (Type::String, Value::Bytes(v)) => {
                 Ok(Value::Str(String::from_utf8_lossy(v).to_string()))
             }
+            (Type::Transaction, Value::FixBytes(v, 32)) => Ok(Value::Transaction(*v)),
             (Type::Bytes, Value::Str(v)) => Ok(Value::Bytes(v.as_bytes().to_vec())),
             (type_ @ Type::FixBytes(_), Value::Str(_)) => type_.cast(&Type::Bytes.cast(value)?),
             (Type::FixBytes(size), Value::Bytes(v)) => {
@@ -218,6 +284,8 @@ impl Type {
             Type::Uint(_) | Type::Int(_) => {
                 vec!["format".to_string()]
             }
+            Type::Transaction => vec!["getReceipt".to_string()],
+            Type::TransactionReceipt => Receipt::keys(),
             Type::Array(_) => vec!["concat".to_string()],
             Type::String => vec!["concat".to_string()],
             _ => vec![],

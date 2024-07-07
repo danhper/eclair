@@ -13,7 +13,7 @@ use std::{
 
 use super::{
     functions::Function,
-    types::{ContractInfo, Type},
+    types::{ContractInfo, Receipt, Type},
 };
 
 #[derive(Debug, Clone)]
@@ -31,6 +31,8 @@ pub enum Value {
     NamedTuple(String, BTreeMap<String, Value>),
     Array(Vec<Value>),
     TypeObject(Type),
+    Transaction(B256),
+    TransactionReceipt(Receipt),
     Func(Function),
 }
 
@@ -73,6 +75,8 @@ impl Display for Value {
             Value::Tuple(v) => write!(f, "({})", _values_to_string(v)),
             Value::Array(v) => write!(f, "[{}]", _values_to_string(v)),
             Value::TypeObject(t) => write!(f, "{}", t),
+            Value::Transaction(t) => write!(f, "Transaction({})", t),
+            Value::TransactionReceipt(r) => write!(f, "TransactionReceipt {{ {} }}", r),
             Value::Contract(ContractInfo(name, _), addr) => {
                 write!(f, "{}({})", name, addr.to_checksum(None))
             }
@@ -92,6 +96,7 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::Str(s) => DynSolValue::String(s.clone()),
             Value::Addr(a) => DynSolValue::Address(*a),
             Value::FixBytes(w, s) => DynSolValue::FixedBytes(*w, *s),
+            Value::Transaction(t) => DynSolValue::FixedBytes(*t, 32),
             Value::Bytes(b) => DynSolValue::Bytes(b.clone()),
             Value::Contract(_, addr) => DynSolValue::Address(*addr),
             Value::NamedTuple(name, vs) => {
@@ -110,6 +115,7 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::Tuple(vs) => DynSolValue::Tuple(_values_to_dyn_sol_values(vs)?),
             Value::Array(vs) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
             Value::Null => bail!("cannot convert null to Solidity type"),
+            Value::TransactionReceipt(_) => bail!("cannot convert receipt to Solidity type"),
             Value::TypeObject(_) => bail!("cannot convert type objects to Solidity type"),
             Value::Func(_) => bail!("cannot convert function to Solidity type"),
         };
@@ -244,6 +250,8 @@ impl Value {
             Value::Null => Type::Null,
             Value::Func(_) => Type::Function,
             Value::TypeObject(type_) => type_.clone(),
+            Value::Transaction(_) => Type::Transaction,
+            Value::TransactionReceipt(_) => Type::TransactionReceipt,
         }
     }
 

@@ -315,7 +315,7 @@ impl Function {
             .input(input);
         let provider = env.get_provider();
         let tx = provider.send_transaction(tx_req).await?;
-        Ok(Value::from(tx.tx_hash()))
+        Ok(Value::Transaction(*tx.tx_hash()))
     }
 
     async fn _execute_contract_call<T, P, N>(

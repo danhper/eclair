@@ -24,6 +24,7 @@ pub fn load_builtins(env: &mut Env) {
     env.set_var("repl", Value::TypeObject(Type::Repl));
     env.set_var("console", Value::TypeObject(Type::Console));
     env.set_var("block", Value::TypeObject(Type::Block));
+    env.set_var("Transaction", Value::TypeObject(Type::Transaction));
 
     for name in BuiltinFunction::functions() {
         env.set_var(
@@ -253,7 +254,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::HexNumberLiteral(_, n, _) => {
                 let result = if n.len() == 42 {
                     Value::Addr(Address::from_hex(n)?)
-                } else if n.len() < 66 {
+                } else if n.len() <= 66 {
                     Value::FixBytes(B256::from_hex(&n)?, 32)
                 } else {
                     Value::Bytes(Vec::from_hex(&n[2..])?)
