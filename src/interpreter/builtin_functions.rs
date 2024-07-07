@@ -1,7 +1,7 @@
 use core::fmt;
 
 use alloy::{
-    dyn_abi::JsonAbiExt,
+    dyn_abi::{DynSolValue, JsonAbiExt},
     hex,
     json_abi::JsonAbi,
     primitives::{Address, FixedBytes, B256, I256, U256},
@@ -173,8 +173,8 @@ fn format_bytes(bytes: &[u8]) -> String {
 
 fn format(value: &Value, args: &[Value]) -> Result<String> {
     match value {
-        Value::Uint(n) => to_decimals(*n, args, uint_to_decimals),
-        Value::Int(n) => to_decimals(*n, args, int_to_decimals),
+        Value::Uint(n, _) => to_decimals(*n, args, uint_to_decimals),
+        Value::Int(n, _) => to_decimals(*n, args, int_to_decimals),
         Value::Str(s) => Ok(s.clone()),
         Value::Bytes(b) => Ok(format_bytes(b)),
         Value::FixBytes(b, _) => Ok(format_bytes(&b.0)),
@@ -195,6 +195,20 @@ fn mul_div_args(args: &[Value]) -> Result<(Value, u64)> {
         [v2, d] => Ok((v2.clone(), d.as_u64()?)),
         _ => bail!("mul function expects one or two arguments"),
     }
+}
+
+fn abi_encode(args: &[Value]) -> Result<Value> {
+    let arr = Value::Tuple(args.to_vec());
+    let dyn_sol = DynSolValue::try_from(&arr)?;
+    let abi_encoded = dyn_sol.abi_encode();
+    Ok(Value::Bytes(abi_encoded))
+}
+
+fn abi_encode_packed(args: &[Value]) -> Result<Value> {
+    let arr = Value::Tuple(args.to_vec());
+    let dyn_sol = DynSolValue::try_from(&arr)?;
+    let abi_encoded = dyn_sol.abi_encode_packed();
+    Ok(Value::Bytes(abi_encoded))
 }
 
 async fn wait_for_receipt(tx: B256, env: &mut Env, args: &[Value]) -> Result<Value> {
@@ -230,6 +244,8 @@ pub enum BuiltinFunction {
     Block(BlockFunction),
     GetReceipt(B256),
     ReadReceipt(Receipt, String),
+    AbiEncode,
+    AbiEncodePacked,
 }
 
 impl fmt::Display for BuiltinFunction {
@@ -254,6 +270,8 @@ impl fmt::Display for BuiltinFunction {
             Self::GetReceipt(tx) => write!(f, "{}.get_receipt", Value::FixBytes(*tx, 32)),
             Self::ReadReceipt(receipt, name) => write!(f, "{}.{}", receipt, name),
             Self::Log => write!(f, "console.log"),
+            Self::AbiEncode => write!(f, "abi.encode"),
+            Self::AbiEncodePacked => write!(f, "abi.encodePacked"),
         }
     }
 }
@@ -279,8 +297,8 @@ impl BuiltinFunction {
 
             (v @ (Value::Str(_) | Value::Array(_)), "concat") => Self::Concat(Box::new(v.clone())),
 
-            (v @ Value::Uint(_) | v @ Value::Int(_), "mul") => Self::Mul(Box::new(v.clone())),
-            (v @ Value::Uint(_) | v @ Value::Int(_), "div") => Self::Div(Box::new(v.clone())),
+            (v @ Value::Uint(..) | v @ Value::Int(..), "mul") => Self::Mul(Box::new(v.clone())),
+            (v @ Value::Uint(..) | v @ Value::Int(..), "div") => Self::Div(Box::new(v.clone())),
 
             (Value::Tuple(values), "map") => Self::Map(
                 values.clone(),
@@ -313,6 +331,9 @@ impl BuiltinFunction {
             }
             (Value::TypeObject(Type::Console), "log") => Self::Log,
 
+            (Value::TypeObject(Type::Abi), "encode") => Self::AbiEncode,
+            (Value::TypeObject(Type::Abi), "encodePacked") => Self::AbiEncodePacked,
+
             _ => bail!("no method {} for type {}", name, receiver.get_type()),
         };
         Ok(method)
@@ -332,7 +353,10 @@ impl BuiltinFunction {
 
     pub async fn execute(&self, args: &[Value], env: &mut Env) -> Result<Value> {
         match self {
-            Self::Balance(addr) => Ok(Value::Uint(env.get_provider().get_balance(*addr).await?)),
+            Self::Balance(addr) => Ok(Value::Uint(
+                env.get_provider().get_balance(*addr).await?,
+                256,
+            )),
             Self::FormatFunc => format_func(args).map(Value::Str),
             Self::Format(v) => format(v, args).map(Value::Str),
             Self::Concat(v) => concat(v, args),
@@ -348,6 +372,9 @@ impl BuiltinFunction {
 
             Self::Max(t) => t.max(),
             Self::Min(t) => t.min(),
+
+            Self::AbiEncode => abi_encode(args),
+            Self::AbiEncodePacked => abi_encode_packed(args),
 
             Self::Decode(name, abi) => decode_calldata(name, abi, args),
             Self::Map(values, type_) => {

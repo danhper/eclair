@@ -25,6 +25,7 @@ pub fn load_builtins(env: &mut Env) {
     env.set_var("console", Value::TypeObject(Type::Console));
     env.set_var("block", Value::TypeObject(Type::Block));
     env.set_var("Transaction", Value::TypeObject(Type::Transaction));
+    env.set_var("abi", Value::TypeObject(Type::Abi));
 
     for name in BuiltinFunction::functions() {
         env.set_var(
@@ -220,7 +221,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                         U256::from_str(&decimals).map_err(|e| anyhow!("{}", e.to_string()))?;
                     parsed_n *= U256::from(10).pow(parsed_decimals);
                 }
-                Ok(Value::Uint(parsed_n))
+                Ok(Value::Uint(parsed_n, 256))
             }
             Expression::StringLiteral(strs) => Ok(Value::Str(strs[0].string.clone())),
 
@@ -291,7 +292,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 let adjusted_fraction = fraction * U256::from(10).pow(exponent - decimals_count);
                 n += adjusted_fraction;
 
-                Ok(Value::Uint(n))
+                Ok(Value::Uint(n, 256))
             }
 
             Expression::And(_, lexpr, rexpr) => {
@@ -349,8 +350,8 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             }
 
             Expression::Negate(_, expr) => match evaluate_expression(env, expr).await? {
-                Value::Int(n) => Ok(Value::Int(n.neg())),
-                Value::Uint(n) => Ok(Value::Int(I256::from_raw(n).neg())),
+                Value::Int(n, s) => Ok(Value::Int(n.neg(), s)),
+                Value::Uint(n, s) => Ok(Value::Int(I256::from_raw(n).neg(), s)),
                 v => bail!("invalid type for negate, expected uint, got {}", v),
             },
 
@@ -447,22 +448,27 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 let left = evaluate_expression(env, lhs).await?;
                 let right = evaluate_expression(env, rhs).await?;
                 match (&left, &right) {
-                    (Value::Uint(l), Value::Uint(r)) => Ok(Value::Uint(l.pow(*r))),
-                    (Value::Int(l), Value::Uint(r)) => Ok(Value::Int(l.pow(*r))),
-                    (Value::Uint(l), Value::Int(r)) => {
-                        if r.is_negative() {
-                            bail!("exponentiation with negative exponent")
-                        }
-                        Ok(Value::Uint(l.pow(r.unchecked_into())))
+                    (Value::Uint(l, s1), Value::Uint(r, s2)) => {
+                        Ok(Value::Uint(l.pow(*r), *s1.max(s2)))
                     }
-                    (Value::Int(l), Value::Int(r)) => {
+                    (Value::Int(l, s1), Value::Uint(r, s2)) => {
+                        Ok(Value::Int(l.pow(*r), *s1.max(s2)))
+                    }
+                    (Value::Uint(l, s1), Value::Int(r, s2)) => {
                         if r.is_negative() {
                             bail!("exponentiation with negative exponent")
                         }
-                        Ok(Value::Int(l.pow(r.unchecked_into())))
+                        Ok(Value::Uint(l.pow(r.unchecked_into()), *s1.max(s2)))
+                    }
+                    (Value::Int(l, s1), Value::Int(r, s2)) => {
+                        if r.is_negative() {
+                            bail!("exponentiation with negative exponent")
+                        }
+                        Ok(Value::Int(l.pow(r.unchecked_into()), *s1.max(s2)))
                     }
                     _ => bail!("{} not supported for {} and {}", "^", left, right),
                 }
+                .and_then(Value::validate_int)
             }
 
             Expression::NamedFunctionCall(_, name_expr, args) => {

@@ -20,8 +20,8 @@ use super::{
 pub enum Value {
     Null,
     Bool(bool),
-    Int(I256),
-    Uint(U256),
+    Int(I256, usize),
+    Uint(U256, usize),
     Str(String),
     FixBytes(B256, usize),
     Bytes(Vec<u8>),
@@ -62,8 +62,8 @@ impl Display for Value {
         match self {
             Value::Null => write!(f, "null"),
             Value::Bool(b) => write!(f, "{}", b),
-            Value::Int(n) => write!(f, "{}", n),
-            Value::Uint(n) => write!(f, "{}", n),
+            Value::Int(n, _) => write!(f, "{}", n),
+            Value::Uint(n, _) => write!(f, "{}", n),
             Value::Addr(a) => write!(f, "{}", a.to_checksum(None)),
             Value::Str(s) => write!(f, "\"{}\"", s),
             Value::FixBytes(w, s) => {
@@ -91,8 +91,8 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
         let v = match value {
             Value::Bool(b) => DynSolValue::Bool(*b),
-            Value::Int(n) => DynSolValue::Int(*n, 256),
-            Value::Uint(n) => DynSolValue::Uint(*n, 256),
+            Value::Int(n, s) => DynSolValue::Int(*n, *s),
+            Value::Uint(n, s) => DynSolValue::Uint(*n, *s),
             Value::Str(s) => DynSolValue::String(s.clone()),
             Value::Addr(a) => DynSolValue::Address(*a),
             Value::FixBytes(w, s) => DynSolValue::FixedBytes(*w, *s),
@@ -129,8 +129,8 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
     fn try_from(value: alloy::dyn_abi::DynSolValue) -> Result<Self, Self::Error> {
         match value {
             DynSolValue::Bool(b) => Ok(Value::Bool(b)),
-            DynSolValue::Int(n, _) => Ok(Value::Int(n)),
-            DynSolValue::Uint(n, _) => Ok(Value::Uint(n)),
+            DynSolValue::Int(n, s) => Ok(Value::Int(n, s)),
+            DynSolValue::Uint(n, s) => Ok(Value::Uint(n, s)),
             DynSolValue::String(s) => Ok(Value::Str(s)),
             DynSolValue::Address(a) => Ok(Value::Addr(a)),
             DynSolValue::FixedBytes(w, s) => Ok(Value::FixBytes(w, s)),
@@ -156,19 +156,19 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
 
 impl From<i32> for Value {
     fn from(n: i32) -> Self {
-        Value::Int(n.try_into().unwrap())
+        Value::Int(n.try_into().unwrap(), 256)
     }
 }
 
 impl From<u64> for Value {
     fn from(n: u64) -> Self {
-        Value::Uint(U256::from(n))
+        Value::Uint(U256::from(n), 256)
     }
 }
 
 impl From<u128> for Value {
     fn from(n: u128) -> Self {
-        Value::Uint(U256::from(n))
+        Value::Uint(U256::from(n), 256)
     }
 }
 
@@ -191,10 +191,10 @@ impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::Int(a), Value::Int(b)) => a == b,
-            (Value::Uint(a), Value::Uint(b)) => a == b,
-            (Value::Int(a), Value::Uint(b)) => *a == I256::from_raw(*b),
-            (Value::Uint(a), Value::Int(b)) => I256::from_raw(*a) == *b,
+            (Value::Int(a, _), Value::Int(b, _)) => a == b,
+            (Value::Uint(a, _), Value::Uint(b, _)) => a == b,
+            (Value::Int(a, _), Value::Uint(b, _)) => *a == I256::from_raw(*b),
+            (Value::Uint(a, _), Value::Int(b, _)) => I256::from_raw(*a) == *b,
             (Value::Str(a), Value::Str(b)) => a == b,
             (Value::Addr(a), Value::Addr(b)) => a == b,
             (Value::FixBytes(a, _), Value::FixBytes(b, _)) => a == b,
@@ -212,10 +212,10 @@ impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Value::Bool(a), Value::Bool(b)) => a.partial_cmp(b),
-            (Value::Int(a), Value::Int(b)) => a.partial_cmp(b),
-            (Value::Uint(a), Value::Uint(b)) => a.partial_cmp(b),
-            (Value::Int(a), Value::Uint(b)) => a.partial_cmp(&I256::from_raw(*b)),
-            (Value::Uint(a), Value::Int(b)) => I256::from_raw(*a).partial_cmp(b),
+            (Value::Int(a, _), Value::Int(b, _)) => a.partial_cmp(b),
+            (Value::Uint(a, _), Value::Uint(b, _)) => a.partial_cmp(b),
+            (Value::Int(a, _), Value::Uint(b, _)) => a.partial_cmp(&I256::from_raw(*b)),
+            (Value::Uint(a, _), Value::Int(b, _)) => I256::from_raw(*a).partial_cmp(b),
             (Value::Str(a), Value::Str(b)) => a.partial_cmp(b),
             (Value::Addr(a), Value::Addr(b)) => a.partial_cmp(b),
             (Value::FixBytes(a, _), Value::FixBytes(b, _)) => a.partial_cmp(b),
@@ -231,8 +231,8 @@ impl Value {
     pub fn get_type(&self) -> Type {
         match self {
             Value::Bool(_) => Type::Bool,
-            Value::Int(_) => Type::Int(256),
-            Value::Uint(_) => Type::Uint(256),
+            Value::Int(_, s) => Type::Int(*s),
+            Value::Uint(_, s) => Type::Uint(*s),
             Value::Str(_) => Type::String,
             Value::Addr(_) => Type::Address,
             Value::FixBytes(_, s) => Type::FixBytes(*s),
@@ -280,24 +280,24 @@ impl Value {
 
     pub fn as_i32(&self) -> Result<i32> {
         match self {
-            Value::Int(n) => Ok(n.as_i32()),
-            Value::Uint(n) => Ok(n.to()),
+            Value::Int(n, _) => Ok(n.as_i32()),
+            Value::Uint(n, _) => Ok(n.to()),
             _ => bail!("cannot convert {} to i32", self.get_type()),
         }
     }
 
     pub fn as_usize(&self) -> Result<usize> {
         match self {
-            Value::Int(n) => Ok(n.as_usize()),
-            Value::Uint(n) => Ok(n.to()),
+            Value::Int(n, _) => Ok(n.as_usize()),
+            Value::Uint(n, _) => Ok(n.to()),
             _ => bail!("cannot convert {} to usize", self.get_type()),
         }
     }
 
     pub fn as_u64(&self) -> Result<u64> {
         match self {
-            Value::Int(n) => Ok(n.as_u64()),
-            Value::Uint(n) => Ok(n.to()),
+            Value::Int(n, _) => Ok(n.as_u64()),
+            Value::Uint(n, _) => Ok(n.to()),
             _ => bail!("cannot convert {} to u64", self.get_type()),
         }
     }
@@ -322,7 +322,17 @@ impl Value {
     }
 
     pub fn decimal_multiplier(decimals: u8) -> Value {
-        Value::Uint(U256::from(10).pow(U256::from(decimals)))
+        Value::Uint(U256::from(10).pow(U256::from(decimals)), 256)
+    }
+
+    pub fn validate_int(self) -> Result<Self> {
+        let type_ = self.get_type();
+        let min_value = type_.min()?;
+        let max_value = type_.max()?;
+        if self < min_value || self > max_value {
+            bail!("{} is out of range for {}", self, type_)
+        }
+        Ok(self)
     }
 }
 
@@ -332,13 +342,18 @@ impl Add for Value {
     fn add(self, other: Self) -> Self::Output {
         let error_msg = format!("cannot add {} and {}", self.get_type(), other.get_type());
         match (self, other) {
-            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
-            (Value::Uint(a), Value::Uint(b)) => Ok(Value::Uint(a + b)),
-            (Value::Int(a), Value::Uint(b)) => Ok(Value::Int(a + I256::from_raw(b))),
-            (Value::Uint(a), Value::Int(b)) => Ok(Value::Int(I256::from_raw(a) + b)),
+            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(a + b, s1.max(s2))),
+            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a + b, s1.max(s2))),
+            (Value::Int(a, s1), Value::Uint(b, s2)) => {
+                Ok(Value::Int(a + I256::from_raw(b), s1.max(s2)))
+            }
+            (Value::Uint(a, s1), Value::Int(b, s2)) => {
+                Ok(Value::Int(I256::from_raw(a) + b, s1.max(s2)))
+            }
             (Value::Str(a), Value::Str(b)) => Ok(Value::Str(a + &b)),
             _ => bail!(error_msg),
         }
+        .and_then(Value::validate_int)
     }
 }
 
@@ -348,12 +363,17 @@ impl Sub for Value {
     fn sub(self, other: Self) -> Self::Output {
         let error_msg = format!("cannot sub {} and {}", self.get_type(), other.get_type());
         match (self, other) {
-            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a - b)),
-            (Value::Uint(a), Value::Uint(b)) => Ok(Value::Uint(a - b)),
-            (Value::Int(a), Value::Uint(b)) => Ok(Value::Int(a - I256::from_raw(b))),
-            (Value::Uint(a), Value::Int(b)) => Ok(Value::Int(I256::from_raw(a) - b)),
+            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(a - b, s1.max(s2))),
+            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a - b, s1.max(s2))),
+            (Value::Int(a, s1), Value::Uint(b, s2)) => {
+                Ok(Value::Int(a - I256::from_raw(b), s1.max(s2)))
+            }
+            (Value::Uint(a, s1), Value::Int(b, s2)) => {
+                Ok(Value::Int(I256::from_raw(a) - b, s1.max(s2)))
+            }
             _ => bail!(error_msg),
         }
+        .and_then(Value::validate_int)
     }
 }
 
@@ -363,12 +383,17 @@ impl Mul for Value {
     fn mul(self, other: Self) -> Self::Output {
         let error_msg = format!("cannot mul {} and {}", self.get_type(), other.get_type());
         match (self, other) {
-            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a * b)),
-            (Value::Uint(a), Value::Uint(b)) => Ok(Value::Uint(a * b)),
-            (Value::Int(a), Value::Uint(b)) => Ok(Value::Int(a * I256::from_raw(b))),
-            (Value::Uint(a), Value::Int(b)) => Ok(Value::Int(I256::from_raw(a) * b)),
+            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(a * b, s1.max(s2))),
+            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a * b, s1.max(s2))),
+            (Value::Int(a, s1), Value::Uint(b, s2)) => {
+                Ok(Value::Int(a * I256::from_raw(b), s1.max(s2)))
+            }
+            (Value::Uint(a, s1), Value::Int(b, s2)) => {
+                Ok(Value::Int(I256::from_raw(a) * b, s1.max(s2)))
+            }
             _ => bail!(error_msg),
         }
+        .and_then(Value::validate_int)
     }
 }
 
@@ -378,12 +403,17 @@ impl Div for Value {
     fn div(self, other: Self) -> Self::Output {
         let error_msg = format!("cannot div {} and {}", self.get_type(), other.get_type());
         match (self, other) {
-            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a / b)),
-            (Value::Uint(a), Value::Uint(b)) => Ok(Value::Uint(a / b)),
-            (Value::Int(a), Value::Uint(b)) => Ok(Value::Int(a / I256::from_raw(b))),
-            (Value::Uint(a), Value::Int(b)) => Ok(Value::Int(I256::from_raw(a) / b)),
+            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(a / b, s1.max(s2))),
+            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a / b, s1.max(s2))),
+            (Value::Int(a, s1), Value::Uint(b, s2)) => {
+                Ok(Value::Int(a / I256::from_raw(b), s1.max(s2)))
+            }
+            (Value::Uint(a, s1), Value::Int(b, s2)) => {
+                Ok(Value::Int(I256::from_raw(a) / b, s1.max(s2)))
+            }
             _ => bail!(error_msg),
         }
+        .and_then(Value::validate_int)
     }
 }
 
@@ -393,11 +423,16 @@ impl Rem for Value {
     fn rem(self, other: Self) -> Self::Output {
         let error_msg = format!("cannot rem {} and {}", self.get_type(), other.get_type());
         match (self, other) {
-            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a % b)),
-            (Value::Uint(a), Value::Uint(b)) => Ok(Value::Uint(a % b)),
-            (Value::Int(a), Value::Uint(b)) => Ok(Value::Int(a % I256::from_raw(b))),
-            (Value::Uint(a), Value::Int(b)) => Ok(Value::Int(I256::from_raw(a) % b)),
+            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(a % b, s1.max(s2))),
+            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a % b, s1.max(s2))),
+            (Value::Int(a, s1), Value::Uint(b, s2)) => {
+                Ok(Value::Int(a % I256::from_raw(b), s1.max(s2)))
+            }
+            (Value::Uint(a, s1), Value::Int(b, s2)) => {
+                Ok(Value::Int(I256::from_raw(a) % b, s1.max(s2)))
+            }
             _ => bail!(error_msg),
         }
+        .and_then(Value::validate_int)
     }
 }

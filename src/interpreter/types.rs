@@ -48,10 +48,10 @@ impl Receipt {
         let result = match field {
             "tx_hash" => Value::FixBytes(self.tx_hash, 32),
             "block_hash" => Value::FixBytes(self.block_hash, 32),
-            "block_number" => Value::Uint(U256::from(self.block_number)),
+            "block_number" => Value::Uint(U256::from(self.block_number), 256),
             "status" => Value::Bool(self.status),
-            "gas_used" => Value::Uint(U256::from(self.gas_used)),
-            "effective_gas_price" => Value::Uint(U256::from(self.effective_gas_price)),
+            "gas_used" => Value::Uint(U256::from(self.gas_used), 256),
+            "effective_gas_price" => Value::Uint(U256::from(self.effective_gas_price), 256),
             _ => bail!("receipt has no field {}", field),
         };
         Ok(result)
@@ -112,6 +112,7 @@ pub enum Type {
     Repl,
     Block,
     Console,
+    Abi,
 }
 
 impl Display for Type {
@@ -142,6 +143,7 @@ impl Display for Type {
             Type::Repl => write!(f, "repl"),
             Type::Block => write!(f, "block"),
             Type::Console => write!(f, "console"),
+            Type::Abi => write!(f, "abi"),
         }
     }
 }
@@ -222,7 +224,6 @@ impl Type {
             "uint256".to_string(),
             "bytes".to_string(),
             "string".to_string(),
-            "Transaction".to_string(),
         ]
     }
 
@@ -231,13 +232,24 @@ impl Type {
             (type_, value) if type_ == &value.get_type() => Ok(value.clone()),
             (Type::Contract(info), Value::Addr(addr)) => Ok(Value::Contract(info.clone(), *addr)),
             (Type::Address, Value::Contract(_, addr)) => Ok(Value::Addr(*addr)),
-            (Type::Address, Value::Uint(v)) => Ok(Value::Addr(Address::from(v.to::<U160>()))),
-            (Type::Address, Value::Int(v)) if v.is_zero() => Ok(Value::Addr(Address::ZERO)),
-            (Type::Address, Value::Int(_)) => {
+            (Type::Address, Value::Uint(v, _)) => Ok(Value::Addr(Address::from(v.to::<U160>()))),
+            (Type::Address, Value::Int(v, _)) if v.is_zero() => Ok(Value::Addr(Address::ZERO)),
+            (Type::Address, Value::Int(_, _)) => {
                 bail!("cannot only cast cast zero address from int")
             }
             (Type::String, Value::Bytes(v)) => {
                 Ok(Value::Str(String::from_utf8_lossy(v).to_string()))
+            }
+            (Type::Uint(size), Value::Int(v, _)) => {
+                if v.is_negative() {
+                    bail!("cannot cast negative int to uint")
+                }
+                Value::Uint((*v).try_into()?, *size).validate_int()
+            }
+            (Type::Uint(size), Value::Uint(v, _)) => Value::Uint(*v, *size).validate_int(),
+            (Type::Int(size), Value::Int(v, _)) => Value::Int(*v, *size).validate_int(),
+            (Type::Int(size), Value::Uint(v, _)) => {
+                Value::Int((*v).try_into()?, *size).validate_int()
             }
             (Type::Transaction, Value::FixBytes(v, 32)) => Ok(Value::Transaction(*v)),
             (Type::Bytes, Value::Str(v)) => Ok(Value::Bytes(v.as_bytes().to_vec())),
@@ -288,6 +300,11 @@ impl Type {
             Type::TransactionReceipt => Receipt::keys(),
             Type::Array(_) => vec!["concat".to_string()],
             Type::String => vec!["concat".to_string()],
+            Type::Abi => vec![
+                "encode".to_string(),
+                "decode".to_string(),
+                "encodePacked".to_string(),
+            ],
             _ => vec![],
         }
     }
@@ -299,17 +316,18 @@ impl Type {
             Type::Int(size) => (U256::from(1) << U256::from(*size - 1)) - U256::from(1),
             _ => bail!("cannot get max value for type {}", self),
         };
-        Ok(Value::Uint(res))
+        Ok(Value::Uint(res, 256))
     }
 
     pub fn min(&self) -> Result<Value> {
         match self {
             Type::Uint(_) => Ok(0.into()),
-            Type::Int(256) => Ok(Value::Int(I256::MIN)),
+            Type::Int(256) => Ok(Value::Int(I256::MIN, 256)),
             Type::Int(size) => {
                 let minus_one = -I256::from_raw(U256::from(1));
                 Ok(Value::Int(
                     minus_one.asl(*size - 1).expect("min computation failed"),
+                    256,
                 ))
             }
             _ => bail!("cannot get min value for type {}", self),
@@ -334,7 +352,7 @@ mod tests {
             (Type::Uint(8), U256::from(U8::MAX)),
         ];
         for (t, expected) in cases {
-            assert_eq!(t.max().unwrap(), Value::Uint(expected));
+            assert_eq!(t.max().unwrap(), Value::Uint(expected, 256));
         }
     }
 
@@ -348,7 +366,7 @@ mod tests {
             (Type::Uint(8), 0),
         ];
         for (t, expected) in cases {
-            assert_eq!(t.min().unwrap(), Value::Uint(U256::from(expected)));
+            assert_eq!(t.min().unwrap(), Value::Uint(U256::from(expected), 256));
         }
     }
 
@@ -363,7 +381,7 @@ mod tests {
         ];
         for (t, expected_str) in cases {
             let expected = I256::from_dec_str(&expected_str).unwrap();
-            assert_eq!(t.max().unwrap(), Value::Int(expected));
+            assert_eq!(t.max().unwrap(), Value::Int(expected, 256));
         }
     }
 
@@ -378,7 +396,7 @@ mod tests {
         ];
         for (t, expected_str) in cases {
             let expected = I256::from_dec_str(&expected_str).unwrap();
-            assert_eq!(t.min().unwrap(), Value::Int(expected));
+            assert_eq!(t.min().unwrap(), Value::Int(expected, 256));
         }
     }
 }
