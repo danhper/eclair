@@ -5,9 +5,9 @@ to interact with EVM smart contracts using Solidity.
 
 The documentation can be found here: https://docs.eclair.so
 
-Here is a sample session using Eclair:
+Here is a sample session using Eclair that interacts with smart contracts deployed on [Optimism](https://optimism.io/) using a [Ledger](https://www.ledger.com/).
 
-```python
+```solidity
 >> repl.rpc("https://mainnet.optimism.io")
 >> repl.fetchAbi("ERC20", 0xded3b9a8dbedc2f9cb725b55d0e686a81e6d06dc)
 ERC20(0xdEd3b9a8DBeDC2F9CB725B55d0E686A81E6d06dC)
