@@ -123,6 +123,25 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
     }
 }
 
+impl From<alloy::rpc::types::Log> for Value {
+    fn from(log: alloy::rpc::types::Log) -> Self {
+        let mut fields = BTreeMap::new();
+        fields.insert("address".to_string(), Value::Addr(log.address()));
+        fields.insert(
+            "topics".to_string(),
+            Value::Array(
+                log.topics()
+                    .iter()
+                    .map(|t| Value::FixBytes(*t, 32))
+                    .collect(),
+            ),
+        );
+        fields.insert("data".to_string(), Value::Bytes(log.data().data.to_vec()));
+
+        Value::NamedTuple("Log".to_string(), fields)
+    }
+}
+
 impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
     type Error = anyhow::Error;
 
@@ -249,7 +268,8 @@ impl Value {
             Value::Contract(c, _) => Type::Contract(c.clone()),
             Value::Null => Type::Null,
             Value::Func(_) => Type::Function,
-            Value::TypeObject(type_) => type_.clone(),
+            Value::TypeObject(type_ @ Type::Type(_)) => type_.clone(),
+            Value::TypeObject(type_) => Type::Type(Box::new(type_.clone())),
             Value::Transaction(_) => Type::Transaction,
             Value::TransactionReceipt(_) => Type::TransactionReceipt,
         }

@@ -4,7 +4,7 @@ use alloy::{
     dyn_abi::DynSolType,
     json_abi::JsonAbi,
     primitives::{Address, B256, I256, U160, U256},
-    rpc::types::TransactionReceipt,
+    rpc::types::{Log, TransactionReceipt},
 };
 use anyhow::{bail, Result};
 use itertools::Itertools;
@@ -41,6 +41,7 @@ pub struct Receipt {
     status: bool,
     gas_used: u128,
     effective_gas_price: u128,
+    logs: Vec<Log>,
 }
 
 impl Receipt {
@@ -52,25 +53,29 @@ impl Receipt {
             "status" => Value::Bool(self.status),
             "gas_used" => Value::Uint(U256::from(self.gas_used), 256),
             "effective_gas_price" => Value::Uint(U256::from(self.effective_gas_price), 256),
+            "logs" => Value::Array(self.logs.iter().map(|log| log.into()).collect()),
             _ => bail!("receipt has no field {}", field),
         };
         Ok(result)
     }
 
     pub fn keys() -> Vec<String> {
-        vec![
-            "tx_hash".to_string(),
-            "block_hash".to_string(),
-            "block_number".to_string(),
-            "status".to_string(),
-            "gas_used".to_string(),
-            "effective_gas_price".to_string(),
-        ]
+        let keys = [
+            "tx_hash",
+            "block_hash",
+            "block_number",
+            "status",
+            "gas_used",
+            "effective_gas_price",
+            "logs",
+        ];
+        keys.map(|s| s.to_string()).to_vec()
     }
 }
 
 impl From<TransactionReceipt> for Receipt {
     fn from(receipt: TransactionReceipt) -> Self {
+        let logs = receipt.inner.logs().to_vec();
         Receipt {
             tx_hash: receipt.transaction_hash,
             block_hash: receipt.block_hash.unwrap_or_default(),
@@ -78,6 +83,7 @@ impl From<TransactionReceipt> for Receipt {
             status: receipt.status(),
             gas_used: receipt.gas_used,
             effective_gas_price: receipt.effective_gas_price,
+            logs,
         }
     }
 }
@@ -114,6 +120,7 @@ pub enum Type {
     Block,
     Console,
     Abi,
+    Type(Box<Type>),
 }
 
 impl Display for Type {
@@ -139,6 +146,7 @@ impl Display for Type {
             }
             Type::Contract(ContractInfo(name, _)) => write!(f, "{}", name),
             Type::Function => write!(f, "function"),
+
             Type::Transaction => write!(f, "transaction"),
             Type::TransactionReceipt => write!(f, "transactionReceipt"),
 
@@ -146,6 +154,7 @@ impl Display for Type {
             Type::Block => write!(f, "block"),
             Type::Console => write!(f, "console"),
             Type::Abi => write!(f, "abi"),
+            Type::Type(t) => write!(f, "type({})", t),
         }
     }
 }
@@ -244,6 +253,10 @@ impl TryFrom<Type> for DynSolType {
 }
 
 impl Type {
+    pub fn is_int(&self) -> bool {
+        matches!(self, Type::Int(_) | Type::Uint(_))
+    }
+
     pub fn builtins() -> Vec<String> {
         vec![
             "address".to_string(),
@@ -324,13 +337,7 @@ impl Type {
             Type::Contract(ContractInfo(_, abi)) => {
                 abi.functions.keys().map(|s| s.to_string()).collect()
             }
-            Type::Console => vec!["log".to_string()],
             Type::NamedTuple(_, fields) => fields.keys().map(|s| s.to_string()).collect(),
-            Type::Repl => Directive::all()
-                .into_iter()
-                .map(|s| s.to_string())
-                .collect(),
-            Type::Block => BlockFunction::all(),
             Type::Uint(_) | Type::Int(_) => {
                 vec!["format".to_string()]
             }
@@ -338,11 +345,23 @@ impl Type {
             Type::TransactionReceipt => Receipt::keys(),
             Type::Array(_) => vec!["concat".to_string()],
             Type::String => vec!["concat".to_string()],
-            Type::Abi => vec![
-                "encode".to_string(),
-                "decode".to_string(),
-                "encodePacked".to_string(),
-            ],
+
+            Type::Type(t) => match *t.clone() {
+                Type::Contract(_) => vec!["decode".to_string()],
+                Type::Abi => vec![
+                    "encode".to_string(),
+                    "decode".to_string(),
+                    "encodePacked".to_string(),
+                ],
+                Type::Console => vec!["log".to_string()],
+                Type::Block => BlockFunction::all(),
+                Type::Repl => Directive::all()
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                Type::Uint(_) | Type::Int(_) => vec!["max".to_string(), "min".to_string()],
+                _ => vec![],
+            },
             _ => vec![],
         }
     }

@@ -60,7 +60,12 @@ fn get_function_completion(
 
     let names = env
         .get_var(receiver)
-        .map_or(vec![], |value| value.get_type().functions());
+        .map(|value| value.get_type())
+        .or(env
+            .get_type(receiver)
+            .cloned()
+            .map(|t| Type::Type(Box::new(t))))
+        .map_or(vec![], |t| t.functions());
 
     let completions = names
         .iter()

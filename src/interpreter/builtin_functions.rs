@@ -325,12 +325,8 @@ impl BuiltinFunction {
                 Self::Map(values.clone(), Type::Array(Box::new(arr_type)))
             }
 
-            (Value::TypeObject(t @ Type::Int(_)) | Value::TypeObject(t @ Type::Uint(_)), "max") => {
-                Self::Max(t.clone())
-            }
-            (Value::TypeObject(t @ Type::Int(_)) | Value::TypeObject(t @ Type::Uint(_)), "min") => {
-                Self::Min(t.clone())
-            }
+            (Value::TypeObject(Type::Type(t)), "max") if t.is_int() => Self::Max(*t.clone()),
+            (Value::TypeObject(Type::Type(t)), "min") if t.is_int() => Self::Min(*t.clone()),
 
             (Value::Transaction(tx), "getReceipt") => Self::GetReceipt(*tx),
 
