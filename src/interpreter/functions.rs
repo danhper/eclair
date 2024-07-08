@@ -209,7 +209,7 @@ impl Function {
                 }
                 evaluate_statement(env, Box::new(func.body.clone()))
                     .await
-                    .map(|v| v.unwrap_or(Value::Null))
+                    .map(|v| v.value().cloned().unwrap_or(Value::Null))
             }
         }
     }

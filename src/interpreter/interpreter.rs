@@ -20,6 +20,26 @@ use super::{env::Env, parsing, value::Value};
 
 pub const SETUP_FUNCTION_NAME: &str = "setUp";
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum StatementResult {
+    Empty,
+    Value(Value),
+    Continue,
+    Break,
+    Return(Value),
+}
+
+impl StatementResult {
+    pub fn value(&self) -> Option<&Value> {
+        match self {
+            StatementResult::Value(v) | StatementResult::Return(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+unsafe impl std::marker::Send for StatementResult {}
+
 pub fn load_builtins(env: &mut Env) {
     env.set_var("repl", Value::TypeObject(Type::Repl));
     env.set_var("console", Value::TypeObject(Type::Console));
@@ -71,7 +91,9 @@ pub async fn evaluate_code(env: &mut Env, code: &str) -> Result<Option<Value>> {
             if env.is_debug() {
                 println!("{:#?}", stmts);
             }
-            evaluate_statements(env, &stmts).await
+            evaluate_statements(env, &stmts)
+                .await
+                .map(|v| v.value().cloned())
         }
         ParsedCode::ContractDefinition(def) => {
             if env.is_debug() {
@@ -116,26 +138,28 @@ pub async fn evaluate_contract_part(
     Ok(())
 }
 
-pub async fn evaluate_statements(env: &mut Env, stmts: &[Statement]) -> Result<Option<Value>> {
-    let mut result = Ok(None);
+pub async fn evaluate_statements(env: &mut Env, stmts: &[Statement]) -> Result<StatementResult> {
+    let mut result = StatementResult::Empty;
     for stmt in stmts.iter() {
-        result = evaluate_statement(env, Box::new(stmt.clone())).await;
-        if let Statement::Return(_, _) = stmt {
-            break;
+        match evaluate_statement(env, Box::new(stmt.clone())).await? {
+            r @ StatementResult::Return(_) => return Ok(r),
+            r @ StatementResult::Continue => return Ok(r),
+            r @ StatementResult::Break => return Ok(r),
+            r => result = r,
         }
     }
-    result
+    Ok(result)
 }
 
 pub fn evaluate_statement(
     env: &mut Env,
     stmt: Box<Statement>,
-) -> BoxFuture<'_, Result<Option<Value>>> {
+) -> BoxFuture<'_, Result<StatementResult>> {
     async move {
         match stmt.as_ref() {
             Statement::Expression(_, expr) => evaluate_expression(env, Box::new(expr.clone()))
                 .await
-                .map(Some),
+                .map(StatementResult::Value),
 
             Statement::If(_, cond, then_stmt, else_stmt) => {
                 let cond = evaluate_expression(env, Box::new(cond.clone())).await?;
@@ -145,7 +169,7 @@ pub fn evaluate_statement(
                         if let Some(else_stmt) = else_stmt {
                             evaluate_statement(env, else_stmt.clone()).await
                         } else {
-                            Ok(None)
+                            Ok(StatementResult::Empty)
                         }
                     }
                     v => bail!("invalid type for if condition, expected bool, got {}", v),
@@ -158,8 +182,12 @@ pub fn evaluate_statement(
                 } else {
                     Value::Null
                 };
-                Ok(Some(result))
+                Ok(StatementResult::Return(result))
             }
+
+            Statement::Continue(_) => Ok(StatementResult::Continue),
+
+            Statement::Break(_) => Ok(StatementResult::Break),
 
             Statement::For(_, init, cond, update, body) => {
                 if let Some(init) = init {
@@ -174,7 +202,11 @@ pub fn evaluate_statement(
                     match cond {
                         Value::Bool(true) => {
                             if let Some(body) = body {
-                                evaluate_statement(env, body.clone()).await?;
+                                match evaluate_statement(env, body.clone()).await? {
+                                    StatementResult::Break => break,
+                                    r @ StatementResult::Return(_) => return Ok(r),
+                                    _ => (),
+                                }
                             }
                             if let Some(update) = update {
                                 evaluate_expression(env, update.clone()).await?;
@@ -185,7 +217,7 @@ pub fn evaluate_statement(
                     }
                 }
 
-                Ok(None)
+                Ok(StatementResult::Empty)
             }
 
             Statement::Block { statements, .. } => evaluate_statements(env, statements).await,
@@ -199,7 +231,7 @@ pub fn evaluate_statement(
                 if let Some(e) = expr {
                     let result = evaluate_expression(env, Box::new(e.clone())).await?;
                     env.set_var(&id, result.clone());
-                    Ok(None)
+                    Ok(StatementResult::Empty)
                 } else {
                     bail!("declarations need rhs")
                 }

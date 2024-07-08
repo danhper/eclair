@@ -28,3 +28,4 @@ coins-ledger = "0.11.1"
 async-trait = "0.1.80"
 futures-util = "0.3.30"
 semver = "1.0.23"
+shellexpand = { version = "3.1.0", features = ["path"] }
