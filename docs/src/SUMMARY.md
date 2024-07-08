@@ -5,6 +5,6 @@
 # Getting Started
 
 - [Installation](./installation.md)
-- [Configuration](./configuration.md.md)
+- [Configuration](./configuration.md)
 
 # Reference
