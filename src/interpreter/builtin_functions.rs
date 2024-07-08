@@ -240,6 +240,14 @@ async fn wait_for_receipt(tx: B256, env: &mut Env, args: &[Value]) -> Result<Val
     Ok(Value::TransactionReceipt(receipt.into()))
 }
 
+fn keccak256(args: &[Value]) -> Result<Value> {
+    let data = match args.first() {
+        Some(Value::Bytes(data)) => data,
+        _ => bail!("keccak256 function expects bytes as an argument"),
+    };
+    Ok(Value::FixBytes(alloy::primitives::keccak256(data), 32))
+}
+
 #[derive(Debug, Clone)]
 pub enum BuiltinFunction {
     Balance(Address),
@@ -261,6 +269,7 @@ pub enum BuiltinFunction {
     AbiEncode,
     AbiEncodePacked,
     AbiDecode,
+    Keccak256,
 }
 
 impl fmt::Display for BuiltinFunction {
@@ -288,6 +297,7 @@ impl fmt::Display for BuiltinFunction {
             Self::AbiEncode => write!(f, "abi.encode"),
             Self::AbiEncodePacked => write!(f, "abi.encodePacked"),
             Self::AbiDecode => write!(f, "abi.decode"),
+            Self::Keccak256 => write!(f, "keccak256"),
         }
     }
 }
@@ -297,12 +307,14 @@ impl BuiltinFunction {
         match name {
             "format" => Ok(Self::FormatFunc),
             "type" => Ok(Self::GetType),
+            "keccak256" => Ok(Self::Keccak256),
             _ => bail!("no function {}", name),
         }
     }
 
     pub fn functions() -> Vec<String> {
-        vec!["format".to_string(), "type".to_string()]
+        let functions = ["format", "type", "keccak256"];
+        functions.iter().map(|s| s.to_string()).collect()
     }
 
     pub fn with_receiver(receiver: &Value, name: &str) -> Result<Self> {
@@ -385,6 +397,8 @@ impl BuiltinFunction {
 
             Self::Max(t) => t.max(),
             Self::Min(t) => t.min(),
+
+            Self::Keccak256 => keccak256(args),
 
             Self::AbiEncode => abi_encode(args),
             Self::AbiEncodePacked => abi_encode_packed(args),
