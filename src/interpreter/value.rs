@@ -4,9 +4,9 @@ use alloy::{
     primitives::{Address, B256, I256, U256},
 };
 use anyhow::{bail, Result};
+use indexmap::IndexMap;
 use itertools::Itertools;
 use std::{
-    collections::BTreeMap,
     fmt::{self, Display, Formatter},
     ops::{Add, Div, Mul, Rem, Sub},
 };
@@ -28,7 +28,7 @@ pub enum Value {
     Addr(Address),
     Contract(ContractInfo, Address),
     Tuple(Vec<Value>),
-    NamedTuple(String, BTreeMap<String, Value>),
+    NamedTuple(String, IndexMap<String, Value>),
     Array(Vec<Value>),
     TypeObject(Type),
     Transaction(B256),
@@ -40,7 +40,7 @@ fn _values_to_string(values: &[Value]) -> String {
     values.iter().map(|v| format!("{}", v)).join(", ")
 }
 
-fn _format_struct_fields(fields: &BTreeMap<String, Value>) -> String {
+fn _format_struct_fields(fields: &IndexMap<String, Value>) -> String {
     fields
         .iter()
         .map(|(k, v)| format!("{}: {}", k, v))
@@ -125,7 +125,7 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
 
 impl From<alloy::rpc::types::Log> for Value {
     fn from(log: alloy::rpc::types::Log) -> Self {
-        let mut fields = BTreeMap::new();
+        let mut fields = IndexMap::new();
         fields.insert("address".to_string(), Value::Addr(log.address()));
         fields.insert(
             "topics".to_string(),
@@ -166,7 +166,7 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
                     .zip(tuple)
                     .map(|(k, dv)| Value::try_from(dv).map(|v| (k.clone(), v)))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(Value::NamedTuple(name, BTreeMap::from_iter(vs)))
+                Ok(Value::NamedTuple(name, IndexMap::from_iter(vs)))
             }
             v => Err(anyhow::anyhow!("{:?} not supported", v)),
         }

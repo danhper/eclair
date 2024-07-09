@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 use std::str::FromStr;
 
@@ -7,6 +6,7 @@ use alloy::hex::FromHex;
 use alloy::primitives::{Address, B256, I256, U256};
 use anyhow::{anyhow, bail, Result};
 use futures::future::{BoxFuture, FutureExt};
+use indexmap::IndexMap;
 use solang_parser::pt::{ContractPart, Expression, Statement};
 
 use crate::loaders::types::Project;
@@ -519,7 +519,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 } else {
                     bail!("expected variable, found {:?}", name_expr);
                 };
-                let mut fields = BTreeMap::new();
+                let mut fields = IndexMap::new();
                 for arg in args.iter() {
                     let value = evaluate_expression(env, Box::new(arg.expr.clone())).await?;
                     fields.insert(arg.name.name.clone(), value);

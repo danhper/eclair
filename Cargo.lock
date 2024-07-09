@@ -2405,6 +2405,7 @@ dependencies = [
  "futures",
  "futures-util",
  "glob",
+ "indexmap",
  "itertools 0.13.0",
  "rpassword",
  "rustyline 14.0.0",

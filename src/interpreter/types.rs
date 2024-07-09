@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::fmt::Display;
 
 use alloy::{
     dyn_abi::DynSolType,
@@ -7,6 +7,7 @@ use alloy::{
     rpc::types::{Log, TransactionReceipt},
 };
 use anyhow::{bail, Result};
+use indexmap::IndexMap;
 use itertools::Itertools;
 
 use super::{
@@ -110,7 +111,7 @@ pub enum Type {
     String,
     Array(Box<Type>),
     FixedArray(Box<Type>, usize),
-    NamedTuple(String, BTreeMap<String, Type>),
+    NamedTuple(String, IndexMap<String, Type>),
     Tuple(Vec<Type>),
     Contract(ContractInfo),
     Transaction,
@@ -311,7 +312,7 @@ impl Type {
                 Ok(Value::FixBytes(B256::from_slice(&new_vector), *size))
             }
             (Type::NamedTuple(name, types_), Value::Tuple(values)) => {
-                let mut new_values = BTreeMap::new();
+                let mut new_values = IndexMap::new();
                 for (key, value) in types_.iter().zip(values.iter()) {
                     new_values.insert(key.0.clone(), key.1.cast(value)?);
                 }
