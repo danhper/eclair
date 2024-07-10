@@ -123,7 +123,9 @@ impl Directive {
             Directive::FetchAbi => match args {
                 [Value::Str(name), Value::Addr(address)] => {
                     let chain_id = env.get_chain_id().await?;
-                    let abi = loaders::etherscan::load_abi(chain_id, &address.to_string()).await?;
+                    let etherscan_config = env.config.get_etherscan_config(chain_id)?;
+                    let abi = loaders::etherscan::load_abi(etherscan_config, &address.to_string())
+                        .await?;
                     let contract_info = ContractInfo(name.to_string(), abi);
                     env.set_type(name, Type::Contract(contract_info.clone()));
                     return Ok(Value::Contract(contract_info, *address));

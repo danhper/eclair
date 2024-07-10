@@ -1,6 +1,7 @@
 mod assignment;
 mod block_functions;
 mod builtin_functions;
+mod config;
 mod directive;
 mod env;
 mod functions;
@@ -10,6 +11,7 @@ mod parsing;
 mod types;
 mod value;
 
+pub use config::Config;
 pub use directive::Directive;
 pub use env::Env;
 pub use interpreter::*;

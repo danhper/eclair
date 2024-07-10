@@ -2,12 +2,28 @@ use alloy::{json_abi::JsonAbi, transports::http::reqwest};
 use anyhow::{anyhow, bail, Result};
 use serde_json::Value;
 
-pub async fn load_abi(chain_id: u64, address: &str) -> Result<JsonAbi> {
-    let base_url = get_base_url(chain_id)?;
-    let api_key = api_key_from_env(chain_id)?;
+#[derive(Debug, Clone)]
+pub struct EtherscanConfig {
+    pub api_key: String,
+    pub base_url: String,
+}
+
+impl EtherscanConfig {
+    pub fn new(api_key: String, base_url: String) -> Self {
+        Self { api_key, base_url }
+    }
+
+    pub fn default_for_chain(chain_id: u64) -> Result<Self> {
+        let base_url = get_base_url(chain_id)?;
+        let api_key = api_key_from_env(chain_id)?;
+        Ok(Self::new(api_key, base_url.to_string()))
+    }
+}
+
+pub async fn load_abi(config: EtherscanConfig, address: &str) -> Result<JsonAbi> {
     let url = format!(
         "{}?module=contract&action=getabi&address={}&apikey={}",
-        base_url, address, api_key
+        config.base_url, address, config.api_key
     );
     let value = reqwest::get(&url).await?.json::<Value>().await?;
     let abi_str = value["result"]

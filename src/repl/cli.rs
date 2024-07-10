@@ -6,13 +6,8 @@ use clap::Parser;
 #[command(version, about, long_about = None)]
 pub struct Cli {
     /// Set the RPC URL to use
-    #[arg(
-        long,
-        value_name = "URL",
-        default_value = "http://localhost:8545",
-        env = "ETH_RPC_URL"
-    )]
-    pub rpc_url: String,
+    #[arg(long, value_name = "URL", env = "ETH_RPC_URL")]
+    pub rpc_url: Option<String>,
 
     /// Turn debugging information on
     #[arg(long, env = "DEBUG")]

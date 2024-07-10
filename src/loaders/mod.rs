@@ -7,6 +7,7 @@ mod loader;
 pub mod types;
 
 use brownie::BrownieProjectLoader;
+pub use etherscan::EtherscanConfig;
 use foundry::FoundryProjectLoader;
 use hardhat::HardhatProjectLoader;
 

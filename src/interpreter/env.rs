@@ -3,6 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use url::Url;
 
 use alloy::{
     network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet, TxSigner},
@@ -11,27 +12,27 @@ use alloy::{
     signers::{ledger::HDPath, local::PrivateKeySigner, Signature},
     transports::http::{Client, Http},
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use coins_ledger::{transports::LedgerAsync, Ledger};
 
-use crate::vendor::ledger_signer::LedgerSigner;
+use crate::{interpreter::Config, vendor::ledger_signer::LedgerSigner};
 
 use super::{types::Type, Value};
 
 pub struct Env {
     variables: Vec<HashMap<String, Value>>,
     types: HashMap<String, Type>,
-    debug: bool,
     provider: Arc<dyn Provider<Http<Client>, Ethereum>>,
     wallet: Option<EthereumWallet>,
     ledger: Option<Arc<Mutex<Ledger>>>,
+    pub config: Config,
 }
 
 unsafe impl std::marker::Send for Env {}
 
 impl Env {
-    pub fn new(provider_url: &str, debug: bool) -> Self {
-        let rpc_url = provider_url.parse().unwrap();
+    pub fn new(config: Config) -> Self {
+        let rpc_url = config.rpc_url.parse().unwrap();
         let provider = ProviderBuilder::new().on_http(rpc_url);
         Env {
             variables: vec![HashMap::new()],
@@ -39,7 +40,7 @@ impl Env {
             provider: Arc::new(provider),
             wallet: None,
             ledger: None,
-            debug,
+            config,
         }
     }
 
@@ -52,11 +53,11 @@ impl Env {
     }
 
     pub fn set_debug(&mut self, debug: bool) {
-        self.debug = debug;
+        self.config.debug = debug;
     }
 
     pub fn is_debug(&self) -> bool {
-        self.debug
+        self.config.debug
     }
 
     pub fn get_provider(&self) -> Arc<dyn Provider<Http<Client>, Ethereum>> {
@@ -182,7 +183,16 @@ impl Env {
     }
 
     fn set_provider(&mut self, wallet: Option<EthereumWallet>, url: &str) -> Result<()> {
-        let rpc_url = url.parse()?;
+        let rpc_url = match url.parse() {
+            Ok(u) => u,
+            Err(_) => self
+                .config
+                .rpc_endpoints
+                .get(url)
+                .ok_or(anyhow!("invalid URL and no config for {}", url))
+                .and_then(|u| u.parse::<Url>().map_err(Into::into))?,
+        };
+        self.config.rpc_url = rpc_url.to_string();
 
         let builder = ProviderBuilder::new().with_recommended_fillers();
         let provider = if let Some(wallet) = wallet {
