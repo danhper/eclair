@@ -253,6 +253,36 @@ impl TryFrom<Type> for DynSolType {
 }
 
 impl Type {
+    pub fn default_value(&self) -> Result<Value> {
+        let value = match self {
+            Type::Null => Value::Null,
+            Type::Address => Value::Addr(Address::ZERO),
+            Type::Bool => Value::Bool(false),
+            Type::Int(size) => Value::Int(I256::ZERO, *size),
+            Type::Uint(size) => Value::Uint(U256::ZERO, *size),
+            Type::FixBytes(size) => Value::FixBytes(B256::default(), *size),
+            Type::Bytes => Value::Bytes(vec![]),
+            Type::String => Value::Str("".to_string()),
+            Type::Array(_) => Value::Array(vec![]),
+            Type::FixedArray(t, size) => Value::Array(vec![t.default_value()?; *size]),
+            Type::NamedTuple(_, fields) => Value::NamedTuple(
+                "".to_string(),
+                fields
+                    .iter()
+                    .map(|(k, v)| v.default_value().map(|v_| (k.clone(), v_)))
+                    .collect::<Result<IndexMap<_, _>>>()?,
+            ),
+            Type::Tuple(types) => Value::Array(
+                types
+                    .iter()
+                    .map(|t| t.default_value())
+                    .collect::<Result<Vec<_>>>()?,
+            ),
+            _ => bail!("cannot get default value for type {}", self),
+        };
+        Ok(value)
+    }
+
     pub fn is_int(&self) -> bool {
         matches!(self, Type::Int(_) | Type::Uint(_))
     }

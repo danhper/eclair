@@ -1,4 +1,5 @@
 use futures_util::lock::Mutex;
+use solang_parser::pt::{Expression, Identifier};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -12,12 +13,12 @@ use alloy::{
     signers::{ledger::HDPath, local::PrivateKeySigner, Signature},
     transports::http::{Client, Http},
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use coins_ledger::{transports::LedgerAsync, Ledger};
 
 use crate::{interpreter::Config, vendor::ledger_signer::LedgerSigner};
 
-use super::{types::Type, Value};
+use super::{evaluate_expression, types::Type, Value};
 
 pub struct Env {
     variables: Vec<HashMap<String, Value>>,
@@ -171,6 +172,26 @@ impl Env {
     pub fn set_var(&mut self, name: &str, value: Value) {
         let scope = self.variables.last_mut().unwrap();
         scope.insert(name.to_string(), value);
+    }
+
+    pub async fn init_variable(
+        &mut self,
+        name: &Option<Identifier>,
+        type_: &Expression,
+        initializer: &Option<Expression>,
+    ) -> Result<()> {
+        let id = name.clone().ok_or(anyhow!("invalid declaration"))?.name;
+        let type_ = match evaluate_expression(self, Box::new(type_.clone())).await? {
+            Value::TypeObject(t) => t,
+            v => bail!("invalid type for variable, expected type, got {}", v),
+        };
+        let value = if let Some(e) = initializer {
+            evaluate_expression(self, Box::new(e.clone())).await?
+        } else {
+            type_.default_value()?
+        };
+        self.set_var(&id, value);
+        Ok(())
     }
 
     fn set_wallet<S>(&mut self, signer: S) -> Result<()>

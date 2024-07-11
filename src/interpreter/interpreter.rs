@@ -137,13 +137,8 @@ pub async fn evaluate_contract_part(
             env.set_var(&func.name, Value::Func(Function::UserDefined(func.clone())));
         }
         ContractPart::VariableDefinition(def) => {
-            let id = def.name.clone().ok_or(anyhow!("invalid declaration"))?.name;
-            if let Some(expr) = &def.initializer {
-                let result = evaluate_expression(env, Box::new(expr.clone())).await?;
-                env.set_var(&id, result.clone());
-            } else {
-                bail!("declarations need rhs")
-            }
+            env.init_variable(&def.name, &def.ty, &def.initializer)
+                .await?;
         }
         v => bail!("{} not supported", v),
     }
@@ -246,18 +241,8 @@ pub fn evaluate_statement(
             }
 
             Statement::VariableDefinition(_, var, expr) => {
-                let id = var
-                    .name
-                    .clone()
-                    .ok_or(anyhow!("invalid declaration {}", stmt))?
-                    .name;
-                if let Some(e) = expr {
-                    let result = evaluate_expression(env, Box::new(e.clone())).await?;
-                    env.set_var(&id, result.clone());
-                    Ok(StatementResult::Empty)
-                } else {
-                    bail!("declarations need rhs")
-                }
+                env.init_variable(&var.name, &var.ty, expr).await?;
+                Ok(StatementResult::Empty)
             }
             stmt => bail!("statement {:?} not supported", stmt),
         }
