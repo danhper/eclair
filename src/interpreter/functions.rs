@@ -14,7 +14,8 @@ use anyhow::{anyhow, bail, Result};
 use solang_parser::pt::{Expression, Identifier, Parameter, Statement};
 
 use super::{
-    builtin_functions::BuiltinFunction, evaluate_statement, types::ContractInfo, Env, Type, Value,
+    builtin_functions::BuiltinFunction, evaluate_statement, types::ContractInfo, Env,
+    StatementResult, Type, Value,
 };
 
 #[derive(Debug, Clone)]
@@ -101,8 +102,83 @@ impl TryFrom<&str> for ContractCallMode {
 }
 
 #[derive(Debug, Clone)]
+pub struct ContractCall {
+    info: ContractInfo,
+    addr: Address,
+    func_name: String,
+    mode: ContractCallMode,
+    options: CallOptions,
+}
+
+impl ContractCall {
+    pub fn new(info: ContractInfo, addr: Address, func_name: String) -> Self {
+        ContractCall {
+            info,
+            addr,
+            func_name,
+            mode: ContractCallMode::Default,
+            options: CallOptions::default(),
+        }
+    }
+
+    pub fn with_options(self, options: CallOptions) -> Self {
+        ContractCall { options, ..self }
+    }
+
+    pub fn with_mode(self, mode: ContractCallMode) -> Self {
+        ContractCall { mode, ..self }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CallOptions {
+    value: Option<Box<Value>>,
+}
+
+impl Display for CallOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(v) = &self.value {
+            write!(f, "value: {}", v)
+        } else {
+            write!(f, "")
+        }
+    }
+}
+
+impl TryFrom<Value> for CallOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Value) -> std::result::Result<Self, Self::Error> {
+        match value {
+            Value::NamedTuple(_, m) => {
+                let mut opts = CallOptions::default();
+                for (k, v) in m {
+                    match k.as_str() {
+                        "value" => opts.value = Some(Box::new(v)),
+                        _ => bail!("unexpected key {}", k),
+                    }
+                }
+                Ok(opts)
+            }
+            _ => bail!("expected indexed map but got {}", value),
+        }
+    }
+}
+
+impl TryFrom<StatementResult> for CallOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(value: StatementResult) -> std::result::Result<Self, Self::Error> {
+        match value {
+            StatementResult::Value(v) => v.try_into(),
+            _ => bail!("expected indexed map but got {}", value),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Function {
-    ContractCall(ContractInfo, Address, String, ContractCallMode),
+    ContractCall(ContractCall),
     Builtin(BuiltinFunction),
     UserDefined(UserDefinedFunction),
     FieldAccess(Box<Value>, String),
@@ -111,7 +187,13 @@ pub enum Function {
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Function::ContractCall(ContractInfo(name, abi), addr, func_name, mode) => {
+            Function::ContractCall(ContractCall {
+                info: ContractInfo(name, abi),
+                addr,
+                func_name,
+                mode,
+                options,
+            }) => {
                 let arg_types = abi
                     .function(func_name)
                     .map(|f| {
@@ -126,15 +208,12 @@ impl Display for Function {
                 } else {
                     ""
                 };
-                write!(
-                    f,
-                    "{}({}).{}({}){}",
-                    name,
-                    addr,
-                    func_name,
-                    arg_types.join(","),
-                    suffix
-                )
+                write!(f, "{}({}).{}", name, addr, func_name)?;
+                let formatted_options = format!("{}", options);
+                if !formatted_options.is_empty() {
+                    write!(f, "{{{}}}", formatted_options)?;
+                }
+                write!(f, "({}){}", arg_types.join(","), suffix)
             }
             Function::FieldAccess(v, n) => write!(f, "{}.{}", v, n),
             Function::Builtin(m) => write!(f, "{}", m),
@@ -152,6 +231,13 @@ impl Display for Function {
 }
 
 impl Function {
+    pub fn with_opts(self, opts: CallOptions) -> Self {
+        match self {
+            Function::ContractCall(call) => Function::ContractCall(call.with_options(opts)),
+            v => v,
+        }
+    }
+
     pub fn with_receiver(receiver: &Value, name: &str) -> Result<Self> {
         let func = match receiver {
             Value::Contract(c, addr) => c.create_call(name, *addr)?,
@@ -159,13 +245,8 @@ impl Function {
                 Function::FieldAccess(Box::new(v.clone()), name.to_string())
             }
 
-            Value::Func(Function::ContractCall(contract, addr, method, _mode)) => {
-                Function::ContractCall(
-                    contract.clone(),
-                    *addr,
-                    method.to_string(),
-                    ContractCallMode::try_from(name)?,
-                )
+            Value::Func(Function::ContractCall(call)) => {
+                Function::ContractCall(call.clone().with_mode(ContractCallMode::try_from(name)?))
             }
 
             v => {
@@ -178,9 +259,8 @@ impl Function {
 
     pub async fn execute_in_current_scope(&self, args: &[Value], env: &mut Env) -> Result<Value> {
         match self {
-            Function::ContractCall(contract_info, addr, func_name, mode) => {
-                self._execute_contract_interaction(contract_info, addr, func_name, mode, args, env)
-                    .await
+            Function::ContractCall(call) => {
+                self._execute_contract_interaction(call, args, env).await
             }
             Function::FieldAccess(f, v) => f.get_field(v),
             Function::Builtin(m) => m.execute(args, env).await,
@@ -216,7 +296,7 @@ impl Function {
 
     pub fn is_property(&self) -> bool {
         match self {
-            Function::ContractCall(_, _, _, _) => false,
+            Function::ContractCall(_) => false,
             Function::FieldAccess(_, _) => true,
             Function::Builtin(m) => m.is_property(),
             Function::UserDefined(_) => false,
@@ -232,21 +312,18 @@ impl Function {
 
     async fn _execute_contract_interaction(
         &self,
-        contract_info: &ContractInfo,
-        addr: &Address,
-        func_name: &str,
-        mode: &ContractCallMode,
+        call: &ContractCall,
         args: &[Value],
         env: &Env,
     ) -> Result<Value> {
-        let ContractInfo(name, abi) = &contract_info;
-        let funcs = abi.function(func_name).ok_or(anyhow!(
+        let ContractInfo(name, abi) = &call.info;
+        let funcs = abi.function(&call.func_name).ok_or(anyhow!(
             "function {} not found in {}",
-            func_name,
+            call.func_name,
             name
         ))?;
         let contract = ContractInstance::new(
-            *addr,
+            call.addr,
             env.get_provider().root().clone(),
             Interface::new(abi.clone()),
         );
@@ -266,12 +343,14 @@ impl Function {
                     let func = contract.function_from_selector(&func_abi.selector(), &tokens)?;
                     let is_view = func_abi.state_mutability == StateMutability::Pure
                         || func_abi.state_mutability == StateMutability::View;
-                    match mode {
+                    match call.mode {
                         ContractCallMode::Default => {
                             if is_view {
                                 call_result = self._execute_contract_call(func).await;
                             } else {
-                                call_result = self._execute_contract_send(addr, func, env).await
+                                call_result = self
+                                    ._execute_contract_send(&call.addr, func, &call.options, env)
+                                    .await
                             }
                         }
                         ContractCallMode::Encode => {
@@ -282,7 +361,9 @@ impl Function {
                             call_result = self._execute_contract_call(func).await
                         }
                         ContractCallMode::Send => {
-                            call_result = self._execute_contract_send(addr, func, env).await
+                            call_result = self
+                                ._execute_contract_send(&call.addr, func, &call.options, env)
+                                .await
                         }
                     }
                     break;
@@ -297,6 +378,7 @@ impl Function {
         &self,
         addr: &Address,
         func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+        opts: &CallOptions,
         env: &Env,
     ) -> Result<Value>
     where
@@ -309,10 +391,15 @@ impl Function {
         let from_ = env
             .get_default_sender()
             .ok_or(anyhow!("no wallet connected"))?;
-        let tx_req = TransactionRequest::default()
+        let mut tx_req = TransactionRequest::default()
             .with_from(from_)
             .with_to(*addr)
             .input(input);
+        if let Some(value) = opts.value.as_ref() {
+            let value = value.as_u256()?;
+            tx_req = tx_req.with_value(value);
+        }
+
         let provider = env.get_provider();
         let tx = provider.send_transaction(tx_req).await?;
         Ok(Value::Transaction(*tx.tx_hash()))

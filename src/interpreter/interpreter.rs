@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use alloy::hex::FromHex;
 use alloy::primitives::{Address, B256, I256, U256};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Ok, Result};
 use futures::future::{BoxFuture, FutureExt};
 use indexmap::IndexMap;
 use solang_parser::pt::{ContractPart, Expression, Statement};
@@ -27,6 +27,18 @@ pub enum StatementResult {
     Continue,
     Break,
     Return(Value),
+}
+
+impl std::fmt::Display for StatementResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            StatementResult::Empty => write!(f, "Empty"),
+            StatementResult::Value(v) => write!(f, "Value({})", v),
+            StatementResult::Continue => write!(f, "Continue"),
+            StatementResult::Break => write!(f, "Break"),
+            StatementResult::Return(v) => write!(f, "Return({})", v),
+        }
+    }
 }
 
 impl StatementResult {
@@ -221,6 +233,17 @@ pub fn evaluate_statement(
             }
 
             Statement::Block { statements, .. } => evaluate_statements(env, statements).await,
+
+            Statement::Args(_, args) => {
+                let mut result = vec![];
+                for arg in args.iter() {
+                    let evaled = evaluate_expression(env, Box::new(arg.expr.clone())).await?;
+                    result.push((arg.name.to_string(), evaled));
+                }
+                let values = IndexMap::from_iter(result);
+                let named_tuple = Value::NamedTuple("Args".to_string(), values);
+                Ok(StatementResult::Value(named_tuple))
+            }
 
             Statement::VariableDefinition(_, var, expr) => {
                 let id = var
@@ -542,6 +565,14 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                         }
                     }
                     v => bail!("invalid type, expected function, got {}", v),
+                }
+            }
+
+            Expression::FunctionCallBlock(_, func_expr, stmt) => {
+                let res = evaluate_statement(env, stmt).await?;
+                match evaluate_expression(env, func_expr).await? {
+                    Value::Func(f) => Ok(Value::Func(f.with_opts(res.try_into()?))),
+                    _ => bail!("expected function"),
                 }
             }
 

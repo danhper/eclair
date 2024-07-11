@@ -322,6 +322,13 @@ impl Value {
         }
     }
 
+    pub fn as_u256(&self) -> Result<U256> {
+        match self {
+            Value::Uint(n, _) => Ok(n.to()),
+            _ => bail!("cannot convert {} to u256", self.get_type()),
+        }
+    }
+
     pub fn get_field(&self, field: &str) -> Result<Value> {
         match self {
             Value::NamedTuple(_, fields) => fields

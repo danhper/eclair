@@ -12,7 +12,7 @@ use itertools::Itertools;
 
 use super::{
     block_functions::BlockFunction,
-    functions::{ContractCallMode, Function},
+    functions::{ContractCall, Function},
     Directive, Value,
 };
 
@@ -25,12 +25,11 @@ impl ContractInfo {
             .1
             .function(name)
             .ok_or_else(|| anyhow::anyhow!("function {} not found in contract {}", name, self.0))?;
-        Ok(Function::ContractCall(
+        Ok(Function::ContractCall(ContractCall::new(
             self.clone(),
             addr,
             name.to_string(),
-            ContractCallMode::Default,
-        ))
+        )))
     }
 }
 
