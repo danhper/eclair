@@ -98,7 +98,7 @@ pub async fn evaluate_setup(env: &mut Env, code: &str) -> Result<()> {
 pub async fn evaluate_code(env: &mut Env, code: &str) -> Result<Option<Value>> {
     let parsed = parsing::parse_input(code)?;
 
-    match parsed {
+    let result = match parsed {
         ParsedCode::Statements(stmts) => {
             if env.is_debug() {
                 println!("{:#?}", stmts);
@@ -114,7 +114,13 @@ pub async fn evaluate_code(env: &mut Env, code: &str) -> Result<Option<Value>> {
             evaluate_contract_parts(env, &def.parts).await?;
             Ok(None)
         }
+    }?;
+
+    if let Some(value) = &result {
+        env.set_var("_", value.clone());
     }
+
+    Ok(result)
 }
 
 pub async fn evaluate_contract_parts(
