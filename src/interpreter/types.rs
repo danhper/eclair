@@ -9,6 +9,7 @@ use alloy::{
 use anyhow::{bail, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
+use solang_parser::pt as parser;
 
 use super::{
     block_functions::BlockFunction,
@@ -16,7 +17,33 @@ use super::{
     Directive, Value,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HashableIndexMap<K, V>(pub IndexMap<K, V>)
+where
+    K: Eq + std::hash::Hash,
+    V: Eq;
+
+impl<K, V> std::hash::Hash for HashableIndexMap<K, V>
+where
+    K: std::hash::Hash + Eq,
+    V: std::hash::Hash + Eq,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.iter().for_each(|v| v.hash(state));
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for HashableIndexMap<K, V>
+where
+    K: std::hash::Hash + Eq,
+    V: Eq,
+{
+    fn from_iter<I: IntoIterator<Item = (K, V)>>(iterable: I) -> Self {
+        Self(IndexMap::from_iter(iterable))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ContractInfo(pub String, pub JsonAbi);
 
 impl ContractInfo {
@@ -33,7 +60,7 @@ impl ContractInfo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Receipt {
     tx_hash: B256,
     block_hash: B256,
@@ -98,7 +125,7 @@ impl Display for Receipt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Null,
     Address,
@@ -110,8 +137,9 @@ pub enum Type {
     String,
     Array(Box<Type>),
     FixedArray(Box<Type>, usize),
-    NamedTuple(String, IndexMap<String, Type>),
+    NamedTuple(String, HashableIndexMap<String, Type>),
     Tuple(Vec<Type>),
+    Mapping(Box<Type>, Box<Type>),
     Contract(ContractInfo),
     Transaction,
     TransactionReceipt,
@@ -137,13 +165,14 @@ impl Display for Type {
             Type::Array(t) => write!(f, "{}[]", t),
             Type::FixedArray(t, s) => write!(f, "{}[{}]", t, s),
             Type::NamedTuple(name, t) => {
-                let items = t.iter().map(|(k, v)| format!("{}: {}", k, v)).join(", ");
+                let items = t.0.iter().map(|(k, v)| format!("{}: {}", k, v)).join(", ");
                 write!(f, "{} {{{}}}", name, items)
             }
             Type::Tuple(t) => {
                 let items = t.iter().map(|v| format!("{}", v)).join(", ");
                 write!(f, "({})", items)
             }
+            Type::Mapping(k, v) => write!(f, "mapping({} => {})", k, v),
             Type::Contract(ContractInfo(name, _)) => write!(f, "{}", name),
             Type::Function => write!(f, "function"),
 
@@ -197,23 +226,33 @@ impl From<DynSolType> for Type {
     }
 }
 
-impl TryFrom<solang_parser::pt::Type> for Type {
+impl TryFrom<parser::Type> for Type {
     type Error = anyhow::Error;
 
-    fn try_from(type_: solang_parser::pt::Type) -> std::result::Result<Self, Self::Error> {
+    fn try_from(type_: parser::Type) -> std::result::Result<Self, Self::Error> {
         match type_ {
-            solang_parser::pt::Type::Address => Ok(Type::Address),
-            solang_parser::pt::Type::Bool => Ok(Type::Bool),
-            solang_parser::pt::Type::Int(size) => Ok(Type::Int(size as usize)),
-            solang_parser::pt::Type::Uint(size) => Ok(Type::Uint(size as usize)),
-            solang_parser::pt::Type::Bytes(size) => Ok(Type::FixBytes(size as usize)),
-            solang_parser::pt::Type::DynamicBytes => Ok(Type::Bytes),
-            solang_parser::pt::Type::String => Ok(Type::String),
-            solang_parser::pt::Type::Function { .. } => Ok(Type::Function),
-            solang_parser::pt::Type::Rational => Ok(Type::Uint(256)),
-            solang_parser::pt::Type::AddressPayable => Ok(Type::Address),
-            solang_parser::pt::Type::Mapping { .. } => bail!("mapping type is not supported yet"),
-            solang_parser::pt::Type::Payable { .. } => bail!("payable type is not supported yet"),
+            parser::Type::Address => Ok(Type::Address),
+            parser::Type::Bool => Ok(Type::Bool),
+            parser::Type::Int(size) => Ok(Type::Int(size as usize)),
+            parser::Type::Uint(size) => Ok(Type::Uint(size as usize)),
+            parser::Type::Bytes(size) => Ok(Type::FixBytes(size as usize)),
+            parser::Type::DynamicBytes => Ok(Type::Bytes),
+            parser::Type::String => Ok(Type::String),
+            parser::Type::Function { .. } => Ok(Type::Function),
+            parser::Type::Rational => Ok(Type::Uint(256)),
+            parser::Type::AddressPayable => Ok(Type::Address),
+            parser::Type::Mapping { key, value, .. } => match (key.as_ref(), value.as_ref()) {
+                (parser::Expression::Type(_, k), parser::Expression::Type(_, v)) => {
+                    Ok(Type::Mapping(
+                        Box::new(k.clone().try_into()?),
+                        Box::new(v.clone().try_into()?),
+                    ))
+                }
+                (key, value) => {
+                    bail!("unsupported mapping key {} and value {}", key, value)
+                }
+            },
+            parser::Type::Payable { .. } => bail!("payable type is not supported yet"),
         }
     }
 }
@@ -235,8 +274,9 @@ impl TryFrom<Type> for DynSolType {
             Type::FixedArray(t, s) => Ok(DynSolType::FixedArray(Box::new((*t).try_into()?), s)),
             Type::NamedTuple(name, fields) => Ok(DynSolType::CustomStruct {
                 name,
-                prop_names: fields.keys().cloned().collect(),
+                prop_names: fields.0.keys().cloned().collect(),
                 tuple: fields
+                    .0
                     .values()
                     .map(|t| t.clone().try_into())
                     .collect::<Result<Vec<_>>>()?,
@@ -268,9 +308,10 @@ impl Type {
             Type::NamedTuple(_, fields) => Value::NamedTuple(
                 "".to_string(),
                 fields
+                    .0
                     .iter()
                     .map(|(k, v)| v.default_value().map(|v_| (k.clone(), v_)))
-                    .collect::<Result<IndexMap<_, _>>>()?,
+                    .collect::<Result<HashableIndexMap<_, _>>>()?,
             ),
             Type::Tuple(types) => Value::Array(
                 types
@@ -278,6 +319,9 @@ impl Type {
                     .map(|t| t.default_value())
                     .collect::<Result<Vec<_>>>()?,
             ),
+            Type::Mapping(kt, vt) => {
+                Value::Mapping(HashableIndexMap(IndexMap::new()), kt.clone(), vt.clone())
+            }
             _ => bail!("cannot get default value for type {}", self),
         };
         Ok(value)
@@ -342,10 +386,13 @@ impl Type {
             }
             (Type::NamedTuple(name, types_), Value::Tuple(values)) => {
                 let mut new_values = IndexMap::new();
-                for (key, value) in types_.iter().zip(values.iter()) {
+                for (key, value) in types_.0.iter().zip(values.iter()) {
                     new_values.insert(key.0.clone(), key.1.cast(value)?);
                 }
-                Ok(Value::NamedTuple(name.to_string(), new_values))
+                Ok(Value::NamedTuple(
+                    name.to_string(),
+                    HashableIndexMap(new_values),
+                ))
             }
             (Type::Array(t), Value::Array(v)) => v
                 .iter()
@@ -367,7 +414,7 @@ impl Type {
             Type::Contract(ContractInfo(_, abi)) => {
                 abi.functions.keys().map(|s| s.to_string()).collect()
             }
-            Type::NamedTuple(_, fields) => fields.keys().map(|s| s.to_string()).collect(),
+            Type::NamedTuple(_, fields) => fields.0.keys().map(|s| s.to_string()).collect(),
             Type::Uint(_) | Type::Int(_) => {
                 vec!["format".to_string()]
             }
@@ -375,6 +422,8 @@ impl Type {
             Type::TransactionReceipt => Receipt::keys(),
             Type::Array(_) => vec!["concat".to_string()],
             Type::String => vec!["concat".to_string()],
+
+            Type::Mapping(_, _) => vec!["keys".to_string()],
 
             Type::Type(t) => match *t.clone() {
                 Type::Contract(_) => vec!["decode".to_string()],

@@ -3,7 +3,7 @@ use anyhow::{anyhow, bail, Result};
 
 use super::{Env, Value};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum BlockFunction {
     ChainId,
     BaseFee,

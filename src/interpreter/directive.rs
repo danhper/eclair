@@ -7,7 +7,7 @@ use crate::loaders;
 
 use super::{ContractInfo, Env, Type, Value};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Directive {
     ListVars,
     ListTypes,

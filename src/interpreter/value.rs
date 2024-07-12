@@ -13,10 +13,10 @@ use std::{
 
 use super::{
     functions::Function,
-    types::{ContractInfo, Receipt, Type},
+    types::{ContractInfo, HashableIndexMap, Receipt, Type},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, Eq)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -28,8 +28,9 @@ pub enum Value {
     Addr(Address),
     Contract(ContractInfo, Address),
     Tuple(Vec<Value>),
-    NamedTuple(String, IndexMap<String, Value>),
+    NamedTuple(String, HashableIndexMap<String, Value>),
     Array(Vec<Value>),
+    Mapping(HashableIndexMap<Value, Value>, Box<Type>, Box<Type>),
     TypeObject(Type),
     Transaction(B256),
     TransactionReceipt(Receipt),
@@ -71,9 +72,15 @@ impl Display for Value {
                 write!(f, "0x{}", hex::encode(bytes))
             }
             Value::Bytes(bytes) => write!(f, "0x{}", hex::encode(bytes)),
-            Value::NamedTuple(name, v) => write!(f, "{} {{ {} }}", name, _format_struct_fields(v)),
+            Value::NamedTuple(name, v) => {
+                write!(f, "{} {{ {} }}", name, _format_struct_fields(&v.0))
+            }
             Value::Tuple(v) => write!(f, "({})", _values_to_string(v)),
             Value::Array(v) => write!(f, "[{}]", _values_to_string(v)),
+            Value::Mapping(v, kt, vt) => {
+                let values = v.0.iter().map(|(k, v)| format!("{}: {}", k, v)).join(", ");
+                write!(f, "mapping({} => {}) {{ {} }}", kt, vt, values)
+            }
             Value::TypeObject(t) => write!(f, "{}", t),
             Value::Transaction(t) => write!(f, "Transaction({})", t),
             Value::TransactionReceipt(r) => write!(f, "TransactionReceipt {{ {} }}", r),
@@ -100,11 +107,11 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::Bytes(b) => DynSolValue::Bytes(b.clone()),
             Value::Contract(_, addr) => DynSolValue::Address(*addr),
             Value::NamedTuple(name, vs) => {
-                let prop_names = vs.iter().map(|(k, _)| k.clone()).collect();
-                let tuple = vs
-                    .iter()
-                    .map(|(_, v)| DynSolValue::try_from(v))
-                    .collect::<Result<Vec<_>>>()?;
+                let prop_names = vs.0.iter().map(|(k, _)| k.clone()).collect();
+                let tuple =
+                    vs.0.iter()
+                        .map(|(_, v)| DynSolValue::try_from(v))
+                        .collect::<Result<Vec<_>>>()?;
 
                 DynSolValue::CustomStruct {
                     name: name.clone(),
@@ -114,6 +121,7 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             }
             Value::Tuple(vs) => DynSolValue::Tuple(_values_to_dyn_sol_values(vs)?),
             Value::Array(vs) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
+            Value::Mapping(_, _, _) => bail!("cannot convert mapping to Solidity type"),
             Value::Null => bail!("cannot convert null to Solidity type"),
             Value::TransactionReceipt(_) => bail!("cannot convert receipt to Solidity type"),
             Value::TypeObject(_) => bail!("cannot convert type objects to Solidity type"),
@@ -138,7 +146,7 @@ impl From<alloy::rpc::types::Log> for Value {
         );
         fields.insert("data".to_string(), Value::Bytes(log.data().data.to_vec()));
 
-        Value::NamedTuple("Log".to_string(), fields)
+        Value::NamedTuple("Log".to_string(), HashableIndexMap(fields))
     }
 }
 
@@ -166,7 +174,10 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
                     .zip(tuple)
                     .map(|(k, dv)| Value::try_from(dv).map(|v| (k.clone(), v)))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(Value::NamedTuple(name, IndexMap::from_iter(vs)))
+                Ok(Value::NamedTuple(
+                    name,
+                    HashableIndexMap(IndexMap::from_iter(vs)),
+                ))
             }
             v => Err(anyhow::anyhow!("{:?} not supported", v)),
         }
@@ -258,13 +269,16 @@ impl Value {
             Value::Bytes(_) => Type::Bytes,
             Value::NamedTuple(name, vs) => Type::NamedTuple(
                 name.clone(),
-                vs.iter().map(|(k, v)| (k.clone(), v.get_type())).collect(),
+                vs.0.iter()
+                    .map(|(k, v)| (k.clone(), v.get_type()))
+                    .collect(),
             ),
             Value::Tuple(vs) => Type::Tuple(vs.iter().map(Value::get_type).collect()),
             Value::Array(vs) => {
                 let t = vs.iter().map(Value::get_type).next().unwrap_or(Type::Bool);
                 Type::Array(Box::new(t))
             }
+            Value::Mapping(_, kt, vt) => Type::Mapping(kt.clone(), vt.clone()),
             Value::Contract(c, _) => Type::Contract(c.clone()),
             Value::Null => Type::Null,
             Value::Func(_) => Type::Function,
@@ -272,6 +286,24 @@ impl Value {
             Value::TypeObject(type_) => Type::Type(Box::new(type_.clone())),
             Value::Transaction(_) => Type::Transaction,
             Value::TransactionReceipt(_) => Type::TransactionReceipt,
+        }
+    }
+
+    pub fn set_index(&mut self, index: &Value, value: Value) -> Result<()> {
+        match self {
+            Value::Array(items) => {
+                let int_index = index.as_usize()?;
+                if int_index >= items.len() {
+                    bail!("index out of bounds")
+                }
+                items[int_index] = value;
+                Ok(())
+            }
+            Value::Mapping(v, kt, vt) => {
+                v.0.insert(kt.cast(index)?, vt.cast(&value)?);
+                Ok(())
+            }
+            _ => bail!("{} is not an array", self.get_type()),
         }
     }
 
@@ -332,6 +364,7 @@ impl Value {
     pub fn get_field(&self, field: &str) -> Result<Value> {
         match self {
             Value::NamedTuple(_, fields) => fields
+                .0
                 .get(field)
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("field {} not found", field)),
@@ -343,7 +376,7 @@ impl Value {
         match self {
             Value::Array(items) => Ok(items.clone()),
             Value::Tuple(items) => Ok(items.clone()),
-            Value::NamedTuple(_, items) => Ok(items.values().cloned().collect()),
+            Value::NamedTuple(_, items) => Ok(items.0.values().cloned().collect()),
             _ => bail!("{} is not iterable", self.get_type()),
         }
     }

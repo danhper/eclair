@@ -13,8 +13,7 @@ use itertools::Itertools;
 
 use super::{
     block_functions::BlockFunction,
-    types::Receipt,
-    types::{ContractInfo, Type},
+    types::{ContractInfo, HashableIndexMap, Receipt, Type},
     Directive, Env, Value,
 };
 
@@ -248,7 +247,7 @@ fn keccak256(args: &[Value]) -> Result<Value> {
     Ok(Value::FixBytes(alloy::primitives::keccak256(data), 32))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum BuiltinFunction {
     Balance(Address),
     FormatFunc,
@@ -260,6 +259,7 @@ pub enum BuiltinFunction {
     Concat(Box<Value>),
     Decode(String, JsonAbi),
     Map(Vec<Value>, Type),
+    Keys(HashableIndexMap<Value, Value>),
     Directive(Directive),
     GetType,
     Log,
@@ -286,6 +286,10 @@ impl fmt::Display for BuiltinFunction {
             Self::Map(v, _) => {
                 let items = v.iter().map(|v| format!("{}", v)).join(", ");
                 write!(f, "{}.map", items)
+            }
+            Self::Keys(v) => {
+                let items = v.0.iter().map(|(k, v)| format!("{}: {}", k, v)).join(", ");
+                write!(f, "{{{}}}.keys", items)
             }
             Self::GetType => write!(f, "type"),
             Self::FormatFunc => write!(f, "format"),
@@ -340,6 +344,8 @@ impl BuiltinFunction {
             (Value::TypeObject(Type::Type(t)), "max") if t.is_int() => Self::Max(*t.clone()),
             (Value::TypeObject(Type::Type(t)), "min") if t.is_int() => Self::Min(*t.clone()),
 
+            (Value::Mapping(values, _, _), "keys") => Self::Keys(values.clone()),
+
             (Value::Transaction(tx), "getReceipt") => Self::GetReceipt(*tx),
 
             (Value::TransactionReceipt(r), name) => Self::ReadReceipt(r.clone(), name.to_string()),
@@ -370,7 +376,8 @@ impl BuiltinFunction {
             | Self::Block(_)
             | Self::Min(_)
             | Self::Max(_)
-            | Self::ReadReceipt(_, _) => true,
+            | Self::ReadReceipt(_, _)
+            | Self::Keys(_) => true,
             Self::Directive(d) => d.is_property(),
             _ => false,
         }
@@ -397,6 +404,8 @@ impl BuiltinFunction {
 
             Self::Max(t) => t.max(),
             Self::Min(t) => t.min(),
+
+            Self::Keys(values) => Ok(Value::Array(values.0.keys().cloned().collect_vec())),
 
             Self::Keccak256 => keccak256(args),
 

@@ -18,7 +18,7 @@ use super::{
     StatementResult, Type, Value,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FunctionParam {
     name: String,
     type_: Option<Type>,
@@ -50,11 +50,18 @@ impl TryFrom<Parameter> for FunctionParam {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserDefinedFunction {
     pub name: String,
     params: Vec<FunctionParam>,
     body: Statement,
+}
+
+impl std::hash::Hash for UserDefinedFunction {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.params.hash(state);
+    }
 }
 
 impl TryFrom<solang_parser::pt::FunctionDefinition> for UserDefinedFunction {
@@ -80,7 +87,7 @@ impl TryFrom<solang_parser::pt::FunctionDefinition> for UserDefinedFunction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum ContractCallMode {
     Default,
     Encode,
@@ -101,7 +108,7 @@ impl TryFrom<&str> for ContractCallMode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ContractCall {
     info: ContractInfo,
     addr: Address,
@@ -130,7 +137,7 @@ impl ContractCall {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Hash, PartialEq, Eq)]
 pub struct CallOptions {
     value: Option<Box<Value>>,
 }
@@ -152,9 +159,9 @@ impl TryFrom<Value> for CallOptions {
         match value {
             Value::NamedTuple(_, m) => {
                 let mut opts = CallOptions::default();
-                for (k, v) in m {
+                for (k, v) in m.0.iter() {
                     match k.as_str() {
-                        "value" => opts.value = Some(Box::new(v)),
+                        "value" => opts.value = Some(Box::new(v.clone())),
                         _ => bail!("unexpected key {}", k),
                     }
                 }
@@ -176,7 +183,7 @@ impl TryFrom<StatementResult> for CallOptions {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Function {
     ContractCall(ContractCall),
     Builtin(BuiltinFunction),

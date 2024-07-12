@@ -15,7 +15,7 @@ use super::assignment::Lhs;
 use super::builtin_functions::BuiltinFunction;
 use super::functions::{Function, UserDefinedFunction};
 use super::parsing::ParsedCode;
-use super::types::Type;
+use super::types::{HashableIndexMap, Type};
 use super::{env::Env, parsing, value::Value};
 
 pub const SETUP_FUNCTION_NAME: &str = "setUp";
@@ -242,7 +242,7 @@ pub fn evaluate_statement(
                     result.push((arg.name.to_string(), evaled));
                 }
                 let values = IndexMap::from_iter(result);
-                let named_tuple = Value::NamedTuple("Args".to_string(), values);
+                let named_tuple = Value::NamedTuple("Args".to_string(), HashableIndexMap(values));
                 Ok(StatementResult::Value(named_tuple))
             }
 
@@ -273,27 +273,27 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
 
             Expression::PreIncrement(_, expr) => {
                 let current_value = evaluate_expression(env, expr.clone()).await?;
-                let lhs = Lhs::try_from_expr(expr.as_ref().clone())?;
+                let lhs = Lhs::try_from_expr(expr.as_ref().clone(), env).await?;
                 let new_value = (current_value + 1.into())?;
                 lhs.execute_assign(new_value.clone(), env)?;
                 Ok(new_value)
             }
             Expression::PreDecrement(_, expr) => {
                 let current_value = evaluate_expression(env, expr.clone()).await?;
-                let lhs = Lhs::try_from_expr(expr.as_ref().clone())?;
+                let lhs = Lhs::try_from_expr(expr.as_ref().clone(), env).await?;
                 let new_value = (current_value - 1.into())?;
                 lhs.execute_assign(new_value.clone(), env)?;
                 Ok(new_value)
             }
             Expression::PostIncrement(_, expr) => {
                 let current_value = evaluate_expression(env, expr.clone()).await?;
-                let lhs = Lhs::try_from_expr(expr.as_ref().clone())?;
+                let lhs = Lhs::try_from_expr(expr.as_ref().clone(), env).await?;
                 lhs.execute_assign((current_value.clone() + 1.into())?, env)?;
                 Ok(current_value)
             }
             Expression::PostDecrement(_, expr) => {
                 let current_value = evaluate_expression(env, expr.clone()).await?;
-                let lhs = Lhs::try_from_expr(expr.as_ref().clone())?;
+                let lhs = Lhs::try_from_expr(expr.as_ref().clone(), env).await?;
                 lhs.execute_assign((current_value.clone() - 1.into())?, env)?;
                 Ok(current_value)
             }
@@ -402,7 +402,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             },
 
             Expression::Assign(_, lhs_expr, expr) => {
-                let lhs = Lhs::try_from_expr(lhs_expr.as_ref().clone())?;
+                let lhs = Lhs::try_from_expr(lhs_expr.as_ref().clone(), env).await?;
                 let result = evaluate_expression(env, expr).await?;
                 lhs.execute_assign(result, env)?;
                 Ok(Value::Null)
@@ -461,6 +461,13 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                             bail!("index out of bounds");
                         }
                         Ok(values[index].clone())
+                    }
+                    Value::Mapping(values, kt, _) => {
+                        let subscript = subscript_opt
+                            .ok_or(anyhow!("mappings do not support empty subscript"))?;
+                        let key = evaluate_expression(env, subscript).await?;
+                        let key = kt.cast(&key)?;
+                        Ok(values.0.get(&key).cloned().unwrap_or(Value::Null))
                     }
                     Value::TypeObject(type_) => match subscript_opt {
                         Some(subscript) => {
@@ -538,7 +545,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                     let value = evaluate_expression(env, Box::new(arg.expr.clone())).await?;
                     fields.insert(arg.name.name.clone(), value);
                 }
-                Ok(Value::NamedTuple(id, fields))
+                Ok(Value::NamedTuple(id, HashableIndexMap(fields)))
             }
 
             Expression::FunctionCall(_, func_expr, args_) => {
