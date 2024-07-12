@@ -147,17 +147,6 @@ impl Signer for LedgerSigner {
 
 impl LedgerSigner {
     /// Instantiate the application by acquiring a lock on the ledger device.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # async fn foo() -> Result<(), Box<dyn std::error::Error>> {
-    /// use alloy_signer_ledger::{HDPath, LedgerSigner};
-    ///
-    /// let ledger = LedgerSigner::new(HDPath::LedgerLive(0), Some(1)).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub async fn new(
         transport: Arc<Mutex<Ledger>>,
         derivation: HDPath,

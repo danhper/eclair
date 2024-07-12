@@ -453,17 +453,22 @@ impl Type {
 
     pub fn max(&self) -> Result<Value> {
         let res = match self {
-            Type::Uint(256) => U256::MAX,
-            Type::Uint(size) => (U256::from(1) << U256::from(*size)) - U256::from(1),
-            Type::Int(size) => (U256::from(1) << U256::from(*size - 1)) - U256::from(1),
+            Type::Uint(256) => Value::Uint(U256::MAX, 256),
+            Type::Uint(size) => {
+                Value::Uint((U256::from(1) << U256::from(*size)) - U256::from(1), 256)
+            }
+            Type::Int(size) => Value::Int(
+                I256::from_raw((U256::from(1) << U256::from(*size - 1)) - U256::from(1)),
+                256,
+            ),
             _ => bail!("cannot get max value for type {}", self),
         };
-        Ok(Value::Uint(res, 256))
+        Ok(res)
     }
 
     pub fn min(&self) -> Result<Value> {
         match self {
-            Type::Uint(_) => Ok(0.into()),
+            Type::Uint(_) => Ok(0u64.into()),
             Type::Int(256) => Ok(Value::Int(I256::MIN, 256)),
             Type::Int(size) => {
                 let minus_one = -I256::from_raw(U256::from(1));
@@ -501,11 +506,11 @@ mod tests {
     #[test]
     fn uint_min() {
         let cases = vec![
-            (Type::Uint(256), 0),
-            (Type::Uint(128), 0),
-            (Type::Uint(64), 0),
-            (Type::Uint(32), 0),
-            (Type::Uint(8), 0),
+            (Type::Uint(256), 0u64),
+            (Type::Uint(128), 0u64),
+            (Type::Uint(64), 0u64),
+            (Type::Uint(32), 0u64),
+            (Type::Uint(8), 0u64),
         ];
         for (t, expected) in cases {
             assert_eq!(t.min().unwrap(), Value::Uint(U256::from(expected), 256));
