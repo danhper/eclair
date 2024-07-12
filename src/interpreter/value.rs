@@ -16,7 +16,7 @@ use super::{
     types::{ContractInfo, HashableIndexMap, Receipt, Type},
 };
 
-#[derive(Debug, Clone, Hash, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -217,27 +217,6 @@ where
     }
 }
 
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::Int(a, _), Value::Int(b, _)) => a == b,
-            (Value::Uint(a, _), Value::Uint(b, _)) => a == b,
-            (Value::Int(a, _), Value::Uint(b, _)) => *a == I256::from_raw(*b),
-            (Value::Uint(a, _), Value::Int(b, _)) => I256::from_raw(*a) == *b,
-            (Value::Str(a), Value::Str(b)) => a == b,
-            (Value::Addr(a), Value::Addr(b)) => a == b,
-            (Value::FixBytes(a, _), Value::FixBytes(b, _)) => a == b,
-            (Value::Bytes(a), Value::Bytes(b)) => a == b,
-            (Value::Tuple(a), Value::Tuple(b)) => a == b,
-            (Value::Array(a), Value::Array(b)) => a == b,
-            (Value::TypeObject(a), Value::TypeObject(b)) => a == b,
-            (Value::Contract(_, a), Value::Contract(_, b)) => a == b,
-            _ => false,
-        }
-    }
-}
-
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
@@ -287,6 +266,17 @@ impl Value {
             Value::Transaction(_) => Type::Transaction,
             Value::TransactionReceipt(_) => Type::TransactionReceipt,
         }
+    }
+
+    pub fn len(&self) -> Result<usize> {
+        let len = match self {
+            Value::Array(items) => items.len(),
+            Value::Tuple(items) => items.len(),
+            Value::Bytes(b) => b.len(),
+            Value::Str(s) => s.len(),
+            v => bail!("{} is not iterable", v.get_type()),
+        };
+        Ok(len)
     }
 
     pub fn set_index(&mut self, index: &Value, value: Value) -> Result<()> {

@@ -420,8 +420,14 @@ impl Type {
             }
             Type::Transaction => vec!["getReceipt".to_string()],
             Type::TransactionReceipt => Receipt::keys(),
-            Type::Array(_) => vec!["concat".to_string()],
-            Type::String => vec!["concat".to_string()],
+            Type::Array(_) => vec![
+                "concat".to_string(),
+                "length".to_string(),
+                "map".to_string(),
+            ],
+            Type::String => vec!["concat".to_string(), "length".to_string()],
+
+            Type::Bytes => vec!["concat".to_string(), "length".to_string()],
 
             Type::Mapping(_, _) => vec!["keys".to_string()],
 

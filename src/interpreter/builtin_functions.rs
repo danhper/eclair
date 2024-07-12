@@ -90,10 +90,21 @@ fn concat_arrays(arr: Vec<Value>, args: &[Value]) -> Result<Vec<Value>> {
     }
 }
 
+fn concat_bytes(bytes: Vec<u8>, args: &[Value]) -> Result<Vec<u8>> {
+    if let Some(Value::Bytes(other)) = args.first() {
+        let mut new_bytes = bytes.clone();
+        new_bytes.extend(other.clone());
+        Ok(new_bytes)
+    } else {
+        bail!("cannot concat {:?} with {:?}", bytes, args)
+    }
+}
+
 fn concat(value: &Value, args: &[Value]) -> Result<Value> {
     match value {
         Value::Str(s) => concat_strings(s.clone(), args).map(Value::Str),
         Value::Array(arr) => concat_arrays(arr.clone(), args).map(Value::Array),
+        Value::Bytes(b) => concat_bytes(b.clone(), args).map(Value::Bytes),
         _ => bail!("cannot concat {}", value),
     }
 }
@@ -257,6 +268,7 @@ pub enum BuiltinFunction {
     Min(Type),
     Max(Type),
     Concat(Box<Value>),
+    Length(Box<Value>),
     Decode(String, JsonAbi),
     Map(Vec<Value>, Type),
     Keys(HashableIndexMap<Value, Value>),
@@ -278,6 +290,7 @@ impl fmt::Display for BuiltinFunction {
             Self::Balance(addr) => write!(f, "{}.balance", addr),
             Self::Format(v) => write!(f, "{}.format", v),
             Self::Concat(s) => write!(f, "{}.concat", s),
+            Self::Length(s) => write!(f, "{}.length", s),
             Self::Mul(v) => write!(f, "{}.mul", v),
             Self::Div(v) => write!(f, "{}.div", v),
             Self::Min(t) => write!(f, "{}.min", t),
@@ -327,7 +340,9 @@ impl BuiltinFunction {
 
             (v, "format") => Self::Format(Box::new(v.clone())),
 
-            (v @ (Value::Str(_) | Value::Array(_)), "concat") => Self::Concat(Box::new(v.clone())),
+            (v @ (Value::Str(_) | Value::Array(_) | Value::Bytes(_)), "concat") => {
+                Self::Concat(Box::new(v.clone()))
+            }
 
             (v @ Value::Uint(..) | v @ Value::Int(..), "mul") => Self::Mul(Box::new(v.clone())),
             (v @ Value::Uint(..) | v @ Value::Int(..), "div") => Self::Div(Box::new(v.clone())),
@@ -336,10 +351,15 @@ impl BuiltinFunction {
                 values.clone(),
                 Type::Tuple(values.iter().map(Value::get_type).collect()),
             ),
+
             (Value::Array(values), "map") => {
                 let arr_type = values.first().map_or(Type::Uint(256), Value::get_type);
                 Self::Map(values.clone(), Type::Array(Box::new(arr_type)))
             }
+            (
+                v @ (Value::Array(_) | Value::Bytes(_) | Value::Str(_) | Value::Tuple(_)),
+                "length",
+            ) => Self::Length(Box::new(v.clone())),
 
             (Value::TypeObject(Type::Type(t)), "max") if t.is_int() => Self::Max(*t.clone()),
             (Value::TypeObject(Type::Type(t)), "min") if t.is_int() => Self::Min(*t.clone()),
@@ -376,6 +396,7 @@ impl BuiltinFunction {
             | Self::Block(_)
             | Self::Min(_)
             | Self::Max(_)
+            | Self::Length(_)
             | Self::ReadReceipt(_, _)
             | Self::Keys(_) => true,
             Self::Directive(d) => d.is_property(),
@@ -404,6 +425,8 @@ impl BuiltinFunction {
 
             Self::Max(t) => t.max(),
             Self::Min(t) => t.min(),
+
+            Self::Length(v) => v.len().map(|v| Value::Uint(U256::from(v), 256)),
 
             Self::Keys(values) => Ok(Value::Array(values.0.keys().cloned().collect_vec())),
 
