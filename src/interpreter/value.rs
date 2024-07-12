@@ -202,6 +202,12 @@ impl From<u128> for Value {
     }
 }
 
+impl From<&str> for Value {
+    fn from(s: &str) -> Self {
+        Value::Str(s.to_string())
+    }
+}
+
 impl<const N: usize> From<alloy::primitives::FixedBytes<N>> for Value {
     fn from(bytes: alloy::primitives::FixedBytes<N>) -> Self {
         Value::FixBytes(B256::from_slice(&bytes[..]), N)
@@ -268,6 +274,7 @@ impl Value {
         }
     }
 
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> Result<usize> {
         let len = match self {
             Value::Array(items) => items.len(),

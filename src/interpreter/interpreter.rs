@@ -274,28 +274,44 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::PreIncrement(_, expr) => {
                 let current_value = evaluate_expression(env, expr.clone()).await?;
                 let lhs = Lhs::try_from_expr(expr.as_ref().clone(), env).await?;
-                let new_value = (current_value + 1.into())?;
+                let new_value = (current_value + 1u64.into())?;
                 lhs.execute_assign(new_value.clone(), env)?;
                 Ok(new_value)
             }
             Expression::PreDecrement(_, expr) => {
                 let current_value = evaluate_expression(env, expr.clone()).await?;
                 let lhs = Lhs::try_from_expr(expr.as_ref().clone(), env).await?;
-                let new_value = (current_value - 1.into())?;
+                let new_value = (current_value - 1u64.into())?;
                 lhs.execute_assign(new_value.clone(), env)?;
                 Ok(new_value)
             }
             Expression::PostIncrement(_, expr) => {
                 let current_value = evaluate_expression(env, expr.clone()).await?;
                 let lhs = Lhs::try_from_expr(expr.as_ref().clone(), env).await?;
-                lhs.execute_assign((current_value.clone() + 1.into())?, env)?;
+                lhs.execute_assign((current_value.clone() + 1u64.into())?, env)?;
                 Ok(current_value)
             }
             Expression::PostDecrement(_, expr) => {
                 let current_value = evaluate_expression(env, expr.clone()).await?;
                 let lhs = Lhs::try_from_expr(expr.as_ref().clone(), env).await?;
-                lhs.execute_assign((current_value.clone() - 1.into())?, env)?;
+                lhs.execute_assign((current_value.clone() - 1u64.into())?, env)?;
                 Ok(current_value)
+            }
+
+            Expression::AssignAdd(_, left, right) => {
+                _eval_binop_assign(env, left, right, |a, b| a + b).await
+            }
+            Expression::AssignSubtract(_, left, right) => {
+                _eval_binop_assign(env, left, right, |a, b| a - b).await
+            }
+            Expression::AssignMultiply(_, left, right) => {
+                _eval_binop_assign(env, left, right, |a, b| a * b).await
+            }
+            Expression::AssignDivide(_, left, right) => {
+                _eval_binop_assign(env, left, right, |a, b| a / b).await
+            }
+            Expression::AssignModulo(_, left, right) => {
+                _eval_binop_assign(env, left, right, |a, b| a % b).await
             }
 
             Expression::HexNumberLiteral(_, n, _) => {
@@ -609,4 +625,19 @@ where
     let lhs = evaluate_expression(env, lexpr).await?;
     let rhs = evaluate_expression(env, rexpr).await?;
     f(lhs, rhs)
+}
+
+async fn _eval_binop_assign<F>(
+    env: &mut Env,
+    lexpr: Box<Expression>,
+    rexpr: Box<Expression>,
+    f: F,
+) -> Result<Value>
+where
+    F: FnOnce(Value, Value) -> Result<Value>,
+{
+    let lhs = Lhs::try_from_expr(lexpr.as_ref().clone(), env).await?;
+    let new_value = _eval_binop(env, lexpr, rexpr, f).await?;
+    lhs.execute_assign(new_value.clone(), env)?;
+    Ok(new_value)
 }
