@@ -292,6 +292,7 @@ impl TryFrom<Type> for DynSolType {
                     .map(|t| t.try_into())
                     .collect::<Result<Vec<_>>>()?,
             )),
+            Type::Type(t) => (*t).try_into(),
             _ => bail!("type {} is not supported", type_),
         }
     }
@@ -422,7 +423,7 @@ impl Type {
             }
             Type::NamedTuple(_, fields) => fields.0.keys().map(|s| s.to_string()).collect(),
             Type::Uint(_) | Type::Int(_) => {
-                vec!["format".to_string()]
+                vec!["format".to_string(), "mul".to_string(), "div".to_string()]
             }
             Type::Transaction => vec!["getReceipt".to_string()],
             Type::TransactionReceipt => Receipt::keys(),
@@ -458,7 +459,11 @@ impl Type {
     }
 
     pub fn max(&self) -> Result<Value> {
-        let res = match self {
+        let inner_type = match self {
+            Type::Type(t) => t.as_ref(),
+            _ => self,
+        };
+        let res = match inner_type {
             Type::Uint(256) => Value::Uint(U256::MAX, 256),
             Type::Uint(size) => {
                 Value::Uint((U256::from(1) << U256::from(*size)) - U256::from(1), 256)
@@ -473,7 +478,11 @@ impl Type {
     }
 
     pub fn min(&self) -> Result<Value> {
-        match self {
+        let inner_type = match self {
+            Type::Type(t) => t.as_ref(),
+            _ => self,
+        };
+        match inner_type {
             Type::Uint(_) => Ok(0u64.into()),
             Type::Int(256) => Ok(Value::Int(I256::MIN, 256)),
             Type::Int(size) => {

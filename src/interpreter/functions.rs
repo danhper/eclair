@@ -202,11 +202,19 @@ impl Display for FunctionCall {
 }
 
 impl FunctionCall {
-    pub fn new(def: &FunctionDefinition, receiver: Option<Value>) -> Self {
+    pub fn new(def: &FunctionDefinition, receiver: Option<&Value>) -> Self {
         FunctionCall {
             def: def.clone(),
-            receiver,
+            receiver: receiver.cloned(),
         }
+    }
+
+    pub fn method(def: &FunctionDefinition, receiver: &Value) -> Self {
+        Self::new(def, Some(receiver))
+    }
+
+    pub fn function(def: &FunctionDefinition) -> Self {
+        Self::new(def, None)
     }
 
     pub async fn execute(&self, env: &mut Env, args: &[Value]) -> Result<Value> {
@@ -219,6 +227,12 @@ impl FunctionCall {
 
     fn get_unified_args(&self, args: &[Value]) -> Result<Vec<Value>> {
         let valid_args_lengths = self.def.get_valid_args_lengths();
+
+        // skip validation if no valid args are specified
+        if valid_args_lengths.is_empty() {
+            return Ok(args.to_vec());
+        }
+
         if !valid_args_lengths.contains(&args.len()) {
             bail!(
                 "function {} expects {} arguments, but got {}",
@@ -257,7 +271,7 @@ impl FunctionCall {
                     "expected {} argument {} to be {}, but got {} ({})",
                     self,
                     i,
-                    param,
+                    param.get_type(),
                     arg.get_type(),
                     e
                 ),
@@ -394,7 +408,7 @@ impl Function {
             Function::FieldAccess(_, _) => true,
             Function::Builtin(m) => m.is_property(),
             Function::UserDefined(_) => false,
-            Function::Call(_) => false,
+            Function::Call(c) => c.def.is_property(),
         }
     }
 

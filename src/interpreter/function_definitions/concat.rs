@@ -52,21 +52,18 @@ lazy_static! {
     pub static ref CONCAT_STRING: FunctionDefinition = FunctionDefinition {
         name_: "concat".to_string(),
         property: false,
-        method: true,
         valid_args: vec![vec![FunctionParam::new("other", Type::String)]],
         execute_fn: concat_async,
     };
     pub static ref CONCAT_BYTES: FunctionDefinition = FunctionDefinition {
         name_: "concat".to_string(),
         property: false,
-        method: true,
         valid_args: vec![vec![FunctionParam::new("other", Type::Bytes)]],
         execute_fn: concat_async,
     };
     pub static ref CONCAT_ARRAY: FunctionDefinition = FunctionDefinition {
         name_: "concat".to_string(),
         property: false,
-        method: true,
         valid_args: vec![vec![FunctionParam::new(
             "other",
             Type::Array(Box::new(Type::Any))

@@ -12,7 +12,13 @@ use std::{
 };
 
 use super::{
-    function_definitions,
+    function_definitions::{
+        abi::{ABI_DECODE, ABI_ENCODE, ABI_ENCODE_PACKED},
+        concat::{CONCAT_ARRAY, CONCAT_STRING},
+        format::{NON_NUM_FORMAT, NUM_FORMAT},
+        iterable::{ITER_LENGTH, ITER_MAP},
+        numeric::{NUM_DIV, NUM_MUL, TYPE_MAX, TYPE_MIN},
+    },
     functions::{Function, FunctionCall},
     types::{ContractInfo, HashableIndexMap, Receipt, Type},
 };
@@ -166,7 +172,7 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
             DynSolValue::Bytes(v) => Ok(Value::Bytes(v)),
             DynSolValue::Tuple(vs) => _dyn_sol_values_to_values(vs).map(Value::Tuple),
             DynSolValue::Array(vs) => _dyn_sol_values_to_values(vs).map(|xs| {
-                let type_ = xs.iter().next().map(Value::get_type).unwrap_or(Type::Any);
+                let type_ = xs.first().map(Value::get_type).unwrap_or(Type::Any);
                 Value::Array(xs, Box::new(type_))
             }),
             DynSolValue::CustomStruct {
@@ -197,6 +203,12 @@ impl From<i32> for Value {
 
 impl From<u64> for Value {
     fn from(n: u64) -> Self {
+        Value::Uint(U256::from(n), 256)
+    }
+}
+
+impl From<usize> for Value {
+    fn from(n: usize) -> Self {
         Value::Uint(U256::from(n), 256)
     }
 }
@@ -395,15 +407,46 @@ impl Value {
     }
 
     pub fn member_access(&self, member: &str) -> Result<Value> {
-        let res = match self {
-            Value::Array(_, _) => FunctionCall::new(
-                &function_definitions::concat::CONCAT_ARRAY,
-                Some(self.clone()),
-            ),
+        let f = match self {
+            Value::Array(_, _) => match member {
+                "concat" => FunctionCall::method(&CONCAT_ARRAY, self),
+                "map" => FunctionCall::method(&ITER_MAP, self),
+                "length" => FunctionCall::method(&ITER_LENGTH, self),
+                "format" => FunctionCall::method(&NON_NUM_FORMAT, self),
+                _ => bail!("no member {} for {}", member, self.get_type()),
+            },
+
+            Value::Str(_) => match member {
+                "concat" => FunctionCall::method(&CONCAT_STRING, self),
+                "length" => FunctionCall::method(&ITER_LENGTH, self),
+                "format" => FunctionCall::method(&NON_NUM_FORMAT, self),
+                _ => bail!("no member {} for {}", member, self.get_type()),
+            },
+
+            Value::Int(_, _) | Value::Uint(_, _) => match member {
+                "format" => FunctionCall::method(&NUM_FORMAT, self),
+                "mul" => FunctionCall::method(&NUM_MUL, self),
+                "div" => FunctionCall::method(&NUM_DIV, self),
+                _ => bail!("{} does not have member {}", self.get_type(), member),
+            },
+
+            Value::TypeObject(Type::Abi) => match member {
+                "encode" => FunctionCall::function(&ABI_ENCODE),
+                "encodePacked" => FunctionCall::function(&ABI_ENCODE_PACKED),
+                "decode" => FunctionCall::function(&ABI_DECODE),
+                _ => bail!("{} does not have member {}", self.get_type(), member),
+            },
+
+            Value::TypeObject(Type::Type(t)) => match member {
+                "max" if t.is_int() => FunctionCall::method(&TYPE_MAX, self),
+                "min" if t.is_int() => FunctionCall::method(&TYPE_MIN, self),
+                _ => bail!("{} does not have member {}", self.get_type(), member),
+            },
+
             _ => bail!("{} does not have member {}", self.get_type(), member),
         };
 
-        Ok(Value::Func(Function::Call(Box::new(res))))
+        Ok(Value::Func(Function::Call(Box::new(f))))
     }
 }
 

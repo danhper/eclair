@@ -40,7 +40,6 @@ pub type Executor = for<'a> fn(&'a mut Env, &'a [Value]) -> BoxFuture<'a, Result
 pub struct FunctionDefinition {
     pub(crate) name_: String,
     pub(crate) property: bool,
-    pub(crate) method: bool,
     pub(crate) valid_args: Vec<Vec<FunctionParam>>,
     pub(crate) execute_fn: Executor,
 }
@@ -51,7 +50,14 @@ impl std::fmt::Display for FunctionDefinition {
             return write!(f, "{}", self.name_);
         }
 
+        if self.valid_args.is_empty() {
+            return write!(f, "{}(...)", self.name_);
+        }
+
         for (i, args) in self.valid_args.iter().enumerate() {
+            if i > 0 {
+                write!(f, "  | ")?;
+            }
             write!(f, "{}(", self.name_)?;
             for (j, arg) in args.iter().enumerate() {
                 if j > 0 {
