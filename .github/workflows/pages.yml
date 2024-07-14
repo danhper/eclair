@@ -1,8 +1,10 @@
 name: Depoy docs to GitHub Pages
 
 on:
-  push:
-    branches: ["main"]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -17,6 +19,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-20.04
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v2
       - name: Setup mdBook
