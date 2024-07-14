@@ -437,7 +437,12 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
 
             Expression::MemberAccess(_, receiver_expr, method) => {
                 let receiver = evaluate_expression(env, receiver_expr).await?;
-                let function = Function::with_receiver(&receiver, &method.name)?;
+                let function =
+                    if let Result::Ok(Value::Func(f)) = receiver.member_access(&method.name) {
+                        f
+                    } else {
+                        Function::with_receiver(&receiver, &method.name)?
+                    };
                 if function.is_property() {
                     Ok(function.execute(&[], env).await?)
                 } else {
@@ -463,13 +468,17 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 for expr in exprs.iter() {
                     values.push(evaluate_expression(env, Box::new(expr.clone())).await?);
                 }
-                Ok(Value::Array(values))
+                let type_ = values
+                    .first()
+                    .map(|v| v.get_type().clone())
+                    .unwrap_or(Type::Any);
+                Ok(Value::Array(values, Box::new(type_)))
             }
 
             Expression::ArraySubscript(_, expr, subscript_opt) => {
                 let lhs = evaluate_expression(env, expr).await?;
                 match lhs {
-                    Value::Tuple(values) | Value::Array(values) => {
+                    Value::Tuple(values) | Value::Array(values, _) => {
                         let subscript = subscript_opt
                             .ok_or(anyhow!("tuples and arrays do not support empty subscript"))?;
                         let index = evaluate_expression(env, subscript).await?.as_usize()?;
@@ -500,8 +509,8 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             }
 
             Expression::ArraySlice(_, arr_expr, start_expr, end_expr) => {
-                let values = match evaluate_expression(env, arr_expr).await? {
-                    Value::Array(v) => v,
+                let (values, type_) = match evaluate_expression(env, arr_expr).await? {
+                    Value::Array(v, t) => (v, t),
                     v => bail!("invalid type for slice, expected tuple, got {}", v),
                 };
                 let start = match start_expr {
@@ -515,7 +524,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 if end > values.len() {
                     bail!("end index out of bounds");
                 }
-                Ok(Value::Array(values[start..end].to_vec()))
+                Ok(Value::Array(values[start..end].to_vec(), type_.clone()))
             }
 
             Expression::Add(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::add).await,

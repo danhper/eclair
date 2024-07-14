@@ -13,9 +13,12 @@ use alloy::{
 use anyhow::{anyhow, bail, Result};
 use solang_parser::pt::{Expression, Identifier, Parameter, Statement};
 
+use crate::interpreter::utils::join_with_final;
+
 use super::{
-    builtin_functions::BuiltinFunction, evaluate_statement, types::ContractInfo, Env,
-    StatementResult, Type, Value,
+    builtin_functions::BuiltinFunction, evaluate_statement,
+    function_definitions::FunctionDefinition, types::ContractInfo, Env, StatementResult, Type,
+    Value,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -184,16 +187,99 @@ impl TryFrom<StatementResult> for CallOptions {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct FunctionCall {
+    def: FunctionDefinition,
+    receiver: Option<Value>,
+}
+
+impl Display for FunctionCall {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(receiver) = &self.receiver {
+            write!(f, "{}.", receiver)?;
+        }
+        write!(f, "{}", self.def)
+    }
+}
+
+impl FunctionCall {
+    pub fn new(def: &FunctionDefinition, receiver: Option<Value>) -> Self {
+        FunctionCall {
+            def: def.clone(),
+            receiver,
+        }
+    }
+
+    pub async fn execute(&self, env: &mut Env, args: &[Value]) -> Result<Value> {
+        let mut unified_args = self.get_unified_args(args)?;
+        if let Some(receiver) = &self.receiver {
+            unified_args.insert(0, receiver.clone());
+        }
+        self.def.execute(env, &unified_args).await
+    }
+
+    fn get_unified_args(&self, args: &[Value]) -> Result<Vec<Value>> {
+        let valid_args_lengths = self.def.get_valid_args_lengths();
+        if !valid_args_lengths.contains(&args.len()) {
+            bail!(
+                "function {} expects {} arguments, but got {}",
+                self,
+                join_with_final(", ", " or ", valid_args_lengths),
+                args.len()
+            );
+        }
+
+        let potential_types = self
+            .def
+            .get_valid_args()
+            .iter()
+            .filter(|a| a.len() == args.len());
+
+        for (i, arg_types) in potential_types.enumerate() {
+            let res = self._unify_types(args, arg_types.as_slice());
+            if res.is_ok() || i == valid_args_lengths.len() - 1 {
+                return res;
+            }
+        }
+
+        unreachable!()
+    }
+
+    fn _unify_types(
+        &self,
+        args: &[Value],
+        types: &[crate::interpreter::function_definitions::FunctionParam],
+    ) -> Result<Vec<Value>> {
+        let mut result = vec![];
+        for (i, (arg, param)) in args.iter().zip(types).enumerate() {
+            match param.get_type().cast(arg) {
+                Ok(v) => result.push(v),
+                Err(e) => bail!(
+                    "expected {} argument {} to be {}, but got {} ({})",
+                    self,
+                    i,
+                    param,
+                    arg.get_type(),
+                    e
+                ),
+            }
+        }
+        Ok(result)
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Function {
     ContractCall(ContractCall),
     Builtin(BuiltinFunction),
     UserDefined(UserDefinedFunction),
     FieldAccess(Box<Value>, String),
+    Call(Box<FunctionCall>),
 }
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Function::Call(call) => write!(f, "{}", call),
             Function::ContractCall(ContractCall {
                 info: ContractInfo(name, abi),
                 addr,
@@ -269,6 +355,7 @@ impl Function {
             Function::ContractCall(call) => {
                 self._execute_contract_interaction(call, args, env).await
             }
+            Function::Call(call) => call.execute(env, args).await,
             Function::FieldAccess(f, v) => f.get_field(v),
             Function::Builtin(m) => m.execute(args, env).await,
             Function::UserDefined(func) => {
@@ -307,6 +394,7 @@ impl Function {
             Function::FieldAccess(_, _) => true,
             Function::Builtin(m) => m.is_property(),
             Function::UserDefined(_) => false,
+            Function::Call(_) => false,
         }
     }
 

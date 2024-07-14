@@ -81,7 +81,7 @@ fn concat_strings(string: String, args: &[Value]) -> Result<String> {
 }
 
 fn concat_arrays(arr: Vec<Value>, args: &[Value]) -> Result<Vec<Value>> {
-    if let Some(Value::Array(other)) = args.first() {
+    if let Some(Value::Array(other, _)) = args.first() {
         let mut new_arr = arr.clone();
         new_arr.extend(other.clone());
         Ok(new_arr)
@@ -103,7 +103,9 @@ fn concat_bytes(bytes: Vec<u8>, args: &[Value]) -> Result<Vec<u8>> {
 fn concat(value: &Value, args: &[Value]) -> Result<Value> {
     match value {
         Value::Str(s) => concat_strings(s.clone(), args).map(Value::Str),
-        Value::Array(arr) => concat_arrays(arr.clone(), args).map(Value::Array),
+        Value::Array(arr, t) => {
+            concat_arrays(arr.clone(), args).map(|items| Value::Array(items, t.clone()))
+        }
         Value::Bytes(b) => concat_bytes(b.clone(), args).map(Value::Bytes),
         _ => bail!("cannot concat {}", value),
     }
@@ -160,7 +162,7 @@ fn map<'a>(
         }
         match ty {
             Type::Tuple(_) => Ok(Value::Tuple(values)),
-            Type::Array(_) => Ok(Value::Array(values)),
+            Type::Array(t) => Ok(Value::Array(values, t.clone())),
             _ => bail!("cannot map to type {}", ty),
         }
     }
@@ -340,7 +342,7 @@ impl BuiltinFunction {
 
             (v, "format") => Self::Format(Box::new(v.clone())),
 
-            (v @ (Value::Str(_) | Value::Array(_) | Value::Bytes(_)), "concat") => {
+            (v @ (Value::Str(_) | Value::Array(_, _) | Value::Bytes(_)), "concat") => {
                 Self::Concat(Box::new(v.clone()))
             }
 
@@ -352,12 +354,9 @@ impl BuiltinFunction {
                 Type::Tuple(values.iter().map(Value::get_type).collect()),
             ),
 
-            (Value::Array(values), "map") => {
-                let arr_type = values.first().map_or(Type::Uint(256), Value::get_type);
-                Self::Map(values.clone(), Type::Array(Box::new(arr_type)))
-            }
+            (Value::Array(values, t), "map") => Self::Map(values.clone(), Type::Array(t.clone())),
             (
-                v @ (Value::Array(_) | Value::Bytes(_) | Value::Str(_) | Value::Tuple(_)),
+                v @ (Value::Array(_, _) | Value::Bytes(_) | Value::Str(_) | Value::Tuple(_)),
                 "length",
             ) => Self::Length(Box::new(v.clone())),
 
@@ -428,7 +427,10 @@ impl BuiltinFunction {
 
             Self::Length(v) => v.len().map(|v| Value::Uint(U256::from(v), 256)),
 
-            Self::Keys(values) => Ok(Value::Array(values.0.keys().cloned().collect_vec())),
+            Self::Keys(values) => Ok(Value::Array(
+                values.0.keys().cloned().collect_vec(),
+                Box::new(Type::Any),
+            )),
 
             Self::Keccak256 => keccak256(args),
 

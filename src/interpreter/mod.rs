@@ -4,11 +4,13 @@ mod builtin_functions;
 mod config;
 mod directive;
 mod env;
+mod function_definitions;
 mod functions;
 #[allow(clippy::module_inception)]
 mod interpreter;
 mod parsing;
 mod types;
+mod utils;
 mod value;
 
 pub use config::Config;

@@ -80,7 +80,10 @@ impl Receipt {
             "status" => Value::Bool(self.status),
             "gas_used" => Value::Uint(U256::from(self.gas_used), 256),
             "effective_gas_price" => Value::Uint(U256::from(self.effective_gas_price), 256),
-            "logs" => Value::Array(self.logs.iter().map(|log| log.into()).collect()),
+            "logs" => Value::Array(
+                self.logs.iter().map(|log| log.into()).collect(),
+                Box::new(Type::FixBytes(32)),
+            ),
             _ => bail!("receipt has no field {}", field),
         };
         Ok(result)
@@ -127,6 +130,7 @@ impl Display for Receipt {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
+    Any,
     Null,
     Address,
     Bool,
@@ -154,6 +158,7 @@ pub enum Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Type::Any => write!(f, "any"),
             Type::Null => write!(f, "null"),
             Type::Address => write!(f, "address"),
             Type::Bool => write!(f, "bool"),
@@ -303,8 +308,8 @@ impl Type {
             Type::FixBytes(size) => Value::FixBytes(B256::default(), *size),
             Type::Bytes => Value::Bytes(vec![]),
             Type::String => Value::Str("".to_string()),
-            Type::Array(_) => Value::Array(vec![]),
-            Type::FixedArray(t, size) => Value::Array(vec![t.default_value()?; *size]),
+            Type::Array(t) => Value::Array(vec![], t.clone()),
+            Type::FixedArray(t, size) => Value::Array(vec![t.default_value()?; *size], t.clone()),
             Type::NamedTuple(_, fields) => Value::NamedTuple(
                 "".to_string(),
                 fields
@@ -313,7 +318,7 @@ impl Type {
                     .map(|(k, v)| v.default_value().map(|v_| (k.clone(), v_)))
                     .collect::<Result<HashableIndexMap<_, _>>>()?,
             ),
-            Type::Tuple(types) => Value::Array(
+            Type::Tuple(types) => Value::Tuple(
                 types
                     .iter()
                     .map(|t| t.default_value())
@@ -354,6 +359,7 @@ impl Type {
 
     pub fn cast(&self, value: &Value) -> Result<Value> {
         match (self, value) {
+            (Type::Any, value) => Ok(value.clone()),
             (type_, value) if type_ == &value.get_type() => Ok(value.clone()),
             (Type::Contract(info), Value::Addr(addr)) => Ok(Value::Contract(info.clone(), *addr)),
             (Type::Address, Value::Contract(_, addr)) => Ok(Value::Addr(*addr)),
@@ -394,17 +400,17 @@ impl Type {
                     HashableIndexMap(new_values),
                 ))
             }
-            (Type::Array(t), Value::Array(v)) => v
+            (Type::Array(t), Value::Array(v, _)) => v
                 .iter()
                 .map(|value| t.cast(value))
                 .collect::<Result<Vec<_>>>()
-                .map(Value::Array),
+                .map(|items| Value::Array(items, t.clone())),
             (Type::Tuple(types), Value::Tuple(v)) => v
                 .iter()
                 .zip(types.iter())
                 .map(|(value, t)| t.cast(value))
                 .collect::<Result<Vec<_>>>()
-                .map(Value::Array),
+                .map(Value::Tuple),
             _ => bail!("cannot cast {} to {}", value.get_type(), self),
         }
     }

@@ -12,7 +12,8 @@ use std::{
 };
 
 use super::{
-    functions::Function,
+    function_definitions,
+    functions::{Function, FunctionCall},
     types::{ContractInfo, HashableIndexMap, Receipt, Type},
 };
 
@@ -29,7 +30,7 @@ pub enum Value {
     Contract(ContractInfo, Address),
     Tuple(Vec<Value>),
     NamedTuple(String, HashableIndexMap<String, Value>),
-    Array(Vec<Value>),
+    Array(Vec<Value>, Box<Type>),
     Mapping(HashableIndexMap<Value, Value>, Box<Type>, Box<Type>),
     TypeObject(Type),
     Transaction(B256),
@@ -76,7 +77,7 @@ impl Display for Value {
                 write!(f, "{} {{ {} }}", name, _format_struct_fields(&v.0))
             }
             Value::Tuple(v) => write!(f, "({})", _values_to_string(v)),
-            Value::Array(v) => write!(f, "[{}]", _values_to_string(v)),
+            Value::Array(v, _) => write!(f, "[{}]", _values_to_string(v)),
             Value::Mapping(v, kt, vt) => {
                 let values = v.0.iter().map(|(k, v)| format!("{}: {}", k, v)).join(", ");
                 write!(f, "mapping({} => {}) {{ {} }}", kt, vt, values)
@@ -120,7 +121,7 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
                 }
             }
             Value::Tuple(vs) => DynSolValue::Tuple(_values_to_dyn_sol_values(vs)?),
-            Value::Array(vs) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
+            Value::Array(vs, _) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
             Value::Mapping(_, _, _) => bail!("cannot convert mapping to Solidity type"),
             Value::Null => bail!("cannot convert null to Solidity type"),
             Value::TransactionReceipt(_) => bail!("cannot convert receipt to Solidity type"),
@@ -142,6 +143,7 @@ impl From<alloy::rpc::types::Log> for Value {
                     .iter()
                     .map(|t| Value::FixBytes(*t, 32))
                     .collect(),
+                Box::new(Type::FixBytes(32)),
             ),
         );
         fields.insert("data".to_string(), Value::Bytes(log.data().data.to_vec()));
@@ -163,7 +165,10 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
             DynSolValue::FixedBytes(w, s) => Ok(Value::FixBytes(w, s)),
             DynSolValue::Bytes(v) => Ok(Value::Bytes(v)),
             DynSolValue::Tuple(vs) => _dyn_sol_values_to_values(vs).map(Value::Tuple),
-            DynSolValue::Array(vs) => _dyn_sol_values_to_values(vs).map(Value::Array),
+            DynSolValue::Array(vs) => _dyn_sol_values_to_values(vs).map(|xs| {
+                let type_ = xs.iter().next().map(Value::get_type).unwrap_or(Type::Any);
+                Value::Array(xs, Box::new(type_))
+            }),
             DynSolValue::CustomStruct {
                 name,
                 prop_names,
@@ -235,7 +240,7 @@ impl PartialOrd for Value {
             (Value::Addr(a), Value::Addr(b)) => a.partial_cmp(b),
             (Value::FixBytes(a, _), Value::FixBytes(b, _)) => a.partial_cmp(b),
             (Value::Tuple(a), Value::Tuple(b)) => a.partial_cmp(b),
-            (Value::Array(a), Value::Array(b)) => a.partial_cmp(b),
+            (Value::Array(a, _), Value::Array(b, _)) => a.partial_cmp(b),
             (Value::Contract(_, a), Value::Contract(_, b)) => a.partial_cmp(b),
             _ => None,
         }
@@ -259,10 +264,7 @@ impl Value {
                     .collect(),
             ),
             Value::Tuple(vs) => Type::Tuple(vs.iter().map(Value::get_type).collect()),
-            Value::Array(vs) => {
-                let t = vs.iter().map(Value::get_type).next().unwrap_or(Type::Bool);
-                Type::Array(Box::new(t))
-            }
+            Value::Array(_, t) => Type::Array(t.clone()),
             Value::Mapping(_, kt, vt) => Type::Mapping(kt.clone(), vt.clone()),
             Value::Contract(c, _) => Type::Contract(c.clone()),
             Value::Null => Type::Null,
@@ -277,7 +279,7 @@ impl Value {
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> Result<usize> {
         let len = match self {
-            Value::Array(items) => items.len(),
+            Value::Array(items, _) => items.len(),
             Value::Tuple(items) => items.len(),
             Value::Bytes(b) => b.len(),
             Value::Str(s) => s.len(),
@@ -288,12 +290,12 @@ impl Value {
 
     pub fn set_index(&mut self, index: &Value, value: Value) -> Result<()> {
         match self {
-            Value::Array(items) => {
+            Value::Array(items, t) => {
                 let int_index = index.as_usize()?;
                 if int_index >= items.len() {
                     bail!("index out of bounds")
                 }
-                items[int_index] = value;
+                items[int_index] = t.cast(&value)?;
                 Ok(())
             }
             Value::Mapping(v, kt, vt) => {
@@ -371,7 +373,7 @@ impl Value {
 
     pub fn get_items(&self) -> Result<Vec<Value>> {
         match self {
-            Value::Array(items) => Ok(items.clone()),
+            Value::Array(items, _) => Ok(items.clone()),
             Value::Tuple(items) => Ok(items.clone()),
             Value::NamedTuple(_, items) => Ok(items.0.values().cloned().collect()),
             _ => bail!("{} is not iterable", self.get_type()),
@@ -390,6 +392,18 @@ impl Value {
             bail!("{} is out of range for {}", self, type_)
         }
         Ok(self)
+    }
+
+    pub fn member_access(&self, member: &str) -> Result<Value> {
+        let res = match self {
+            Value::Array(_, _) => FunctionCall::new(
+                &function_definitions::concat::CONCAT_ARRAY,
+                Some(self.clone()),
+            ),
+            _ => bail!("{} does not have member {}", self.get_type(), member),
+        };
+
+        Ok(Value::Func(Function::Call(Box::new(res))))
     }
 }
 

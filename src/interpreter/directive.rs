@@ -155,7 +155,10 @@ impl Directive {
                     _ => bail!("listLedgerWallets: invalid arguments"),
                 };
                 let wallets = env.list_ledger_wallets(count).await?;
-                return Ok(Value::Array(wallets.into_iter().map(Value::Addr).collect()));
+                return Ok(Value::Array(
+                    wallets.into_iter().map(Value::Addr).collect(),
+                    Box::new(Type::Address),
+                ));
             }
             Directive::LoadLedger => {
                 let index = match args {
