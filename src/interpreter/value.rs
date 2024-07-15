@@ -14,7 +14,9 @@ use std::{
 use super::{
     function_definitions::{
         abi::{ABI_DECODE, ABI_ENCODE, ABI_ENCODE_PACKED},
-        concat::{CONCAT_ARRAY, CONCAT_STRING},
+        address::ADDRESS_BALANCE,
+        concat::{CONCAT_ARRAY, CONCAT_BYTES, CONCAT_STRING},
+        console::CONSOLE_LOG,
         format::{NON_NUM_FORMAT, NUM_FORMAT},
         iterable::{ITER_LENGTH, ITER_MAP},
         numeric::{NUM_DIV, NUM_MUL, TYPE_MAX, TYPE_MIN},
@@ -408,7 +410,7 @@ impl Value {
 
     pub fn member_access(&self, member: &str) -> Result<Value> {
         let f = match self {
-            Value::Array(_, _) => match member {
+            Value::Array(..) => match member {
                 "concat" => FunctionCall::method(&CONCAT_ARRAY, self),
                 "map" => FunctionCall::method(&ITER_MAP, self),
                 "length" => FunctionCall::method(&ITER_LENGTH, self),
@@ -423,10 +425,27 @@ impl Value {
                 _ => bail!("no member {} for {}", member, self.get_type()),
             },
 
+            Value::FixBytes(..) => match member {
+                "format" => FunctionCall::method(&NON_NUM_FORMAT, self),
+                _ => bail!("no member {} for {}", member, self.get_type()),
+            },
+
+            Value::Bytes(_) => match member {
+                "concat" => FunctionCall::method(&CONCAT_BYTES, self),
+                "length" => FunctionCall::method(&ITER_LENGTH, self),
+                "format" => FunctionCall::method(&NON_NUM_FORMAT, self),
+                _ => bail!("no member {} for {}", member, self.get_type()),
+            },
+
             Value::Int(_, _) | Value::Uint(_, _) => match member {
                 "format" => FunctionCall::method(&NUM_FORMAT, self),
                 "mul" => FunctionCall::method(&NUM_MUL, self),
                 "div" => FunctionCall::method(&NUM_DIV, self),
+                _ => bail!("{} does not have member {}", self.get_type(), member),
+            },
+
+            Value::Addr(_) => match member {
+                "balance" => FunctionCall::method(&ADDRESS_BALANCE, self),
                 _ => bail!("{} does not have member {}", self.get_type(), member),
             },
 
@@ -440,6 +459,11 @@ impl Value {
             Value::TypeObject(Type::Type(t)) => match member {
                 "max" if t.is_int() => FunctionCall::method(&TYPE_MAX, self),
                 "min" if t.is_int() => FunctionCall::method(&TYPE_MIN, self),
+                _ => bail!("{} does not have member {}", self.get_type(), member),
+            },
+
+            Value::TypeObject(Type::Console) => match member {
+                "log" => FunctionCall::function(&CONSOLE_LOG),
                 _ => bail!("{} does not have member {}", self.get_type(), member),
             },
 
