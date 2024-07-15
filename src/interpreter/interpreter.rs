@@ -387,10 +387,12 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             },
 
             Expression::Equal(_, lhs, rhs) => {
-                _eval_comparison(env, lhs, rhs, |o| o == Ordering::Equal).await
+                let eq = _equals(env, lhs.clone(), rhs.clone()).await?;
+                Ok(Value::Bool(eq))
             }
             Expression::NotEqual(_, lhs, rhs) => {
-                _eval_comparison(env, lhs, rhs, |o| o == Ordering::Equal).await
+                let eq = _equals(env, lhs.clone(), rhs.clone()).await?;
+                Ok(Value::Bool(!eq))
             }
             Expression::Less(_, lhs, rhs) => {
                 _eval_comparison(env, lhs, rhs, |o| o == Ordering::Less).await
@@ -606,6 +608,12 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
         }
     }
     .boxed()
+}
+
+async fn _equals(env: &mut Env, lexpr: Box<Expression>, rexpr: Box<Expression>) -> Result<bool> {
+    let lhs = evaluate_expression(env, lexpr).await?;
+    let rhs = evaluate_expression(env, rexpr).await?;
+    Ok(lhs == rhs)
 }
 
 async fn _eval_comparison(

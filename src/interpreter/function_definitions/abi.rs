@@ -7,8 +7,15 @@ use lazy_static::lazy_static;
 fn abi_decode<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
         let (data, sol_type) = match args {
-            [Value::Bytes(data_), type_ @ Value::Tuple(_)] => {
-                (data_, DynSolType::try_from(type_.get_type())?)
+            [Value::Bytes(data_), Value::Tuple(values)] => {
+                let types = values
+                    .iter()
+                    .map(|v| match v {
+                        Value::TypeObject(ty) => ty.clone().try_into(),
+                        _ => bail!("abi.decode function expects tuple of types as argument"),
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                (data_, DynSolType::Tuple(types))
             }
             [Value::Bytes(data_), Value::TypeObject(ty)] => {
                 (data_, DynSolType::Tuple(vec![ty.clone().try_into()?]))

@@ -292,7 +292,6 @@ impl TryFrom<Type> for DynSolType {
                     .map(|t| t.try_into())
                     .collect::<Result<Vec<_>>>()?,
             )),
-            Type::Type(t) => (*t).try_into(),
             _ => bail!("type {} is not supported", type_),
         }
     }
