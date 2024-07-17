@@ -16,9 +16,8 @@ use solang_parser::pt::{Expression, Identifier, Parameter, Statement};
 use crate::interpreter::utils::join_with_final;
 
 use super::{
-    builtin_functions::BuiltinFunction, evaluate_statement,
-    function_definitions::FunctionDefinition, types::ContractInfo, Env, StatementResult, Type,
-    Value,
+    evaluate_statement, function_definitions::FunctionDefinition, types::ContractInfo, Env,
+    StatementResult, Type, Value,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -284,7 +283,6 @@ impl FunctionCall {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Function {
     ContractCall(ContractCall),
-    Builtin(BuiltinFunction),
     UserDefined(UserDefinedFunction),
     FieldAccess(Box<Value>, String),
     Call(Box<FunctionCall>),
@@ -323,7 +321,6 @@ impl Display for Function {
                 write!(f, "({}){}", arg_types.join(","), suffix)
             }
             Function::FieldAccess(v, n) => write!(f, "{}.{}", v, n),
-            Function::Builtin(m) => write!(f, "{}", m),
             Function::UserDefined(func) => {
                 let formatted_params = func
                     .params
@@ -356,10 +353,7 @@ impl Function {
                 Function::ContractCall(call.clone().with_mode(ContractCallMode::try_from(name)?))
             }
 
-            v => {
-                let method = BuiltinFunction::with_receiver(v, name)?;
-                Function::Builtin(method)
-            }
+            _ => bail!("no method {} on {}", name, receiver),
         };
         Ok(func)
     }
@@ -371,7 +365,6 @@ impl Function {
             }
             Function::Call(call) => call.execute(env, args).await,
             Function::FieldAccess(f, v) => f.get_field(v),
-            Function::Builtin(m) => m.execute(args, env).await,
             Function::UserDefined(func) => {
                 if args.len() != func.params.len() {
                     bail!(
@@ -406,7 +399,6 @@ impl Function {
         match self {
             Function::ContractCall(_) => false,
             Function::FieldAccess(_, _) => true,
-            Function::Builtin(m) => m.is_property(),
             Function::UserDefined(_) => false,
             Function::Call(c) => c.def.is_property(),
         }

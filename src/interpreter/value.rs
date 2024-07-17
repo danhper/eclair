@@ -13,13 +13,11 @@ use std::{
 
 use super::{
     function_definitions::{
-        abi::{ABI_DECODE, ABI_ENCODE, ABI_ENCODE_PACKED},
         address::ADDRESS_BALANCE,
         concat::{CONCAT_ARRAY, CONCAT_BYTES, CONCAT_STRING},
-        console::CONSOLE_LOG,
         format::{NON_NUM_FORMAT, NUM_FORMAT},
         iterable::{ITER_LENGTH, ITER_MAP},
-        numeric::{NUM_DIV, NUM_MUL, TYPE_MAX, TYPE_MIN},
+        numeric::{NUM_DIV, NUM_MUL},
     },
     functions::{Function, FunctionCall},
     types::{ContractInfo, HashableIndexMap, Receipt, Type},
@@ -227,6 +225,12 @@ impl From<&str> for Value {
     }
 }
 
+impl From<FunctionCall> for Value {
+    fn from(f: FunctionCall) -> Self {
+        Value::Func(Function::Call(Box::new(f)))
+    }
+}
+
 impl<const N: usize> From<alloy::primitives::FixedBytes<N>> for Value {
     fn from(bytes: alloy::primitives::FixedBytes<N>) -> Self {
         Value::FixBytes(B256::from_slice(&bytes[..]), N)
@@ -323,9 +327,7 @@ impl Value {
     pub fn is_builtin(&self) -> bool {
         matches!(
             self,
-            Value::TypeObject(Type::Console)
-                | Value::TypeObject(Type::Repl)
-                | Value::Func(Function::Builtin(_))
+            Value::TypeObject(Type::Console) | Value::TypeObject(Type::Repl)
         )
     }
 
@@ -449,23 +451,9 @@ impl Value {
                 _ => bail!("{} does not have member {}", self.get_type(), member),
             },
 
-            Value::TypeObject(Type::Abi) => match member {
-                "encode" => FunctionCall::function(&ABI_ENCODE),
-                "encodePacked" => FunctionCall::function(&ABI_ENCODE_PACKED),
-                "decode" => FunctionCall::function(&ABI_DECODE),
-                _ => bail!("{} does not have member {}", self.get_type(), member),
-            },
-
-            Value::TypeObject(Type::Type(t)) => match member {
-                "max" if t.is_int() => FunctionCall::method(&TYPE_MAX, self),
-                "min" if t.is_int() => FunctionCall::method(&TYPE_MIN, self),
-                _ => bail!("{} does not have member {}", self.get_type(), member),
-            },
-
-            Value::TypeObject(Type::Console) => match member {
-                "log" => FunctionCall::function(&CONSOLE_LOG),
-                _ => bail!("{} does not have member {}", self.get_type(), member),
-            },
+            Value::TypeObject(type_) => {
+                return type_.member_access(member);
+            }
 
             _ => bail!("{} does not have member {}", self.get_type(), member),
         };

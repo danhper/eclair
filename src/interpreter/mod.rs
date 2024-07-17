@@ -1,6 +1,5 @@
 mod assignment;
 mod block_functions;
-mod builtin_functions;
 mod config;
 mod directive;
 mod env;

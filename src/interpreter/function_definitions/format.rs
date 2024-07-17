@@ -133,3 +133,24 @@ lazy_static! {
         execute_fn: async_format,
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_uint_to_decimals() -> Result<()> {
+        let value = U256::from(10).pow(U256::from(18));
+        assert_eq!(uint_to_decimals(value, None, None)?, "1.00");
+
+        assert_eq!(
+            uint_to_decimals(U256::from(12348000), Some(6), None)?,
+            "12.35"
+        );
+        assert_eq!(
+            uint_to_decimals(U256::from(12348000), Some(6), Some(3))?,
+            "12.348"
+        );
+
+        Ok(())
+    }
+}

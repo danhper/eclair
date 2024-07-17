@@ -12,8 +12,9 @@ use solang_parser::pt::{ContractPart, Expression, Statement};
 use crate::loaders::types::Project;
 
 use super::assignment::Lhs;
-use super::builtin_functions::BuiltinFunction;
-use super::functions::{Function, UserDefinedFunction};
+use super::function_definitions::format::FORMAT_FUNCTION;
+use super::function_definitions::misc::{GET_TYPE, KECCAK256};
+use super::functions::{Function, FunctionCall, UserDefinedFunction};
 use super::parsing::ParsedCode;
 use super::types::{HashableIndexMap, Type};
 use super::{env::Env, parsing, value::Value};
@@ -53,20 +54,17 @@ impl StatementResult {
 unsafe impl std::marker::Send for StatementResult {}
 
 pub fn load_builtins(env: &mut Env) {
+    // builtin types
     env.set_var("repl", Value::TypeObject(Type::Repl));
     env.set_var("console", Value::TypeObject(Type::Console));
     env.set_var("block", Value::TypeObject(Type::Block));
     env.set_var("Transaction", Value::TypeObject(Type::Transaction));
     env.set_var("abi", Value::TypeObject(Type::Abi));
 
-    for name in BuiltinFunction::functions() {
-        env.set_var(
-            &name,
-            Value::Func(Function::Builtin(
-                BuiltinFunction::from_name(&name).unwrap(),
-            )),
-        );
-    }
+    // builtin functions
+    env.set_var("format", FunctionCall::function(&FORMAT_FUNCTION).into());
+    env.set_var("keccak256", FunctionCall::function(&KECCAK256).into());
+    env.set_var("type", FunctionCall::function(&GET_TYPE).into());
 }
 
 pub fn load_project(env: &mut Env, project: &Project) -> Result<()> {

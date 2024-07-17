@@ -13,7 +13,12 @@ use solang_parser::pt as parser;
 
 use super::{
     block_functions::BlockFunction,
-    functions::{ContractCall, Function},
+    function_definitions::{
+        abi::{ABI_DECODE, ABI_DECODE_CALLDATA, ABI_ENCODE, ABI_ENCODE_PACKED},
+        console::CONSOLE_LOG,
+        numeric::{TYPE_MAX, TYPE_MIN},
+    },
+    functions::{ContractCall, Function, FunctionCall},
     Directive, Value,
 };
 
@@ -493,6 +498,37 @@ impl Type {
             }
             _ => bail!("cannot get min value for type {}", self),
         }
+    }
+
+    pub fn member_access(&self, member: &str) -> Result<Value> {
+        let type_value = Value::TypeObject(self.clone());
+        let f = match self {
+            Type::Int(_) | Type::Uint(_) => match member {
+                "max" => FunctionCall::method(&TYPE_MAX, &type_value),
+                "min" => FunctionCall::method(&TYPE_MIN, &type_value),
+                _ => bail!("{} does not have member {}", self, member),
+            },
+
+            Type::Contract(_) => match member {
+                "decode" => FunctionCall::method(&ABI_DECODE_CALLDATA, &type_value),
+                _ => bail!("{} does not have member {}", self, member),
+            },
+
+            Type::Abi => match member {
+                "encode" => FunctionCall::function(&ABI_ENCODE),
+                "encodePacked" => FunctionCall::function(&ABI_ENCODE_PACKED),
+                "decode" => FunctionCall::function(&ABI_DECODE),
+                _ => bail!("{} does not have member {}", self, member),
+            },
+
+            Type::Console => match member {
+                "log" => FunctionCall::function(&CONSOLE_LOG),
+                _ => bail!("{} does not have member {}", self, member),
+            },
+
+            _ => bail!("{} does not have member {}", self, member),
+        };
+        Ok(Value::Func(Function::Call(Box::new(f))))
     }
 }
 
