@@ -55,7 +55,10 @@ fn abi_decode_calldata<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a
             .into_iter()
             .map(Value::try_from)
             .collect::<Result<Vec<_>>>()?;
-        Ok(Value::Tuple(values))
+        Ok(Value::Tuple(vec![
+            Value::Str(function.signature()),
+            Value::Tuple(values),
+        ]))
     }
     .boxed()
 }

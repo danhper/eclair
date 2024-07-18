@@ -193,10 +193,17 @@ pub struct FunctionCall {
 
 impl Display for FunctionCall {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(receiver) = &self.receiver {
-            write!(f, "{}.", receiver)?;
+        let variants = self.def.get_variants();
+        for (i, variant) in variants.iter().enumerate() {
+            if i > 0 {
+                writeln!(f)?;
+            }
+            if let Some(receiver) = &self.receiver {
+                write!(f, "{}.", receiver)?;
+            }
+            write!(f, "{}", variant)?;
         }
-        write!(f, "{}", self.def)
+        Ok(())
     }
 }
 

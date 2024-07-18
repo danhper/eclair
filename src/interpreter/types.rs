@@ -12,14 +12,19 @@ use itertools::Itertools;
 use solang_parser::pt as parser;
 
 use super::{
-    block_functions::BlockFunction,
     function_definitions::{
         abi::{ABI_DECODE, ABI_DECODE_CALLDATA, ABI_ENCODE, ABI_ENCODE_PACKED},
+        block::{BLOCK_BASE_FEE, BLOCK_CHAIN_ID, BLOCK_NUMBER, BLOCK_TIMESTAMP},
         console::CONSOLE_LOG,
         numeric::{TYPE_MAX, TYPE_MIN},
+        repl::{
+            REPL_ACCOUNT, REPL_DEBUG, REPL_EXEC, REPL_FETCH_ABI, REPL_IS_CONNECTED,
+            REPL_LIST_LEDGER_WALLETS, REPL_LIST_TYPES, REPL_LIST_VARS, REPL_LOAD_ABI,
+            REPL_LOAD_LEDGER, REPL_LOAD_PRIVATE_KEY, REPL_RPC,
+        },
     },
     functions::{ContractCall, Function, FunctionCall},
-    Directive, Value,
+    Value,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -450,11 +455,27 @@ impl Type {
                     "encodePacked".to_string(),
                 ],
                 Type::Console => vec!["log".to_string()],
-                Type::Block => BlockFunction::all(),
-                Type::Repl => Directive::all()
-                    .into_iter()
-                    .map(|s| s.to_string())
-                    .collect(),
+                Type::Block => vec![
+                    "chainid".to_string(),
+                    "basefee".to_string(),
+                    "number".to_string(),
+                    "timestamp".to_string(),
+                ],
+                Type::Repl => vec![
+                    "vars".to_string(),
+                    "types".to_string(),
+                    "connected".to_string(),
+                    "rpc".to_string(),
+                    "debug".to_string(),
+                    "exec".to_string(),
+                    "loadAbi".to_string(),
+                    "fetchAbi".to_string(),
+                    "account".to_string(),
+                    "loadPrivateKey".to_string(),
+                    "listLedgerWallets".to_string(),
+                    "loadLedger".to_string(),
+                ],
+
                 Type::Uint(_) | Type::Int(_) => vec!["max".to_string(), "min".to_string()],
                 _ => vec![],
             },
@@ -521,8 +542,32 @@ impl Type {
                 _ => bail!("{} does not have member {}", self, member),
             },
 
+            Type::Block => match member {
+                "chainid" => FunctionCall::function(&BLOCK_CHAIN_ID),
+                "basefee" => FunctionCall::function(&BLOCK_BASE_FEE),
+                "number" => FunctionCall::function(&BLOCK_NUMBER),
+                "timestamp" => FunctionCall::function(&BLOCK_TIMESTAMP),
+                _ => bail!("{} does not have member {}", self, member),
+            },
+
             Type::Console => match member {
                 "log" => FunctionCall::function(&CONSOLE_LOG),
+                _ => bail!("{} does not have member {}", self, member),
+            },
+
+            Type::Repl => match member {
+                "vars" => FunctionCall::function(&REPL_LIST_VARS),
+                "types" => FunctionCall::function(&REPL_LIST_TYPES),
+                "connected" => FunctionCall::function(&REPL_IS_CONNECTED),
+                "rpc" => FunctionCall::function(&REPL_RPC),
+                "debug" => FunctionCall::function(&REPL_DEBUG),
+                "exec" => FunctionCall::function(&REPL_EXEC),
+                "loadAbi" => FunctionCall::function(&REPL_LOAD_ABI),
+                "fetchAbi" => FunctionCall::function(&REPL_FETCH_ABI),
+                "account" => FunctionCall::function(&REPL_ACCOUNT),
+                "loadPrivateKey" => FunctionCall::function(&REPL_LOAD_PRIVATE_KEY),
+                "listLedgerWallets" => FunctionCall::function(&REPL_LIST_LEDGER_WALLETS),
+                "loadLedger" => FunctionCall::function(&REPL_LOAD_LEDGER),
                 _ => bail!("{} does not have member {}", self, member),
             },
 

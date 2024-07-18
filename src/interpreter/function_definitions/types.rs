@@ -87,6 +87,20 @@ impl FunctionDefinition {
         self.property
     }
 
+    pub fn get_variants(&self) -> Vec<String> {
+        self.valid_args
+            .iter()
+            .map(|args| {
+                let args = args
+                    .iter()
+                    .map(|arg| arg.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                format!("{}({})", self.name_, args)
+            })
+            .collect()
+    }
+
     pub fn get_valid_args(&self) -> &Vec<Vec<FunctionParam>> {
         &self.valid_args
     }

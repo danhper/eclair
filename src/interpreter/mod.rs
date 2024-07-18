@@ -1,7 +1,5 @@
 mod assignment;
-mod block_functions;
 mod config;
-mod directive;
 mod env;
 mod function_definitions;
 mod functions;
@@ -13,7 +11,6 @@ mod utils;
 mod value;
 
 pub use config::Config;
-pub use directive::Directive;
 pub use env::Env;
 pub use interpreter::*;
 pub use types::{ContractInfo, Type};
