@@ -17,7 +17,9 @@ use super::{
         concat::{CONCAT_ARRAY, CONCAT_BYTES, CONCAT_STRING},
         format::{NON_NUM_FORMAT, NUM_FORMAT},
         iterable::{ITER_LENGTH, ITER_MAP},
+        misc::MAPPING_KEYS,
         numeric::{NUM_DIV, NUM_MUL},
+        receipt::TX_GET_RECEIPT,
     },
     functions::{Function, FunctionCall},
     types::{ContractInfo, HashableIndexMap, Receipt, Type},
@@ -450,6 +452,26 @@ impl Value {
                 "balance" => FunctionCall::method(&ADDRESS_BALANCE, self),
                 _ => bail!("{} does not have member {}", self.get_type(), member),
             },
+
+            Value::Transaction(_) => match member {
+                "getReceipt" => FunctionCall::method(&TX_GET_RECEIPT, self),
+                _ => bail!("{} does not have member {}", self.get_type(), member),
+            },
+
+            Value::Mapping(..) => match member {
+                "keys" => FunctionCall::method(&MAPPING_KEYS, self),
+                _ => bail!("{} does not have member {}", self.get_type(), member),
+            },
+
+            Value::NamedTuple(_, kv) => {
+                if let Some(v) = kv.0.get(member) {
+                    return Ok(v.clone());
+                } else {
+                    bail!("{} does not have member {}", self.get_type(), member)
+                }
+            }
+
+            Value::TransactionReceipt(r) => return r.get(member),
 
             Value::TypeObject(type_) => {
                 return type_.member_access(member);

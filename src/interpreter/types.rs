@@ -191,8 +191,8 @@ impl Display for Type {
             Type::Contract(ContractInfo(name, _)) => write!(f, "{}", name),
             Type::Function => write!(f, "function"),
 
-            Type::Transaction => write!(f, "transaction"),
-            Type::TransactionReceipt => write!(f, "transactionReceipt"),
+            Type::Transaction => write!(f, "Transaction"),
+            Type::TransactionReceipt => write!(f, "TransactionReceipt"),
 
             Type::Repl => write!(f, "repl"),
             Type::Block => write!(f, "block"),
@@ -364,6 +364,7 @@ impl Type {
             "uint256".to_string(),
             "bytes".to_string(),
             "string".to_string(),
+            "mapping".to_string(),
         ]
     }
 

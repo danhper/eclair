@@ -9,6 +9,7 @@ pub mod format;
 pub mod iterable;
 pub mod misc;
 pub mod numeric;
+pub mod receipt;
 pub mod repl;
 
 pub use types::FunctionDefinition;

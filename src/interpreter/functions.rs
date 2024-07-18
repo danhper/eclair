@@ -291,7 +291,6 @@ impl FunctionCall {
 pub enum Function {
     ContractCall(ContractCall),
     UserDefined(UserDefinedFunction),
-    FieldAccess(Box<Value>, String),
     Call(Box<FunctionCall>),
 }
 
@@ -327,7 +326,6 @@ impl Display for Function {
                 }
                 write!(f, "({}){}", arg_types.join(","), suffix)
             }
-            Function::FieldAccess(v, n) => write!(f, "{}.{}", v, n),
             Function::UserDefined(func) => {
                 let formatted_params = func
                     .params
@@ -352,15 +350,12 @@ impl Function {
     pub fn with_receiver(receiver: &Value, name: &str) -> Result<Self> {
         let func = match receiver {
             Value::Contract(c, addr) => c.create_call(name, *addr)?,
-            v @ Value::NamedTuple(..) => {
-                Function::FieldAccess(Box::new(v.clone()), name.to_string())
-            }
 
             Value::Func(Function::ContractCall(call)) => {
                 Function::ContractCall(call.clone().with_mode(ContractCallMode::try_from(name)?))
             }
 
-            _ => bail!("no method {} on {}", name, receiver),
+            _ => bail!("no method {} on type {}", name, receiver.get_type()),
         };
         Ok(func)
     }
@@ -371,7 +366,6 @@ impl Function {
                 self._execute_contract_interaction(call, args, env).await
             }
             Function::Call(call) => call.execute(env, args).await,
-            Function::FieldAccess(f, v) => f.get_field(v),
             Function::UserDefined(func) => {
                 if args.len() != func.params.len() {
                     bail!(
@@ -405,7 +399,6 @@ impl Function {
     pub fn is_property(&self) -> bool {
         match self {
             Function::ContractCall(_) => false,
-            Function::FieldAccess(_, _) => true,
             Function::UserDefined(_) => false,
             Function::Call(c) => c.def.is_property(),
         }

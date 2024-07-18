@@ -27,6 +27,19 @@ fn get_type<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Va
     .boxed()
 }
 
+fn mapping_keys<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        match args.first() {
+            Some(Value::Mapping(mapping, key_type, _)) => {
+                let keys = mapping.0.keys().cloned().collect();
+                Ok(Value::Array(keys, key_type.clone()))
+            }
+            _ => bail!("mapping_keys function expects a mapping as an argument"),
+        }
+    }
+    .boxed()
+}
+
 lazy_static! {
     pub static ref KECCAK256: FunctionDefinition = FunctionDefinition {
         name_: "keccak256".to_string(),
@@ -39,5 +52,11 @@ lazy_static! {
         property: false,
         valid_args: vec![vec![FunctionParam::new("value", Type::Any)]],
         execute_fn: get_type,
+    };
+    pub static ref MAPPING_KEYS: FunctionDefinition = FunctionDefinition {
+        name_: "keys".to_string(),
+        property: true,
+        valid_args: vec![vec![]],
+        execute_fn: mapping_keys,
     };
 }
