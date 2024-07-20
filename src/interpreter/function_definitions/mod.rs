@@ -3,6 +3,7 @@ mod types;
 pub mod abi;
 pub mod address;
 pub mod block;
+pub mod builtins;
 pub mod concat;
 pub mod console;
 pub mod format;

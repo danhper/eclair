@@ -139,6 +139,33 @@ impl Display for Receipt {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum NonParametricType {
+    Any,
+    Null,
+    Address,
+    Bool,
+    Int,
+    Uint,
+    FixBytes,
+    Bytes,
+    String,
+    Array,
+    FixedArray,
+    NamedTuple,
+    Tuple,
+    Mapping,
+    Contract,
+    Transaction,
+    TransactionReceipt,
+    Function,
+    Repl,
+    Block,
+    Console,
+    Abi,
+    Type,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Any,
     Null,
@@ -199,6 +226,36 @@ impl Display for Type {
             Type::Console => write!(f, "console"),
             Type::Abi => write!(f, "abi"),
             Type::Type(t) => write!(f, "type({})", t),
+        }
+    }
+}
+
+impl From<Type> for NonParametricType {
+    fn from(value: Type) -> Self {
+        match value {
+            Type::Any => NonParametricType::Any,
+            Type::Null => NonParametricType::Null,
+            Type::Address => NonParametricType::Address,
+            Type::Bool => NonParametricType::Bool,
+            Type::Int(_) => NonParametricType::Int,
+            Type::Uint(_) => NonParametricType::Uint,
+            Type::FixBytes(_) => NonParametricType::FixBytes,
+            Type::Bytes => NonParametricType::Bytes,
+            Type::String => NonParametricType::String,
+            Type::Array(_) => NonParametricType::Array,
+            Type::FixedArray(..) => NonParametricType::FixedArray,
+            Type::NamedTuple(..) => NonParametricType::NamedTuple,
+            Type::Tuple(_) => NonParametricType::Tuple,
+            Type::Mapping(..) => NonParametricType::Mapping,
+            Type::Contract(..) => NonParametricType::Contract,
+            Type::Function => NonParametricType::Function,
+            Type::Transaction => NonParametricType::Transaction,
+            Type::TransactionReceipt => NonParametricType::TransactionReceipt,
+            Type::Repl => NonParametricType::Repl,
+            Type::Block => NonParametricType::Block,
+            Type::Console => NonParametricType::Console,
+            Type::Abi => NonParametricType::Abi,
+            Type::Type(_) => NonParametricType::Type,
         }
     }
 }
