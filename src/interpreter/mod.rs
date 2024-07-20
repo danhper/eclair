@@ -1,7 +1,7 @@
 mod assignment;
+mod builtins;
 mod config;
 mod env;
-mod function_definitions;
 mod functions;
 #[allow(clippy::module_inception)]
 mod interpreter;

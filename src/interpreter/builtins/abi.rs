@@ -1,5 +1,5 @@
 use crate::interpreter::{
-    function_definitions::{FunctionDefinition, FunctionParam},
+    builtins::{FunctionDefinition, FunctionParam},
     ContractInfo, Env, Type, Value,
 };
 use alloy::dyn_abi::{DynSolType, DynSolValue, JsonAbiExt};
@@ -10,7 +10,7 @@ use lazy_static::lazy_static;
 fn abi_decode<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
         let (data, sol_type) = match args {
-            [Value::Bytes(data_), Value::Tuple(values)] => {
+            [_, Value::Bytes(data_), Value::Tuple(values)] => {
                 let types = values
                     .iter()
                     .map(|v| match v {
@@ -20,7 +20,7 @@ fn abi_decode<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<
                     .collect::<Result<Vec<_>>>()?;
                 (data_, DynSolType::Tuple(types))
             }
-            [Value::Bytes(data_), Value::TypeObject(ty)] => {
+            [_, Value::Bytes(data_), Value::TypeObject(ty)] => {
                 (data_, DynSolType::Tuple(vec![ty.clone().try_into()?]))
             }
             _ => bail!("abi.decode function expects bytes and tuple of types as argument"),
@@ -65,7 +65,7 @@ fn abi_decode_calldata<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a
 
 fn abi_encode<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
-        let arr = Value::Tuple(args.to_vec());
+        let arr = Value::Tuple(args[1..].to_vec());
         let dyn_sol = DynSolValue::try_from(&arr)?;
         let abi_encoded = dyn_sol.abi_encode();
         Ok(Value::Bytes(abi_encoded))
@@ -75,7 +75,7 @@ fn abi_encode<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<
 
 fn abi_encode_packed<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
-        let arr = Value::Tuple(args.to_vec());
+        let arr = Value::Tuple(args[1..].to_vec());
         let dyn_sol = DynSolValue::try_from(&arr)?;
         let abi_encoded = dyn_sol.abi_encode_packed();
         Ok(Value::Bytes(abi_encoded))

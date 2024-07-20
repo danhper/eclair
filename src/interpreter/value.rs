@@ -3,7 +3,7 @@ use alloy::{
     hex,
     primitives::{Address, B256, I256, U256},
 };
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use std::{
@@ -12,15 +12,7 @@ use std::{
 };
 
 use super::{
-    function_definitions::{
-        address::ADDRESS_BALANCE,
-        concat::{CONCAT_ARRAY, CONCAT_BYTES, CONCAT_STRING},
-        format::{NON_NUM_FORMAT, NUM_FORMAT},
-        iterable::{ITER_LENGTH, ITER_MAP},
-        misc::MAPPING_KEYS,
-        numeric::{NUM_DIV, NUM_MUL},
-        receipt::TX_GET_RECEIPT,
-    },
+    builtins::{INSTANCE_METHODS, STATIC_METHODS},
     functions::{Function, FunctionCall},
     types::{ContractInfo, HashableIndexMap, Receipt, Type},
 };
@@ -192,7 +184,7 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
                     HashableIndexMap(IndexMap::from_iter(vs)),
                 ))
             }
-            v => Err(anyhow::anyhow!("{:?} not supported", v)),
+            v => Err(anyhow!("{:?} not supported", v)),
         }
     }
 }
@@ -384,7 +376,7 @@ impl Value {
                 .0
                 .get(field)
                 .cloned()
-                .ok_or_else(|| anyhow::anyhow!("field {} not found", field)),
+                .ok_or(anyhow!("field {} not found", field)),
             _ => bail!("{} is not a struct", self.get_type()),
         }
     }
@@ -413,74 +405,27 @@ impl Value {
     }
 
     pub fn member_access(&self, member: &str) -> Result<Value> {
-        let f = match self {
-            Value::Array(..) => match member {
-                "concat" => FunctionCall::method(&CONCAT_ARRAY, self),
-                "map" => FunctionCall::method(&ITER_MAP, self),
-                "length" => FunctionCall::method(&ITER_LENGTH, self),
-                "format" => FunctionCall::method(&NON_NUM_FORMAT, self),
-                _ => bail!("no member {} for {}", member, self.get_type()),
-            },
-
-            Value::Str(_) => match member {
-                "concat" => FunctionCall::method(&CONCAT_STRING, self),
-                "length" => FunctionCall::method(&ITER_LENGTH, self),
-                "format" => FunctionCall::method(&NON_NUM_FORMAT, self),
-                _ => bail!("no member {} for {}", member, self.get_type()),
-            },
-
-            Value::FixBytes(..) => match member {
-                "format" => FunctionCall::method(&NON_NUM_FORMAT, self),
-                _ => bail!("no member {} for {}", member, self.get_type()),
-            },
-
-            Value::Bytes(_) => match member {
-                "concat" => FunctionCall::method(&CONCAT_BYTES, self),
-                "length" => FunctionCall::method(&ITER_LENGTH, self),
-                "format" => FunctionCall::method(&NON_NUM_FORMAT, self),
-                _ => bail!("no member {} for {}", member, self.get_type()),
-            },
-
-            Value::Int(_, _) | Value::Uint(_, _) => match member {
-                "format" => FunctionCall::method(&NUM_FORMAT, self),
-                "mul" => FunctionCall::method(&NUM_MUL, self),
-                "div" => FunctionCall::method(&NUM_DIV, self),
-                _ => bail!("{} does not have member {}", self.get_type(), member),
-            },
-
-            Value::Addr(_) => match member {
-                "balance" => FunctionCall::method(&ADDRESS_BALANCE, self),
-                _ => bail!("{} does not have member {}", self.get_type(), member),
-            },
-
-            Value::Transaction(_) => match member {
-                "getReceipt" => FunctionCall::method(&TX_GET_RECEIPT, self),
-                _ => bail!("{} does not have member {}", self.get_type(), member),
-            },
-
-            Value::Mapping(..) => match member {
-                "keys" => FunctionCall::method(&MAPPING_KEYS, self),
-                _ => bail!("{} does not have member {}", self.get_type(), member),
-            },
-
-            Value::NamedTuple(_, kv) => {
-                if let Some(v) = kv.0.get(member) {
-                    return Ok(v.clone());
-                } else {
-                    bail!("{} does not have member {}", self.get_type(), member)
-                }
+        match self {
+            Value::NamedTuple(_, kv) if kv.0.contains_key(member) => {
+                Ok(kv.0.get(member).unwrap().clone())
             }
-
-            Value::TransactionReceipt(r) => return r.get(member),
-
+            Value::TransactionReceipt(r) if r.contains_key(member) => r.get(member),
             Value::TypeObject(type_) => {
-                return type_.member_access(member);
+                let func = STATIC_METHODS
+                    .get(&type_.into())
+                    .and_then(|m| m.get(member))
+                    .ok_or(anyhow!("{} does not have static member {}", type_, member))?;
+                Ok(FunctionCall::method(func, self).into())
             }
-
-            _ => bail!("{} does not have member {}", self.get_type(), member),
-        };
-
-        Ok(Value::Func(Function::Call(Box::new(f))))
+            _ => {
+                let type_ = self.get_type();
+                let func = INSTANCE_METHODS
+                    .get(&(&type_).into())
+                    .and_then(|m| m.get(member))
+                    .ok_or(anyhow!("{} does not have static member {}", type_, member))?;
+                Ok(FunctionCall::method(func, self).into())
+            }
+        }
     }
 }
 

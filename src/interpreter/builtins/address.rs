@@ -3,7 +3,7 @@ use anyhow::Result;
 use futures::FutureExt;
 use lazy_static::lazy_static;
 
-use crate::interpreter::{function_definitions::FunctionDefinition, Env, Value};
+use crate::interpreter::{builtins::FunctionDefinition, Env, Value};
 
 fn balance<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {

@@ -16,7 +16,7 @@ use solang_parser::pt::{Expression, Identifier, Parameter, Statement};
 use crate::interpreter::utils::join_with_final;
 
 use super::{
-    evaluate_statement, function_definitions::FunctionDefinition, types::ContractInfo, Env,
+    evaluate_statement, builtins::FunctionDefinition, types::ContractInfo, Env,
     StatementResult, Type, Value,
 };
 
@@ -267,7 +267,7 @@ impl FunctionCall {
     fn _unify_types(
         &self,
         args: &[Value],
-        types: &[crate::interpreter::function_definitions::FunctionParam],
+        types: &[crate::interpreter::builtins::FunctionParam],
     ) -> Result<Vec<Value>> {
         let mut result = vec![];
         for (i, (arg, param)) in args.iter().zip(types).enumerate() {

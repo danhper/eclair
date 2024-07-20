@@ -3,7 +3,7 @@ use anyhow::{anyhow, Ok, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
-use crate::interpreter::{function_definitions::FunctionDefinition, Env, Value};
+use crate::interpreter::{builtins::FunctionDefinition, Env, Value};
 
 fn get_chain_id<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move { Ok(env.get_provider().get_chain_id().await?.into()) }.boxed()

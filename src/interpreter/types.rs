@@ -12,18 +12,8 @@ use itertools::Itertools;
 use solang_parser::pt as parser;
 
 use super::{
-    function_definitions::{
-        abi::{ABI_DECODE, ABI_DECODE_CALLDATA, ABI_ENCODE, ABI_ENCODE_PACKED},
-        block::{BLOCK_BASE_FEE, BLOCK_CHAIN_ID, BLOCK_NUMBER, BLOCK_TIMESTAMP},
-        console::CONSOLE_LOG,
-        numeric::{TYPE_MAX, TYPE_MIN},
-        repl::{
-            REPL_ACCOUNT, REPL_DEBUG, REPL_EXEC, REPL_FETCH_ABI, REPL_IS_CONNECTED,
-            REPL_LIST_LEDGER_WALLETS, REPL_LIST_TYPES, REPL_LIST_VARS, REPL_LOAD_ABI,
-            REPL_LOAD_LEDGER, REPL_LOAD_PRIVATE_KEY, REPL_RPC,
-        },
-    },
-    functions::{ContractCall, Function, FunctionCall},
+    builtins::{INSTANCE_METHODS, STATIC_METHODS},
+    functions::{ContractCall, Function},
     Value,
 };
 
@@ -99,6 +89,10 @@ impl Receipt {
         Ok(result)
     }
 
+    pub fn contains_key(&self, key: &str) -> bool {
+        Self::keys().contains(&key.to_string())
+    }
+
     pub fn keys() -> Vec<String> {
         let keys = [
             "tx_hash",
@@ -138,7 +132,7 @@ impl Display for Receipt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NonParametricType {
     Any,
     Null,
@@ -230,9 +224,9 @@ impl Display for Type {
     }
 }
 
-impl From<Type> for NonParametricType {
-    fn from(value: Type) -> Self {
-        match value {
+impl<T: AsRef<Type>> From<T> for NonParametricType {
+    fn from(value: T) -> Self {
+        match value.as_ref() {
             Type::Any => NonParametricType::Any,
             Type::Null => NonParametricType::Null,
             Type::Address => NonParametricType::Address,
@@ -257,6 +251,12 @@ impl From<Type> for NonParametricType {
             Type::Abi => NonParametricType::Abi,
             Type::Type(_) => NonParametricType::Type,
         }
+    }
+}
+
+impl AsRef<Type> for Type {
+    fn as_ref(&self) -> &Type {
+        self
     }
 }
 
@@ -489,55 +489,13 @@ impl Type {
                 abi.functions.keys().map(|s| s.to_string()).collect()
             }
             Type::NamedTuple(_, fields) => fields.0.keys().map(|s| s.to_string()).collect(),
-            Type::Uint(_) | Type::Int(_) => {
-                vec!["format".to_string(), "mul".to_string(), "div".to_string()]
-            }
-            Type::Transaction => vec!["getReceipt".to_string()],
             Type::TransactionReceipt => Receipt::keys(),
-            Type::Array(_) => vec![
-                "concat".to_string(),
-                "length".to_string(),
-                "map".to_string(),
-            ],
-            Type::String => vec!["concat".to_string(), "length".to_string()],
-
-            Type::Bytes => vec!["concat".to_string(), "length".to_string()],
-
-            Type::Mapping(_, _) => vec!["keys".to_string()],
-
-            Type::Type(t) => match *t.clone() {
-                Type::Contract(_) => vec!["decode".to_string()],
-                Type::Abi => vec![
-                    "encode".to_string(),
-                    "decode".to_string(),
-                    "encodePacked".to_string(),
-                ],
-                Type::Console => vec!["log".to_string()],
-                Type::Block => vec![
-                    "chainid".to_string(),
-                    "basefee".to_string(),
-                    "number".to_string(),
-                    "timestamp".to_string(),
-                ],
-                Type::Repl => vec![
-                    "vars".to_string(),
-                    "types".to_string(),
-                    "connected".to_string(),
-                    "rpc".to_string(),
-                    "debug".to_string(),
-                    "exec".to_string(),
-                    "loadAbi".to_string(),
-                    "fetchAbi".to_string(),
-                    "account".to_string(),
-                    "loadPrivateKey".to_string(),
-                    "listLedgerWallets".to_string(),
-                    "loadLedger".to_string(),
-                ],
-
-                Type::Uint(_) | Type::Int(_) => vec!["max".to_string(), "min".to_string()],
-                _ => vec![],
-            },
-            _ => vec![],
+            Type::Type(type_) => STATIC_METHODS
+                .get(&type_.into())
+                .map_or(vec![], |m| m.keys().cloned().collect()),
+            _ => INSTANCE_METHODS
+                .get(&self.into())
+                .map_or(vec![], |m| m.keys().cloned().collect()),
         }
     }
 
@@ -577,61 +535,6 @@ impl Type {
             }
             _ => bail!("cannot get min value for type {}", self),
         }
-    }
-
-    pub fn member_access(&self, member: &str) -> Result<Value> {
-        let type_value = Value::TypeObject(self.clone());
-        let f = match self {
-            Type::Int(_) | Type::Uint(_) => match member {
-                "max" => FunctionCall::method(&TYPE_MAX, &type_value),
-                "min" => FunctionCall::method(&TYPE_MIN, &type_value),
-                _ => bail!("{} does not have member {}", self, member),
-            },
-
-            Type::Contract(_) => match member {
-                "decode" => FunctionCall::method(&ABI_DECODE_CALLDATA, &type_value),
-                _ => bail!("{} does not have member {}", self, member),
-            },
-
-            Type::Abi => match member {
-                "encode" => FunctionCall::function(&ABI_ENCODE),
-                "encodePacked" => FunctionCall::function(&ABI_ENCODE_PACKED),
-                "decode" => FunctionCall::function(&ABI_DECODE),
-                _ => bail!("{} does not have member {}", self, member),
-            },
-
-            Type::Block => match member {
-                "chainid" => FunctionCall::function(&BLOCK_CHAIN_ID),
-                "basefee" => FunctionCall::function(&BLOCK_BASE_FEE),
-                "number" => FunctionCall::function(&BLOCK_NUMBER),
-                "timestamp" => FunctionCall::function(&BLOCK_TIMESTAMP),
-                _ => bail!("{} does not have member {}", self, member),
-            },
-
-            Type::Console => match member {
-                "log" => FunctionCall::function(&CONSOLE_LOG),
-                _ => bail!("{} does not have member {}", self, member),
-            },
-
-            Type::Repl => match member {
-                "vars" => FunctionCall::function(&REPL_LIST_VARS),
-                "types" => FunctionCall::function(&REPL_LIST_TYPES),
-                "connected" => FunctionCall::function(&REPL_IS_CONNECTED),
-                "rpc" => FunctionCall::function(&REPL_RPC),
-                "debug" => FunctionCall::function(&REPL_DEBUG),
-                "exec" => FunctionCall::function(&REPL_EXEC),
-                "loadAbi" => FunctionCall::function(&REPL_LOAD_ABI),
-                "fetchAbi" => FunctionCall::function(&REPL_FETCH_ABI),
-                "account" => FunctionCall::function(&REPL_ACCOUNT),
-                "loadPrivateKey" => FunctionCall::function(&REPL_LOAD_PRIVATE_KEY),
-                "listLedgerWallets" => FunctionCall::function(&REPL_LIST_LEDGER_WALLETS),
-                "loadLedger" => FunctionCall::function(&REPL_LOAD_LEDGER),
-                _ => bail!("{} does not have member {}", self, member),
-            },
-
-            _ => bail!("{} does not have member {}", self, member),
-        };
-        Ok(Value::Func(Function::Call(Box::new(f))))
     }
 }
 

@@ -4,7 +4,7 @@ use futures::FutureExt;
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    function_definitions::{FunctionDefinition, FunctionParam},
+    builtins::{FunctionDefinition, FunctionParam},
     Env, Type, Value,
 };
 

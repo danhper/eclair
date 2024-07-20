@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 
 use crate::{
     interpreter::{
-        function_definitions::{FunctionDefinition, FunctionParam},
+        builtins::{FunctionDefinition, FunctionParam},
         ContractInfo, Env, Type, Value,
     },
     loaders,
@@ -48,8 +48,8 @@ fn is_connected<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Resul
 fn rpc<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
         match args {
-            [] => Ok(Value::Str(env.get_rpc_url())),
-            [url] => {
+            [_] => Ok(Value::Str(env.get_rpc_url())),
+            [_, url] => {
                 env.set_provider_url(&url.as_string()?)?;
                 Ok(Value::Null)
             }
@@ -62,8 +62,8 @@ fn rpc<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> 
 fn debug<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
         match args {
-            [] => Ok(Value::Bool(env.is_debug())),
-            [Value::Bool(b)] => {
+            [_] => Ok(Value::Bool(env.is_debug())),
+            [_, Value::Bool(b)] => {
                 env.set_debug(*b);
                 Ok(Value::Null)
             }
@@ -76,7 +76,7 @@ fn debug<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>
 fn exec<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
         let cmd = args
-            .first()
+            .get(1)
             .ok_or(anyhow!("exec: missing command"))?
             .as_string()?;
 
@@ -92,8 +92,8 @@ fn exec<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>
 fn load_abi<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
         let (name, filepath, key) = match args {
-            [Value::Str(name), Value::Str(filepath)] => (name, filepath, None),
-            [Value::Str(name), Value::Str(filepath), Value::Str(key)] => {
+            [_, Value::Str(name), Value::Str(filepath)] => (name, filepath, None),
+            [_, Value::Str(name), Value::Str(filepath), Value::Str(key)] => {
                 (name, filepath, Some(key.as_str()))
             }
             _ => bail!("loadAbi: invalid arguments"),
@@ -109,7 +109,7 @@ fn load_abi<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Val
 fn fetch_abi<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
         match args {
-            [Value::Str(name), Value::Addr(address)] => {
+            [_, Value::Str(name), Value::Addr(address)] => {
                 let chain_id = env.get_chain_id().await?;
                 let etherscan_config = env.config.get_etherscan_config(chain_id)?;
                 let abi =
@@ -141,8 +141,8 @@ fn get_default_sender(env: &Env) -> Value {
 fn load_private_key<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
         let key = match args {
-            [Value::Str(key)] => key.clone(),
-            [] => rpassword::prompt_password("Enter private key: ")?,
+            [_, Value::Str(key)] => key.clone(),
+            [_] => rpassword::prompt_password("Enter private key: ")?,
             _ => bail!("loadPrivateKey: invalid arguments"),
         };
         env.set_private_key(key.as_str())?;
@@ -154,8 +154,8 @@ fn load_private_key<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Re
 fn list_ledgers<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
         let count = match args {
-            [] => 5,
-            [value] => value.as_usize()?,
+            [_] => 5,
+            [_, value] => value.as_usize()?,
             _ => bail!("listLedgerWallets: invalid arguments"),
         };
         let wallets = env.list_ledger_wallets(count).await?;
@@ -170,8 +170,8 @@ fn list_ledgers<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result
 fn load_ledger<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
         let index = match args {
-            [] => 0,
-            [value] => value.as_usize()?,
+            [_] => 0,
+            [_, value] => value.as_usize()?,
             _ => bail!("loadLedger: invalid arguments"),
         };
         env.load_ledger(index).await?;
