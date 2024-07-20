@@ -12,8 +12,8 @@ use std::{
 };
 
 use super::{
-    builtins::{INSTANCE_METHODS, STATIC_METHODS},
-    functions::{Function, FunctionCall},
+    builtins::{INSTANCE_METHODS, STATIC_METHODS, TYPE_METHODS},
+    functions::{ContractCallMode, Function, FunctionCall},
     types::{ContractInfo, HashableIndexMap, Receipt, Type},
 };
 
@@ -240,6 +240,33 @@ where
     }
 }
 
+impl<T: Into<Value>> From<(T,)> for Value
+where
+    T: Into<Value>,
+{
+    fn from(t: (T,)) -> Self {
+        Value::Tuple(vec![t.0.into()])
+    }
+}
+
+impl<T: Into<Value>, U: Into<Value>> From<(T, U)> for Value
+where
+    T: Into<Value>,
+{
+    fn from(t: (T, U)) -> Self {
+        Value::Tuple(vec![t.0.into(), t.1.into()])
+    }
+}
+
+impl<T: Into<Value>, U: Into<Value>, V: Into<Value>> From<(T, U, V)> for Value
+where
+    T: Into<Value>,
+{
+    fn from(t: (T, U, V)) -> Self {
+        Value::Tuple(vec![t.0.into(), t.1.into(), t.2.into()])
+    }
+}
+
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
@@ -410,19 +437,27 @@ impl Value {
                 Ok(kv.0.get(member).unwrap().clone())
             }
             Value::TransactionReceipt(r) if r.contains_key(member) => r.get(member),
-            Value::TypeObject(type_) => {
-                let func = STATIC_METHODS
-                    .get(&type_.into())
-                    .and_then(|m| m.get(member))
-                    .ok_or(anyhow!("{} does not have static member {}", type_, member))?;
-                Ok(FunctionCall::method(func, self).into())
-            }
+            Value::Contract(c, addr) => c.create_call(member, *addr).map(Value::Func),
+
+            Value::Func(Function::ContractCall(call)) => Ok(Value::Func(Function::ContractCall(
+                call.clone().with_mode(ContractCallMode::try_from(member)?),
+            ))),
             _ => {
-                let type_ = self.get_type();
-                let func = INSTANCE_METHODS
-                    .get(&(&type_).into())
-                    .and_then(|m| m.get(member))
-                    .ok_or(anyhow!("{} does not have static member {}", type_, member))?;
+                let (type_, methods) = match self {
+                    Value::TypeObject(Type::Type(type_)) => {
+                        (type_.as_ref().clone(), TYPE_METHODS.get(&type_.into()))
+                    }
+                    Value::TypeObject(type_) => (type_.clone(), STATIC_METHODS.get(&type_.into())),
+                    _ => (
+                        self.get_type(),
+                        INSTANCE_METHODS.get(&(&self.get_type()).into()),
+                    ),
+                };
+                let func = methods.and_then(|m| m.get(member)).ok_or(anyhow!(
+                    "{} does not have member {}",
+                    type_,
+                    member
+                ))?;
                 Ok(FunctionCall::method(func, self).into())
             }
         }

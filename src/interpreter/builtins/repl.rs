@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 
 use crate::{
     interpreter::{
-        builtins::{FunctionDefinition, FunctionParam},
+        builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
         ContractInfo, Env, Type, Value,
     },
     loaders,
@@ -181,89 +181,57 @@ fn load_ledger<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<
 }
 
 lazy_static! {
-    pub static ref REPL_LIST_VARS: FunctionDefinition = FunctionDefinition {
-        name_: "vars".to_string(),
-        property: true,
-        valid_args: vec![vec![]],
-        execute_fn: list_vars,
-    };
-    pub static ref REPL_LIST_TYPES: FunctionDefinition = FunctionDefinition {
-        name_: "types".to_string(),
-        property: true,
-        valid_args: vec![vec![]],
-        execute_fn: list_types,
-    };
-    pub static ref REPL_IS_CONNECTED: FunctionDefinition = FunctionDefinition {
-        name_: "connected".to_string(),
-        property: true,
-        valid_args: vec![vec![]],
-        execute_fn: is_connected,
-    };
-    pub static ref REPL_RPC: FunctionDefinition = FunctionDefinition {
-        name_: "rpc".to_string(),
-        property: false,
-        valid_args: vec![vec![], vec![FunctionParam::new("url", Type::String)]],
-        execute_fn: rpc,
-    };
-    pub static ref REPL_DEBUG: FunctionDefinition = FunctionDefinition {
-        name_: "debug".to_string(),
-        property: false,
-        valid_args: vec![vec![], vec![FunctionParam::new("debug", Type::Bool)]],
-        execute_fn: debug,
-    };
-    pub static ref REPL_EXEC: FunctionDefinition = FunctionDefinition {
-        name_: "exec".to_string(),
-        property: false,
-        valid_args: vec![vec![FunctionParam::new("command", Type::String)]],
-        execute_fn: exec,
-    };
-    pub static ref REPL_LOAD_ABI: FunctionDefinition = FunctionDefinition {
-        name_: "loadAbi".to_string(),
-        property: false,
-        valid_args: vec![
-            vec![
+    pub static ref REPL_LIST_VARS: FunctionDefinition =
+        FunctionDefinitionBuilder::property("vars", list_vars).build();
+    pub static ref REPL_LIST_TYPES: FunctionDefinition =
+        FunctionDefinitionBuilder::property("types", list_types).build();
+    pub static ref REPL_IS_CONNECTED: FunctionDefinition =
+        FunctionDefinitionBuilder::property("connected", is_connected).build();
+    pub static ref REPL_RPC: FunctionDefinition = FunctionDefinitionBuilder::new("rpc", rpc)
+        .add_valid_args(&[])
+        .add_valid_args(&[FunctionParam::new("url", Type::String)])
+        .build();
+    pub static ref REPL_DEBUG: FunctionDefinition = FunctionDefinitionBuilder::new("debug", debug)
+        .add_valid_args(&[])
+        .add_valid_args(&[FunctionParam::new("debug", Type::Bool)])
+        .build();
+    pub static ref REPL_EXEC: FunctionDefinition = FunctionDefinitionBuilder::new("exec", exec)
+        .add_valid_args(&[FunctionParam::new("command", Type::String)])
+        .build();
+    pub static ref REPL_LOAD_ABI: FunctionDefinition =
+        FunctionDefinitionBuilder::new("loadAbi", load_abi)
+            .add_valid_args(&[
                 FunctionParam::new("name", Type::String),
                 FunctionParam::new("filepath", Type::String)
-            ],
-            vec![
+            ])
+            .add_valid_args(&[
                 FunctionParam::new("name", Type::String),
                 FunctionParam::new("filepath", Type::String),
                 FunctionParam::new("jsonKey", Type::String)
-            ]
-        ],
-        execute_fn: load_abi,
-    };
-    pub static ref REPL_FETCH_ABI: FunctionDefinition = FunctionDefinition {
-        name_: "fetchAbi".to_string(),
-        property: false,
-        valid_args: vec![vec![
-            FunctionParam::new("name", Type::String),
-            FunctionParam::new("address", Type::Address)
-        ]],
-        execute_fn: fetch_abi,
-    };
-    pub static ref REPL_ACCOUNT: FunctionDefinition = FunctionDefinition {
-        name_: "account".to_string(),
-        property: true,
-        valid_args: vec![vec![]],
-        execute_fn: get_account,
-    };
-    pub static ref REPL_LOAD_PRIVATE_KEY: FunctionDefinition = FunctionDefinition {
-        name_: "loadPrivateKey".to_string(),
-        property: false,
-        valid_args: vec![vec![], vec![FunctionParam::new("privateKey", Type::String)]],
-        execute_fn: load_private_key,
-    };
-    pub static ref REPL_LIST_LEDGER_WALLETS: FunctionDefinition = FunctionDefinition {
-        name_: "listLedgerWallets".to_string(),
-        property: false,
-        valid_args: vec![vec![], vec![FunctionParam::new("count", Type::Uint(256))]],
-        execute_fn: list_ledgers,
-    };
-    pub static ref REPL_LOAD_LEDGER: FunctionDefinition = FunctionDefinition {
-        name_: "loadLedger".to_string(),
-        property: false,
-        valid_args: vec![vec![], vec![FunctionParam::new("index", Type::Uint(256))]],
-        execute_fn: load_ledger,
-    };
+            ])
+            .build();
+    pub static ref REPL_FETCH_ABI: FunctionDefinition =
+        FunctionDefinitionBuilder::new("fetchAbi", fetch_abi)
+            .add_valid_args(&[
+                FunctionParam::new("name", Type::String),
+                FunctionParam::new("address", Type::Address)
+            ])
+            .build();
+    pub static ref REPL_ACCOUNT: FunctionDefinition =
+        FunctionDefinitionBuilder::property("account", get_account).build();
+    pub static ref REPL_LOAD_PRIVATE_KEY: FunctionDefinition =
+        FunctionDefinitionBuilder::new("loadPrivateKey", load_private_key)
+            .add_valid_args(&[])
+            .add_valid_args(&[FunctionParam::new("privateKey", Type::String)])
+            .build();
+    pub static ref REPL_LIST_LEDGER_WALLETS: FunctionDefinition =
+        FunctionDefinitionBuilder::new("listLedgerWallets", list_ledgers)
+            .add_valid_args(&[])
+            .add_valid_args(&[FunctionParam::new("count", Type::Uint(256))])
+            .build();
+    pub static ref REPL_LOAD_LEDGER: FunctionDefinition =
+        FunctionDefinitionBuilder::new("loadLedger", load_ledger)
+            .add_valid_args(&[])
+            .add_valid_args(&[FunctionParam::new("index", Type::Uint(256))])
+            .build();
 }

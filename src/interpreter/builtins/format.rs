@@ -7,7 +7,7 @@ use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{FunctionDefinition, FunctionParam},
+    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
     Env, Type, Value,
 };
 
@@ -96,42 +96,32 @@ fn async_format<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Resul
 }
 
 lazy_static! {
-    pub static ref NUM_FORMAT: FunctionDefinition = FunctionDefinition {
-        name_: "format".to_string(),
-        property: false,
-        valid_args: vec![
-            vec![],
-            vec![FunctionParam::new("decimals", Type::Uint(8))],
-            vec![
+    pub static ref NUM_FORMAT: FunctionDefinition =
+        FunctionDefinitionBuilder::new("format", async_format)
+            .add_valid_args(&[])
+            .add_valid_args(&[FunctionParam::new("decimals", Type::Uint(8))])
+            .add_valid_args(&[
                 FunctionParam::new("decimals", Type::Uint(8)),
                 FunctionParam::new("precision", Type::Uint(8))
-            ]
-        ],
-        execute_fn: async_format,
-    };
-    pub static ref NON_NUM_FORMAT: FunctionDefinition = FunctionDefinition {
-        name_: "format".to_string(),
-        property: false,
-        valid_args: vec![vec![]],
-        execute_fn: async_format,
-    };
-    pub static ref FORMAT_FUNCTION: FunctionDefinition = FunctionDefinition {
-        name_: "format".to_string(),
-        property: false,
-        valid_args: vec![
-            vec![FunctionParam::new("value", Type::Any)],
-            vec![
+            ])
+            .build();
+    pub static ref NON_NUM_FORMAT: FunctionDefinition =
+        FunctionDefinitionBuilder::new("format", async_format)
+            .add_valid_args(&[])
+            .build();
+    pub static ref FORMAT_FUNCTION: FunctionDefinition =
+        FunctionDefinitionBuilder::new("format", async_format)
+            .add_valid_args(&[FunctionParam::new("value", Type::Any)])
+            .add_valid_args(&[
                 FunctionParam::new("value", Type::Any),
                 FunctionParam::new("decimals", Type::Uint(8))
-            ],
-            vec![
+            ])
+            .add_valid_args(&[
                 FunctionParam::new("value", Type::Any),
                 FunctionParam::new("decimals", Type::Uint(8)),
                 FunctionParam::new("precision", Type::Uint(8))
-            ]
-        ],
-        execute_fn: async_format,
-    };
+            ])
+            .build();
 }
 
 #[cfg(test)]

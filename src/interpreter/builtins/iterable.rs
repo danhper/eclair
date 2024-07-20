@@ -3,7 +3,7 @@ use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{FunctionDefinition, FunctionParam},
+    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
     Env, Type, Value,
 };
 
@@ -40,16 +40,9 @@ fn length<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Valu
 }
 
 lazy_static! {
-    pub static ref ITER_MAP: FunctionDefinition = FunctionDefinition {
-        name_: "map".to_string(),
-        property: false,
-        valid_args: vec![vec![FunctionParam::new("f", Type::Function)]],
-        execute_fn: map,
-    };
-    pub static ref ITER_LENGTH: FunctionDefinition = FunctionDefinition {
-        name_: "length".to_string(),
-        property: true,
-        valid_args: vec![vec![]],
-        execute_fn: length,
-    };
+    pub static ref ITER_MAP: FunctionDefinition = FunctionDefinitionBuilder::new("map", map)
+        .add_valid_args(&[FunctionParam::new("f", Type::Function)])
+        .build();
+    pub static ref ITER_LENGTH: FunctionDefinition =
+        FunctionDefinitionBuilder::property("length", length).build();
 }

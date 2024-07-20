@@ -4,7 +4,7 @@ use futures::FutureExt;
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{FunctionDefinition, FunctionParam},
+    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
     Env, Type, Value,
 };
 
@@ -41,40 +41,22 @@ fn type_max<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Va
 }
 
 lazy_static! {
-    pub static ref NUM_MUL: FunctionDefinition = FunctionDefinition {
-        name_: "mul".to_string(),
-        property: false,
-        valid_args: vec![
-            vec![FunctionParam::new("factor", Type::Uint(256))],
-            vec![
-                FunctionParam::new("factor", Type::Uint(256)),
-                FunctionParam::new("decimals", Type::Uint(8))
-            ],
-        ],
-        execute_fn: mul,
-    };
-    pub static ref NUM_DIV: FunctionDefinition = FunctionDefinition {
-        name_: "div".to_string(),
-        property: false,
-        valid_args: vec![
-            vec![FunctionParam::new("factor", Type::Uint(256))],
-            vec![
-                FunctionParam::new("factor", Type::Uint(256)),
-                FunctionParam::new("decimals", Type::Uint(8))
-            ],
-        ],
-        execute_fn: div,
-    };
-    pub static ref TYPE_MAX: FunctionDefinition = FunctionDefinition {
-        name_: "max".to_string(),
-        property: true,
-        valid_args: vec![vec![],],
-        execute_fn: type_max,
-    };
-    pub static ref TYPE_MIN: FunctionDefinition = FunctionDefinition {
-        name_: "min".to_string(),
-        property: true,
-        valid_args: vec![vec![],],
-        execute_fn: type_min,
-    };
+    pub static ref NUM_MUL: FunctionDefinition = FunctionDefinitionBuilder::new("mul", mul)
+        .add_valid_args(&[FunctionParam::new("factor", Type::Uint(256))])
+        .add_valid_args(&[
+            FunctionParam::new("factor", Type::Uint(256)),
+            FunctionParam::new("decimals", Type::Uint(8))
+        ])
+        .build();
+    pub static ref NUM_DIV: FunctionDefinition = FunctionDefinitionBuilder::new("div", div)
+        .add_valid_args(&[FunctionParam::new("divisor", Type::Uint(256))])
+        .add_valid_args(&[
+            FunctionParam::new("divisor", Type::Uint(256)),
+            FunctionParam::new("decimals", Type::Uint(8))
+        ])
+        .build();
+    pub static ref TYPE_MAX: FunctionDefinition =
+        FunctionDefinitionBuilder::property("max", type_max).build();
+    pub static ref TYPE_MIN: FunctionDefinition =
+        FunctionDefinitionBuilder::property("min", type_min).build();
 }

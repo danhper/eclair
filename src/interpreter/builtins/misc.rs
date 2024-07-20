@@ -3,7 +3,7 @@ use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{FunctionDefinition, FunctionParam},
+    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
     Env, Type, Value,
 };
 
@@ -41,22 +41,13 @@ fn mapping_keys<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Resul
 }
 
 lazy_static! {
-    pub static ref KECCAK256: FunctionDefinition = FunctionDefinition {
-        name_: "keccak256".to_string(),
-        property: false,
-        valid_args: vec![vec![FunctionParam::new("data", Type::Bytes)]],
-        execute_fn: keccak256,
-    };
-    pub static ref GET_TYPE: FunctionDefinition = FunctionDefinition {
-        name_: "get_type".to_string(),
-        property: false,
-        valid_args: vec![vec![FunctionParam::new("value", Type::Any)]],
-        execute_fn: get_type,
-    };
-    pub static ref MAPPING_KEYS: FunctionDefinition = FunctionDefinition {
-        name_: "keys".to_string(),
-        property: true,
-        valid_args: vec![vec![]],
-        execute_fn: mapping_keys,
-    };
+    pub static ref KECCAK256: FunctionDefinition =
+        FunctionDefinitionBuilder::new("keccak256", keccak256)
+            .add_valid_args(&[FunctionParam::new("data", Type::Bytes)])
+            .build();
+    pub static ref GET_TYPE: FunctionDefinition = FunctionDefinitionBuilder::new("type", get_type)
+        .add_valid_args(&[FunctionParam::new("value", Type::Any)])
+        .build();
+    pub static ref MAPPING_KEYS: FunctionDefinition =
+        FunctionDefinitionBuilder::property("keys", mapping_keys).build();
 }

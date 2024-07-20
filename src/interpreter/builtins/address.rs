@@ -3,7 +3,10 @@ use anyhow::Result;
 use futures::FutureExt;
 use lazy_static::lazy_static;
 
-use crate::interpreter::{builtins::FunctionDefinition, Env, Value};
+use crate::interpreter::{
+    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition},
+    Env, Value,
+};
 
 fn balance<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
@@ -18,10 +21,6 @@ fn balance<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Valu
 }
 
 lazy_static! {
-    pub static ref ADDRESS_BALANCE: FunctionDefinition = FunctionDefinition {
-        name_: "balance".to_string(),
-        property: true,
-        valid_args: vec![vec![]],
-        execute_fn: balance,
-    };
+    pub static ref ADDRESS_BALANCE: FunctionDefinition =
+        FunctionDefinitionBuilder::property("balance", balance).build();
 }

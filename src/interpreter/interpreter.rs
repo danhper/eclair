@@ -428,16 +428,15 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
 
             Expression::MemberAccess(_, receiver_expr, method) => {
                 let receiver = evaluate_expression(env, receiver_expr).await?;
-                let function = match receiver.member_access(&method.name) {
-                    Result::Ok(Value::Func(f)) => f,
-                    Result::Ok(value) => return Ok(value),
-                    Err(_) => Function::with_receiver(&receiver, &method.name)?,
-                };
-
-                if function.is_property() {
-                    Ok(function.execute(&[], env).await?)
+                let value = receiver.member_access(&method.name)?;
+                if let Value::Func(f) = value {
+                    if f.is_property() {
+                        f.execute(&[], env).await
+                    } else {
+                        Ok(Value::Func(f))
+                    }
                 } else {
-                    Ok(Value::Func(function))
+                    Ok(value)
                 }
             }
 

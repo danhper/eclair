@@ -1,5 +1,5 @@
 use crate::interpreter::{
-    builtins::{FunctionDefinition, FunctionParam},
+    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
     ContractInfo, Env, Type, Value,
 };
 use alloy::dyn_abi::{DynSolType, DynSolValue, JsonAbiExt};
@@ -84,28 +84,14 @@ fn abi_encode_packed<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, 
 }
 
 lazy_static! {
-    pub static ref ABI_ENCODE: FunctionDefinition = FunctionDefinition {
-        name_: "encode".to_string(),
-        property: false,
-        valid_args: vec![],
-        execute_fn: abi_encode,
-    };
-    pub static ref ABI_ENCODE_PACKED: FunctionDefinition = FunctionDefinition {
-        name_: "encodePacked".to_string(),
-        property: false,
-        valid_args: vec![],
-        execute_fn: abi_encode_packed,
-    };
-    pub static ref ABI_DECODE: FunctionDefinition = FunctionDefinition {
-        name_: "decode".to_string(),
-        property: false,
-        valid_args: vec![],
-        execute_fn: abi_decode,
-    };
-    pub static ref ABI_DECODE_CALLDATA: FunctionDefinition = FunctionDefinition {
-        name_: "decode".to_string(),
-        property: false,
-        valid_args: vec![vec![FunctionParam::new("calldata", Type::Bytes)]],
-        execute_fn: abi_decode_calldata,
-    };
+    pub static ref ABI_ENCODE: FunctionDefinition =
+        FunctionDefinitionBuilder::new("encode", abi_encode).build();
+    pub static ref ABI_ENCODE_PACKED: FunctionDefinition =
+        FunctionDefinitionBuilder::new("encodePacked", abi_encode_packed).build();
+    pub static ref ABI_DECODE: FunctionDefinition =
+        FunctionDefinitionBuilder::new("decode", abi_decode).build();
+    pub static ref ABI_DECODE_CALLDATA: FunctionDefinition =
+        FunctionDefinitionBuilder::new("decode", abi_decode_calldata)
+            .add_valid_args(&[FunctionParam::new("calldata", Type::Bytes)])
+            .build();
 }

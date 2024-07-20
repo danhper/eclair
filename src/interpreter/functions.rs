@@ -16,8 +16,8 @@ use solang_parser::pt::{Expression, Identifier, Parameter, Statement};
 use crate::interpreter::utils::join_with_final;
 
 use super::{
-    evaluate_statement, builtins::FunctionDefinition, types::ContractInfo, Env,
-    StatementResult, Type, Value,
+    builtins::FunctionDefinition, evaluate_statement, types::ContractInfo, Env, StatementResult,
+    Type, Value,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -345,19 +345,6 @@ impl Function {
             Function::ContractCall(call) => Function::ContractCall(call.with_options(opts)),
             v => v,
         }
-    }
-
-    pub fn with_receiver(receiver: &Value, name: &str) -> Result<Self> {
-        let func = match receiver {
-            Value::Contract(c, addr) => c.create_call(name, *addr)?,
-
-            Value::Func(Function::ContractCall(call)) => {
-                Function::ContractCall(call.clone().with_mode(ContractCallMode::try_from(name)?))
-            }
-
-            _ => bail!("no method {} on type {}", name, receiver.get_type()),
-        };
-        Ok(func)
     }
 
     pub async fn execute_in_current_scope(&self, args: &[Value], env: &mut Env) -> Result<Value> {

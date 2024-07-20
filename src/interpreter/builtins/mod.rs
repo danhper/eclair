@@ -79,7 +79,7 @@ lazy_static! {
         num_methods.insert("mul".to_string(), numeric::NUM_MUL.clone());
         num_methods.insert("div".to_string(), numeric::NUM_DIV.clone());
         for types in [NonParametricType::Int, NonParametricType::Uint] {
-            m.insert(types.clone(), num_methods.clone());
+            m.insert(types, num_methods.clone());
         }
 
         let mut addr_methods = HashMap::new();
@@ -101,13 +101,6 @@ lazy_static! {
     };
     pub static ref STATIC_METHODS: HashMap<NonParametricType, HashMap<String, FunctionDefinition>> = {
         let mut m = HashMap::new();
-
-        let mut num_methods = HashMap::new();
-        num_methods.insert("max".to_string(), numeric::TYPE_MAX.clone());
-        num_methods.insert("min".to_string(), numeric::TYPE_MIN.clone());
-        for type_ in [NonParametricType::Int, NonParametricType::Uint] {
-            m.insert(type_.clone(), num_methods.clone());
-        }
 
         let mut contract_methods = HashMap::new();
         contract_methods.insert("decode".to_string(), abi::ABI_DECODE_CALLDATA.clone());
@@ -151,6 +144,16 @@ lazy_static! {
         repl_methods.insert("loadLedger".to_string(), repl::REPL_LOAD_LEDGER.clone());
         m.insert(NonParametricType::Repl, repl_methods);
 
+        m
+    };
+    pub static ref TYPE_METHODS: HashMap<NonParametricType, HashMap<String, FunctionDefinition>> = {
+        let mut m = HashMap::new();
+        let mut num_methods = HashMap::new();
+        num_methods.insert("max".to_string(), numeric::TYPE_MAX.clone());
+        num_methods.insert("min".to_string(), numeric::TYPE_MIN.clone());
+        for type_ in [NonParametricType::Int, NonParametricType::Uint] {
+            m.insert(type_, num_methods.clone());
+        }
         m
     };
 }

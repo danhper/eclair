@@ -3,7 +3,10 @@ use anyhow::Result;
 use futures::FutureExt;
 use lazy_static::lazy_static;
 
-use crate::interpreter::{builtins::FunctionDefinition, Env, Value};
+use crate::interpreter::{
+    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition},
+    Env, Value,
+};
 
 fn log<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
     async move {
@@ -14,10 +17,6 @@ fn log<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>>
 }
 
 lazy_static! {
-    pub static ref CONSOLE_LOG: FunctionDefinition = FunctionDefinition {
-        name_: "log".to_string(),
-        property: false,
-        valid_args: vec![],
-        execute_fn: log,
-    };
+    pub static ref CONSOLE_LOG: FunctionDefinition =
+        FunctionDefinitionBuilder::new("log", log).build();
 }

@@ -3,7 +3,7 @@ use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use super::{FunctionDefinition, FunctionParam};
-use crate::interpreter::{Env, Type, Value};
+use crate::interpreter::{builtins::types::FunctionDefinitionBuilder, Env, Type, Value};
 
 fn concat_strings(string: String, args: &[Value]) -> Result<String> {
     if let Some(Value::Str(s)) = args.first() {
@@ -49,25 +49,19 @@ fn concat_async<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Resul
 }
 
 lazy_static! {
-    pub static ref CONCAT_STRING: FunctionDefinition = FunctionDefinition {
-        name_: "concat".to_string(),
-        property: false,
-        valid_args: vec![vec![FunctionParam::new("other", Type::String)]],
-        execute_fn: concat_async,
-    };
-    pub static ref CONCAT_BYTES: FunctionDefinition = FunctionDefinition {
-        name_: "concat".to_string(),
-        property: false,
-        valid_args: vec![vec![FunctionParam::new("other", Type::Bytes)]],
-        execute_fn: concat_async,
-    };
-    pub static ref CONCAT_ARRAY: FunctionDefinition = FunctionDefinition {
-        name_: "concat".to_string(),
-        property: false,
-        valid_args: vec![vec![FunctionParam::new(
-            "other",
-            Type::Array(Box::new(Type::Any))
-        )]],
-        execute_fn: concat_async,
-    };
+    pub static ref CONCAT_STRING: FunctionDefinition =
+        FunctionDefinitionBuilder::new("concat", concat_async)
+            .add_valid_args(&[FunctionParam::new("other", Type::String)])
+            .build();
+    pub static ref CONCAT_BYTES: FunctionDefinition =
+        FunctionDefinitionBuilder::new("concat", concat_async)
+            .add_valid_args(&[FunctionParam::new("other", Type::Bytes)])
+            .build();
+    pub static ref CONCAT_ARRAY: FunctionDefinition =
+        FunctionDefinitionBuilder::new("concat", concat_async)
+            .add_valid_args(&[FunctionParam::new(
+                "other",
+                Type::Array(Box::new(Type::Any))
+            )])
+            .build();
 }

@@ -4,7 +4,7 @@ use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{FunctionDefinition, FunctionParam},
+    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
     Env, Type, Value,
 };
 
@@ -31,10 +31,9 @@ fn wait_for_receipt<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Re
 }
 
 lazy_static! {
-    pub static ref TX_GET_RECEIPT: FunctionDefinition = FunctionDefinition {
-        name_: "getReceipt".to_string(),
-        property: false,
-        valid_args: vec![vec![], vec![FunctionParam::new("timeout", Type::Uint(256))]],
-        execute_fn: wait_for_receipt,
-    };
+    pub static ref TX_GET_RECEIPT: FunctionDefinition =
+        FunctionDefinitionBuilder::new("getReceipt", wait_for_receipt)
+            .add_valid_args(&[])
+            .add_valid_args(&[FunctionParam::new("timeout", Type::Uint(256))])
+            .build();
 }

@@ -114,3 +114,44 @@ impl FunctionDefinition {
         (self.execute_fn)(env, args)
     }
 }
+
+pub struct FunctionDefinitionBuilder {
+    name: String,
+    property: bool,
+    valid_args: Vec<Vec<FunctionParam>>,
+    execute_fn: Executor,
+}
+
+impl FunctionDefinitionBuilder {
+    pub fn new(name: &str, execute_fn: Executor) -> Self {
+        Self {
+            name: name.to_string(),
+            property: false,
+            valid_args: vec![],
+            execute_fn,
+        }
+    }
+
+    pub fn property(name: &str, execute_fn: Executor) -> Self {
+        Self {
+            name: name.to_string(),
+            property: true,
+            valid_args: vec![vec![]],
+            execute_fn,
+        }
+    }
+
+    pub fn add_valid_args(mut self, valid_args: &[FunctionParam]) -> Self {
+        self.valid_args.push(valid_args.to_vec());
+        self
+    }
+
+    pub fn build(self) -> FunctionDefinition {
+        FunctionDefinition {
+            name_: self.name,
+            property: self.property,
+            valid_args: self.valid_args,
+            execute_fn: self.execute_fn,
+        }
+    }
+}

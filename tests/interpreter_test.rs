@@ -42,6 +42,35 @@ async fn test_builtin_format() {
 }
 
 #[tokio::test]
+async fn test_abi_encode_decode() {
+    let mut env = _create_env();
+
+    _check_result(
+        &mut env,
+        "abi.decode(abi.encode(1), (uint256))",
+        Value::from((1u64,)),
+    )
+    .await;
+
+    _check_result(
+        &mut env,
+        "abi.decode(abi.encode(1, \"foo\"), (int256, string))",
+        Value::from((1, "foo")),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_type_max_min() {
+    let mut env = _create_env();
+    _check_result(&mut env, "type(uint8).max", Value::from(u8::MAX as u64)).await;
+    _check_result(&mut env, "type(uint64).max", Value::from(u64::MAX)).await;
+    _check_result(&mut env, "type(uint256).min", Value::from(0u64)).await;
+    _check_result(&mut env, "type(int16).max", Value::from(i16::MAX as i32)).await;
+    _check_result(&mut env, "type(int8).min", Value::from(-128)).await;
+}
+
+#[tokio::test]
 async fn test_defined_functions() {
     let mut env = _create_env();
 
