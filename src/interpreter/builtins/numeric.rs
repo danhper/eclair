@@ -4,7 +4,7 @@ use futures::FutureExt;
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
+    functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
     Env, Type, Value,
 };
 
@@ -16,7 +16,11 @@ fn mul_div_args(args: &[Value]) -> Result<(Value, u64)> {
     }
 }
 
-fn mul<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn mul<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let (value, decimals) = mul_div_args(&args[1..])?;
         (args[0].clone() * value.clone())? / Value::decimal_multiplier(decimals as u8)
@@ -24,7 +28,11 @@ fn mul<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>>
     .boxed()
 }
 
-fn div<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn div<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let (value, decimals) = mul_div_args(&args[1..])?;
         (args[0].clone() * Value::decimal_multiplier(decimals as u8))? / value.clone()
@@ -32,11 +40,19 @@ fn div<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>>
     .boxed()
 }
 
-fn type_min<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn type_min<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move { args[0].get_type().min().map(Into::into) }.boxed()
 }
 
-fn type_max<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn type_max<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move { args[0].get_type().max().map(Into::into) }.boxed()
 }
 

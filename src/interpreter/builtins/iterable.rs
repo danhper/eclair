@@ -3,11 +3,15 @@ use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
+    functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
     Env, Type, Value,
 };
 
-fn map<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn map<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let mut args_iter = args.iter();
         let receiver = args_iter
@@ -35,7 +39,11 @@ fn map<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> 
     .boxed()
 }
 
-fn length<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn length<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move { args.first().expect("no receiver").len().map(Into::into) }.boxed()
 }
 

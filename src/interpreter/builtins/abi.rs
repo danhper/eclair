@@ -1,5 +1,5 @@
 use crate::interpreter::{
-    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
+    functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
     ContractInfo, Env, Type, Value,
 };
 use alloy::dyn_abi::{DynSolType, DynSolValue, JsonAbiExt};
@@ -7,7 +7,11 @@ use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
-fn abi_decode<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn abi_decode<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let (data, sol_type) = match args {
             [_, Value::Bytes(data_), Value::Tuple(values)] => {
@@ -31,7 +35,11 @@ fn abi_decode<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<
     .boxed()
 }
 
-fn abi_decode_calldata<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn abi_decode_calldata<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let (name, abi) = match args.first() {
             Some(Value::TypeObject(Type::Contract(ContractInfo(name, abi)))) => (name, abi),
@@ -63,7 +71,11 @@ fn abi_decode_calldata<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a
     .boxed()
 }
 
-fn abi_encode<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn abi_encode<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let arr = Value::Tuple(args[1..].to_vec());
         let dyn_sol = DynSolValue::try_from(&arr)?;
@@ -73,7 +85,11 @@ fn abi_encode<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<
     .boxed()
 }
 
-fn abi_encode_packed<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn abi_encode_packed<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let arr = Value::Tuple(args[1..].to_vec());
         let dyn_sol = DynSolValue::try_from(&arr)?;

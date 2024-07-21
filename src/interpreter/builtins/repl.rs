@@ -7,13 +7,17 @@ use lazy_static::lazy_static;
 
 use crate::{
     interpreter::{
-        builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
+        functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
         ContractInfo, Env, Type, Value,
     },
     loaders,
 };
 
-fn list_vars<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn list_vars<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    _args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let mut vars = env.list_vars();
         vars.sort();
@@ -25,7 +29,11 @@ fn list_vars<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<V
     .boxed()
 }
 
-fn list_types<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn list_types<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    _args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let mut types = env.list_types();
         types.sort();
@@ -37,7 +45,11 @@ fn list_types<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<
     .boxed()
 }
 
-fn is_connected<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn is_connected<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    _args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let res = env.get_provider().root().get_chain_id().await.is_ok();
         Ok(Value::Bool(res))
@@ -45,7 +57,11 @@ fn is_connected<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Resul
     .boxed()
 }
 
-fn rpc<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn rpc<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         match args {
             [_] => Ok(Value::Str(env.get_rpc_url())),
@@ -59,7 +75,11 @@ fn rpc<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> 
     .boxed()
 }
 
-fn debug<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn debug<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         match args {
             [_] => Ok(Value::Bool(env.is_debug())),
@@ -73,7 +93,11 @@ fn debug<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>
     .boxed()
 }
 
-fn exec<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn exec<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let cmd = args
             .get(1)
@@ -89,7 +113,11 @@ fn exec<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>
     .boxed()
 }
 
-fn load_abi<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn load_abi<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let (name, filepath, key) = match args {
             [_, Value::Str(name), Value::Str(filepath)] => (name, filepath, None),
@@ -106,7 +134,11 @@ fn load_abi<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Val
     .boxed()
 }
 
-fn fetch_abi<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn fetch_abi<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         match args {
             [_, Value::Str(name), Value::Addr(address)] => {
@@ -124,7 +156,11 @@ fn fetch_abi<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Va
     .boxed()
 }
 
-fn get_account<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn get_account<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    _args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let account = env.get_default_sender();
         Ok(account.map(Value::Addr).unwrap_or(Value::Null))
@@ -138,7 +174,11 @@ fn get_default_sender(env: &Env) -> Value {
         .unwrap_or(Value::Null)
 }
 
-fn load_private_key<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn load_private_key<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let key = match args {
             [_, Value::Str(key)] => key.clone(),
@@ -151,7 +191,11 @@ fn load_private_key<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Re
     .boxed()
 }
 
-fn list_ledgers<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn list_ledgers<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let count = match args {
             [_] => 5,
@@ -167,7 +211,11 @@ fn list_ledgers<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result
     .boxed()
 }
 
-fn load_ledger<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn load_ledger<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let index = match args {
             [_] => 0,

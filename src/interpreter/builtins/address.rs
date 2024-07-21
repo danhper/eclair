@@ -4,11 +4,15 @@ use futures::FutureExt;
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition},
+    functions::{FunctionDefinition, FunctionDefinitionBuilder},
     Env, Value,
 };
 
-fn balance<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn balance<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         Ok(Value::Uint(
             env.get_provider()

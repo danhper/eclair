@@ -4,11 +4,15 @@ use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
+    functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
     Env, Type, Value,
 };
 
-fn wait_for_receipt<'a>(env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn wait_for_receipt<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let tx = match args.first() {
             Some(Value::Transaction(tx)) => *tx,

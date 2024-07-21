@@ -4,23 +4,39 @@ use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition},
+    functions::{FunctionDefinition, FunctionDefinitionBuilder},
     Env, Value,
 };
 
-fn get_chain_id<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn get_chain_id<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    _args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move { Ok(env.get_provider().get_chain_id().await?.into()) }.boxed()
 }
 
-fn get_base_fee<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn get_base_fee<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    _args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move { Ok(env.get_provider().get_gas_price().await?.into()) }.boxed()
 }
 
-fn get_block_number<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn get_block_number<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    _args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move { Ok(env.get_provider().get_block_number().await?.into()) }.boxed()
 }
 
-fn get_timestamp<'a>(env: &'a mut Env, _args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn get_timestamp<'a>(
+    _def: &'a FunctionDefinition,
+    env: &'a mut Env,
+    _args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let latest_block = env
             .get_provider()

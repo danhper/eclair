@@ -1,47 +1,17 @@
-use core::fmt;
-
-use crate::interpreter::{Env, Type, Value};
+use crate::interpreter::{functions::FunctionParam, Env, Value};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use itertools::Itertools;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FunctionParam {
-    name: String,
-    type_: Type,
-}
-
-impl FunctionParam {
-    pub fn new(name: &str, type_: Type) -> Self {
-        Self {
-            name: name.to_string(),
-            type_,
-        }
-    }
-
-    pub fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn get_type(&self) -> &Type {
-        &self.type_
-    }
-}
-
-impl fmt::Display for FunctionParam {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.type_, self.name)
-    }
-}
-
-pub type Executor = for<'a> fn(&'a mut Env, &'a [Value]) -> BoxFuture<'a, Result<Value>>;
+pub type Executor =
+    for<'a> fn(&'a FunctionDefinition, &'a mut Env, &'a [Value]) -> BoxFuture<'a, Result<Value>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FunctionDefinition {
-    pub(crate) name_: String,
-    pub(crate) property: bool,
-    pub(crate) valid_args: Vec<Vec<FunctionParam>>,
-    pub(crate) execute_fn: Executor,
+    name_: String,
+    property: bool,
+    valid_args: Vec<Vec<FunctionParam>>,
+    execute_fn: Executor,
 }
 
 impl std::fmt::Display for FunctionDefinition {
@@ -110,8 +80,12 @@ impl FunctionDefinition {
         valid_lengths.dedup().sorted().collect()
     }
 
-    pub fn execute<'a>(&self, env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
-        (self.execute_fn)(env, args)
+    pub fn execute<'a>(
+        &'a self,
+        env: &'a mut Env,
+        args: &'a [Value],
+    ) -> BoxFuture<'a, Result<Value>> {
+        (self.execute_fn)(self, env, args)
     }
 }
 

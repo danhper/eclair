@@ -13,7 +13,7 @@ use crate::loaders::types::Project;
 
 use super::assignment::Lhs;
 use super::builtins;
-use super::functions::{Function, UserDefinedFunction};
+use super::functions::{Function, FunctionCall, FunctionDefinition};
 use super::parsing::ParsedCode;
 use super::types::{HashableIndexMap, Type};
 use super::{env::Env, parsing, value::Value};
@@ -76,7 +76,7 @@ pub async fn evaluate_setup(env: &mut Env, code: &str) -> Result<()> {
     let def = parsing::parse_contract(code)?;
     evaluate_contract_parts(env, &def.parts).await?;
     let setup = env.get_var(SETUP_FUNCTION_NAME).cloned();
-    if let Some(Value::Func(func @ Function::UserDefined(_))) = setup {
+    if let Some(Value::Func(func)) = setup {
         func.execute_in_current_scope(&[], env).await?;
         env.delete_var(SETUP_FUNCTION_NAME)
     }
@@ -128,8 +128,15 @@ pub async fn evaluate_contract_part(
 ) -> Result<()> {
     match part {
         ContractPart::FunctionDefinition(def) => {
-            let func = UserDefinedFunction::try_from(def.as_ref().clone())?;
-            env.set_var(&func.name, Value::Func(Function::UserDefined(func.clone())));
+            let func = FunctionDefinition::try_from(def.as_ref().clone())?;
+            env.set_function_body(
+                func.name(),
+                def.body.clone().ok_or(anyhow!("missing function body"))?,
+            );
+            env.set_var(
+                func.name(),
+                Value::Func(Function::Call(Box::new(FunctionCall::function(&func)))),
+            );
         }
         ContractPart::VariableDefinition(def) => {
             env.init_variable(&def.name, &def.ty, &def.initializer)
@@ -428,15 +435,9 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
 
             Expression::MemberAccess(_, receiver_expr, method) => {
                 let receiver = evaluate_expression(env, receiver_expr).await?;
-                let value = receiver.member_access(&method.name)?;
-                if let Value::Func(f) = value {
-                    if f.is_property() {
-                        f.execute(&[], env).await
-                    } else {
-                        Ok(Value::Func(f))
-                    }
-                } else {
-                    Ok(value)
+                match receiver.member_access(&method.name) {
+                    Result::Ok(Value::Func(f)) if f.is_property() => f.execute(&[], env).await,
+                    v => v,
                 }
             }
 

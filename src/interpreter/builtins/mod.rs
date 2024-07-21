@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use lazy_static::lazy_static;
-mod types;
 
 mod abi;
 mod address;
@@ -15,10 +14,8 @@ mod numeric;
 mod receipt;
 mod repl;
 
-pub use types::FunctionDefinition;
-pub use types::FunctionParam;
-
 use crate::interpreter::functions::FunctionCall;
+use crate::interpreter::functions::FunctionDefinition;
 use crate::interpreter::types::NonParametricType;
 use crate::interpreter::Type;
 use crate::interpreter::Value;

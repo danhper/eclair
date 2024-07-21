@@ -2,8 +2,10 @@ use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
-use super::{FunctionDefinition, FunctionParam};
-use crate::interpreter::{builtins::types::FunctionDefinitionBuilder, Env, Type, Value};
+use crate::interpreter::{
+    functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
+    Env, Type, Value,
+};
 
 fn concat_strings(string: String, args: &[Value]) -> Result<String> {
     if let Some(Value::Str(s)) = args.first() {
@@ -44,7 +46,11 @@ fn concat(_env: &mut Env, args: &[Value]) -> Result<Value> {
     }
 }
 
-fn concat_async<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn concat_async<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async { concat(_env, args) }.boxed()
 }
 

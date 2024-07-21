@@ -3,11 +3,15 @@ use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
+    functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
     Env, Type, Value,
 };
 
-fn keccak256<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn keccak256<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         let data = match args.first() {
             Some(Value::Bytes(data)) => data,
@@ -18,7 +22,11 @@ fn keccak256<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<V
     .boxed()
 }
 
-fn get_type<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn get_type<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         args.first()
             .map(|v| Value::TypeObject(v.get_type()))
@@ -27,7 +35,11 @@ fn get_type<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Va
     .boxed()
 }
 
-fn mapping_keys<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn mapping_keys<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         match args.first() {
             Some(Value::Mapping(mapping, key_type, _)) => {

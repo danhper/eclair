@@ -4,11 +4,15 @@ use futures::FutureExt;
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition},
+    functions::{FunctionDefinition, FunctionDefinitionBuilder},
     Env, Value,
 };
 
-fn log<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn log<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move {
         args.iter().skip(1).for_each(|arg| println!("{}", arg));
         Ok(Value::Null)

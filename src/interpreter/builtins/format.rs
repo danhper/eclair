@@ -7,7 +7,7 @@ use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    builtins::{types::FunctionDefinitionBuilder, FunctionDefinition, FunctionParam},
+    functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
     Env, Type, Value,
 };
 
@@ -91,7 +91,11 @@ fn format(value: &Value, args: &[Value]) -> Result<String> {
     }
 }
 
-fn async_format<'a>(_env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+fn async_format<'a>(
+    _def: &'a FunctionDefinition,
+    _env: &'a mut Env,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
     async move { Ok(Value::Str(format(&args[0], &args[1..])?)) }.boxed()
 }
 
