@@ -14,46 +14,12 @@ pub struct FunctionDefinition {
     execute_fn: Executor,
 }
 
-impl std::fmt::Display for FunctionDefinition {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.is_property() {
-            return write!(f, "{}", self.name_);
-        }
-
-        if self.valid_args.is_empty() {
-            return write!(f, "{}(...)", self.name_);
-        }
-
-        for (i, args) in self.valid_args.iter().enumerate() {
-            if i > 0 {
-                write!(f, "  | ")?;
-            }
-            write!(f, "{}(", self.name_)?;
-            for (j, arg) in args.iter().enumerate() {
-                if j > 0 {
-                    write!(f, ", ")?;
-                }
-                write!(f, "{}", arg)?;
-            }
-            write!(f, ")")?;
-            if i != self.valid_args.len() - 1 {
-                writeln!(f)?;
-            }
-        }
-        Ok(())
-    }
-}
-
 impl FunctionDefinition {
     pub fn name(&self) -> &str {
         &self.name_
     }
 
     pub fn is_property(&self) -> bool {
-        self.property
-    }
-
-    pub fn is_method(&self) -> bool {
         self.property
     }
 
