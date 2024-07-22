@@ -78,8 +78,8 @@ fn exec(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
 
 fn load_abi(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
     let (name, filepath, key) = match args {
-        [_, Value::Str(name), Value::Str(filepath)] => (name, filepath, None),
-        [_, Value::Str(name), Value::Str(filepath), Value::Str(key)] => {
+        [Value::Str(name), Value::Str(filepath)] => (name, filepath, None),
+        [Value::Str(name), Value::Str(filepath), Value::Str(key)] => {
             (name, filepath, Some(key.as_str()))
         }
         _ => bail!("loadAbi: invalid arguments"),
@@ -97,7 +97,7 @@ fn fetch_abi<'a>(
 ) -> BoxFuture<'a, Result<Value>> {
     async move {
         match args {
-            [_, Value::Str(name), Value::Addr(address)] => {
+            [Value::Str(name), Value::Addr(address)] => {
                 let chain_id = env.get_chain_id().await?;
                 let etherscan_config = env.config.get_etherscan_config(chain_id)?;
                 let abi =
