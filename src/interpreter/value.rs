@@ -458,7 +458,7 @@ impl Value {
                     type_,
                     member
                 ))?;
-                Ok(FunctionCall::method(func, self).into())
+                Ok(FunctionCall::method(func.clone(), self).into())
             }
         }
     }

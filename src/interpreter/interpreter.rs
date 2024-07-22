@@ -13,7 +13,7 @@ use crate::loaders::types::Project;
 
 use super::assignment::Lhs;
 use super::builtins;
-use super::functions::{Function, FunctionCall, FunctionDefinition};
+use super::functions::{FunctionDef, UserDefinedFunction};
 use super::parsing::ParsedCode;
 use super::types::{HashableIndexMap, Type};
 use super::{env::Env, parsing, value::Value};
@@ -128,15 +128,9 @@ pub async fn evaluate_contract_part(
 ) -> Result<()> {
     match part {
         ContractPart::FunctionDefinition(def) => {
-            let func = FunctionDefinition::try_from(def.as_ref().clone())?;
-            env.set_function_body(
-                func.name(),
-                def.body.clone().ok_or(anyhow!("missing function body"))?,
-            );
-            env.set_var(
-                func.name(),
-                Value::Func(Function::Call(Box::new(FunctionCall::function(&func)))),
-            );
+            let func = UserDefinedFunction::try_from(def.as_ref().clone())?;
+            let name = func.name().to_string();
+            env.set_var(&name, func.into());
         }
         ContractPart::VariableDefinition(def) => {
             env.init_variable(&def.name, &def.ty, &def.initializer)

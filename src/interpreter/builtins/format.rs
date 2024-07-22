@@ -1,13 +1,14 @@
+use std::sync::Arc;
+
 use alloy::{
     hex,
     primitives::{I256, U256},
 };
 use anyhow::Result;
-use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
+    functions::{FunctionDef, FunctionParam, SyncFunction, SyncMethod},
     Env, Type, Value,
 };
 
@@ -80,7 +81,7 @@ fn format_bytes(bytes: &[u8]) -> String {
     }
 }
 
-fn format(value: &Value, args: &[Value]) -> Result<String> {
+fn format(value: &Value, args: &[Value]) -> Result<Value> {
     match value {
         Value::Uint(n, _) => to_decimals(*n, args, uint_to_decimals),
         Value::Int(n, _) => to_decimals(*n, args, int_to_decimals),
@@ -89,43 +90,48 @@ fn format(value: &Value, args: &[Value]) -> Result<String> {
         Value::FixBytes(b, _) => Ok(format_bytes(&b.0)),
         v => Ok(format!("{}", v)),
     }
+    .map(Value::Str)
 }
 
-fn async_format<'a>(
-    _def: &'a FunctionDefinition,
-    _env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move { Ok(Value::Str(format(&args[0], &args[1..])?)) }.boxed()
+fn format_method(_env: &mut Env, value: &Value, args: &[Value]) -> Result<Value> {
+    format(value, args)
+}
+
+fn format_func(_env: &Env, args: &[Value]) -> Result<Value> {
+    format(&args[0], &args[1..])
 }
 
 lazy_static! {
-    pub static ref NUM_FORMAT: FunctionDefinition =
-        FunctionDefinitionBuilder::new("format", async_format)
-            .add_valid_args(&[])
-            .add_valid_args(&[FunctionParam::new("decimals", Type::Uint(8))])
-            .add_valid_args(&[
+    pub static ref NUM_FORMAT: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "format",
+        format_method,
+        vec![
+            vec![],
+            vec![FunctionParam::new("decimals", Type::Uint(8))],
+            vec![
                 FunctionParam::new("decimals", Type::Uint(8)),
                 FunctionParam::new("precision", Type::Uint(8))
-            ])
-            .build();
-    pub static ref NON_NUM_FORMAT: FunctionDefinition =
-        FunctionDefinitionBuilder::new("format", async_format)
-            .add_valid_args(&[])
-            .build();
-    pub static ref FORMAT_FUNCTION: FunctionDefinition =
-        FunctionDefinitionBuilder::new("format", async_format)
-            .add_valid_args(&[FunctionParam::new("value", Type::Any)])
-            .add_valid_args(&[
+            ]
+        ]
+    );
+    pub static ref NON_NUM_FORMAT: Arc<dyn FunctionDef> =
+        SyncMethod::arc("format", format_method, vec![vec![]]);
+    pub static ref FORMAT_FUNCTION: Arc<dyn FunctionDef> = SyncFunction::arc(
+        "format",
+        format_func,
+        vec![
+            vec![FunctionParam::new("value", Type::Any)],
+            vec![
                 FunctionParam::new("value", Type::Any),
                 FunctionParam::new("decimals", Type::Uint(8))
-            ])
-            .add_valid_args(&[
+            ],
+            vec![
                 FunctionParam::new("value", Type::Any),
                 FunctionParam::new("decimals", Type::Uint(8)),
                 FunctionParam::new("precision", Type::Uint(8))
-            ])
-            .build();
+            ]
+        ]
+    );
 }
 
 #[cfg(test)]

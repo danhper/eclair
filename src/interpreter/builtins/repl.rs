@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{process::Command, sync::Arc};
 
 use alloy::providers::Provider;
 use anyhow::{anyhow, bail, Ok, Result};
@@ -7,49 +7,33 @@ use lazy_static::lazy_static;
 
 use crate::{
     interpreter::{
-        functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
+        functions::{
+            AsyncMethod, AsyncProperty, FunctionDef, FunctionParam, SyncMethod, SyncProperty,
+        },
         ContractInfo, Env, Type, Value,
     },
     loaders,
 };
 
-fn list_vars<'a>(
-    _def: &'a FunctionDefinition,
-    env: &'a mut Env,
-    _args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let mut vars = env.list_vars();
-        vars.sort();
-        for k in vars.iter() {
-            println!("{}: {}", k, env.get_var(k).unwrap());
-        }
-        Ok(Value::Null)
+fn list_vars(env: &Env, _receiver: &Value) -> Result<Value> {
+    let mut vars = env.list_vars();
+    vars.sort();
+    for k in vars.iter() {
+        println!("{}: {}", k, env.get_var(k).unwrap());
     }
-    .boxed()
+    Ok(Value::Null)
 }
 
-fn list_types<'a>(
-    _def: &'a FunctionDefinition,
-    env: &'a mut Env,
-    _args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let mut types = env.list_types();
-        types.sort();
-        for k in types.iter() {
-            println!("{}", k);
-        }
-        Ok(Value::Null)
+fn list_types(env: &Env, _receiver: &Value) -> Result<Value> {
+    let mut types = env.list_types();
+    types.sort();
+    for k in types.iter() {
+        println!("{}", k);
     }
-    .boxed()
+    Ok(Value::Null)
 }
 
-fn is_connected<'a>(
-    _def: &'a FunctionDefinition,
-    env: &'a mut Env,
-    _args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
+fn is_connected<'a>(env: &'a Env, _receiver: &'a Value) -> BoxFuture<'a, Result<Value>> {
     async move {
         let res = env.get_provider().root().get_chain_id().await.is_ok();
         Ok(Value::Bool(res))
@@ -57,86 +41,58 @@ fn is_connected<'a>(
     .boxed()
 }
 
-fn rpc<'a>(
-    _def: &'a FunctionDefinition,
-    env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        match args {
-            [_] => Ok(Value::Str(env.get_rpc_url())),
-            [_, url] => {
-                env.set_provider_url(&url.as_string()?)?;
-                Ok(Value::Null)
-            }
-            _ => bail!("rpc: invalid arguments"),
+fn rpc(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    match args {
+        [] => Ok(Value::Str(env.get_rpc_url())),
+        [url] => {
+            env.set_provider_url(&url.as_string()?)?;
+            Ok(Value::Null)
         }
+        _ => bail!("rpc: invalid arguments"),
     }
-    .boxed()
 }
 
-fn debug<'a>(
-    _def: &'a FunctionDefinition,
-    env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        match args {
-            [_] => Ok(Value::Bool(env.is_debug())),
-            [_, Value::Bool(b)] => {
-                env.set_debug(*b);
-                Ok(Value::Null)
-            }
-            _ => bail!("debug: invalid arguments"),
+fn debug(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    match args {
+        [] => Ok(Value::Bool(env.is_debug())),
+        [Value::Bool(b)] => {
+            env.set_debug(*b);
+            Ok(Value::Null)
         }
+        _ => bail!("debug: invalid arguments"),
     }
-    .boxed()
 }
 
-fn exec<'a>(
-    _def: &'a FunctionDefinition,
-    _env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let cmd = args
-            .get(1)
-            .ok_or(anyhow!("exec: missing command"))?
-            .as_string()?;
+fn exec(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    let cmd = args
+        .first()
+        .ok_or(anyhow!("exec: missing command"))?
+        .as_string()?;
 
-        let splitted = cmd.split_whitespace().collect::<Vec<_>>();
-        let mut cmd = Command::new(splitted[0]).args(&splitted[1..]).spawn()?;
-        let res = cmd.wait()?;
-        let code = res.code().ok_or(anyhow!("exec: command failed"))?;
-        Ok(code.into())
-    }
-    .boxed()
+    let splitted = cmd.split_whitespace().collect::<Vec<_>>();
+    let mut cmd = Command::new(splitted[0]).args(&splitted[1..]).spawn()?;
+    let res = cmd.wait()?;
+    let code = res.code().ok_or(anyhow!("exec: command failed"))?;
+    Ok(code.into())
 }
 
-fn load_abi<'a>(
-    _def: &'a FunctionDefinition,
-    env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let (name, filepath, key) = match args {
-            [_, Value::Str(name), Value::Str(filepath)] => (name, filepath, None),
-            [_, Value::Str(name), Value::Str(filepath), Value::Str(key)] => {
-                (name, filepath, Some(key.as_str()))
-            }
-            _ => bail!("loadAbi: invalid arguments"),
-        };
-        let abi = loaders::file::load_abi(filepath, key)?;
-        let contract_info = ContractInfo(name.to_string(), abi);
-        env.set_type(name, Type::Contract(contract_info.clone()));
-        Ok(Value::Null)
-    }
-    .boxed()
+fn load_abi(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    let (name, filepath, key) = match args {
+        [_, Value::Str(name), Value::Str(filepath)] => (name, filepath, None),
+        [_, Value::Str(name), Value::Str(filepath), Value::Str(key)] => {
+            (name, filepath, Some(key.as_str()))
+        }
+        _ => bail!("loadAbi: invalid arguments"),
+    };
+    let abi = loaders::file::load_abi(filepath, key)?;
+    let contract_info = ContractInfo(name.to_string(), abi);
+    env.set_type(name, Type::Contract(contract_info.clone()));
+    Ok(Value::Null)
 }
 
 fn fetch_abi<'a>(
-    _def: &'a FunctionDefinition,
     env: &'a mut Env,
+    _receiver: &'a Value,
     args: &'a [Value],
 ) -> BoxFuture<'a, Result<Value>> {
     async move {
@@ -156,16 +112,9 @@ fn fetch_abi<'a>(
     .boxed()
 }
 
-fn get_account<'a>(
-    _def: &'a FunctionDefinition,
-    env: &'a mut Env,
-    _args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let account = env.get_default_sender();
-        Ok(account.map(Value::Addr).unwrap_or(Value::Null))
-    }
-    .boxed()
+fn get_account(env: &Env, _receiver: &Value) -> Result<Value> {
+    let account = env.get_default_sender();
+    Ok(account.map(Value::Addr).unwrap_or(Value::Null))
 }
 
 fn get_default_sender(env: &Env) -> Value {
@@ -174,32 +123,25 @@ fn get_default_sender(env: &Env) -> Value {
         .unwrap_or(Value::Null)
 }
 
-fn load_private_key<'a>(
-    _def: &'a FunctionDefinition,
-    env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let key = match args {
-            [_, Value::Str(key)] => key.clone(),
-            [_] => rpassword::prompt_password("Enter private key: ")?,
-            _ => bail!("loadPrivateKey: invalid arguments"),
-        };
-        env.set_private_key(key.as_str())?;
-        Ok(get_default_sender(env))
-    }
-    .boxed()
+fn load_private_key(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    let key = match args {
+        [Value::Str(key)] => key.clone(),
+        [] => rpassword::prompt_password("Enter private key: ")?,
+        _ => bail!("loadPrivateKey: invalid arguments"),
+    };
+    env.set_private_key(key.as_str())?;
+    Ok(get_default_sender(env))
 }
 
 fn list_ledgers<'a>(
-    _def: &'a FunctionDefinition,
     env: &'a mut Env,
+    _receiver: &Value,
     args: &'a [Value],
 ) -> BoxFuture<'a, Result<Value>> {
     async move {
         let count = match args {
-            [_] => 5,
-            [_, value] => value.as_usize()?,
+            [] => 5,
+            [value] => value.as_usize()?,
             _ => bail!("listLedgerWallets: invalid arguments"),
         };
         let wallets = env.list_ledger_wallets(count).await?;
@@ -212,14 +154,14 @@ fn list_ledgers<'a>(
 }
 
 fn load_ledger<'a>(
-    _def: &'a FunctionDefinition,
     env: &'a mut Env,
+    _receiver: &'a Value,
     args: &'a [Value],
 ) -> BoxFuture<'a, Result<Value>> {
     async move {
         let index = match args {
-            [_] => 0,
-            [_, value] => value.as_usize()?,
+            [] => 0,
+            [value] => value.as_usize()?,
             _ => bail!("loadLedger: invalid arguments"),
         };
         env.load_ledger(index).await?;
@@ -229,57 +171,62 @@ fn load_ledger<'a>(
 }
 
 lazy_static! {
-    pub static ref REPL_LIST_VARS: FunctionDefinition =
-        FunctionDefinitionBuilder::property("vars", list_vars).build();
-    pub static ref REPL_LIST_TYPES: FunctionDefinition =
-        FunctionDefinitionBuilder::property("types", list_types).build();
-    pub static ref REPL_IS_CONNECTED: FunctionDefinition =
-        FunctionDefinitionBuilder::property("connected", is_connected).build();
-    pub static ref REPL_RPC: FunctionDefinition = FunctionDefinitionBuilder::new("rpc", rpc)
-        .add_valid_args(&[])
-        .add_valid_args(&[FunctionParam::new("url", Type::String)])
-        .build();
-    pub static ref REPL_DEBUG: FunctionDefinition = FunctionDefinitionBuilder::new("debug", debug)
-        .add_valid_args(&[])
-        .add_valid_args(&[FunctionParam::new("debug", Type::Bool)])
-        .build();
-    pub static ref REPL_EXEC: FunctionDefinition = FunctionDefinitionBuilder::new("exec", exec)
-        .add_valid_args(&[FunctionParam::new("command", Type::String)])
-        .build();
-    pub static ref REPL_LOAD_ABI: FunctionDefinition =
-        FunctionDefinitionBuilder::new("loadAbi", load_abi)
-            .add_valid_args(&[
+    pub static ref REPL_LIST_VARS: Arc<dyn FunctionDef> = SyncProperty::arc("vars", list_vars);
+    pub static ref REPL_LIST_TYPES: Arc<dyn FunctionDef> = SyncProperty::arc("types", list_types);
+    pub static ref REPL_IS_CONNECTED: Arc<dyn FunctionDef> =
+        AsyncProperty::arc("connected", is_connected);
+    pub static ref REPL_RPC: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "rpc",
+        rpc,
+        vec![vec![], vec![FunctionParam::new("url", Type::String)]]
+    );
+    pub static ref REPL_DEBUG: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "debug",
+        debug,
+        vec![vec![], vec![FunctionParam::new("debug", Type::Bool)]]
+    );
+    pub static ref REPL_EXEC: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "exec",
+        exec,
+        vec![vec![FunctionParam::new("command", Type::String)]]
+    );
+    pub static ref REPL_LOAD_ABI: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "loadAbi",
+        load_abi,
+        vec![
+            vec![
                 FunctionParam::new("name", Type::String),
                 FunctionParam::new("filepath", Type::String)
-            ])
-            .add_valid_args(&[
+            ],
+            vec![
                 FunctionParam::new("name", Type::String),
                 FunctionParam::new("filepath", Type::String),
                 FunctionParam::new("jsonKey", Type::String)
-            ])
-            .build();
-    pub static ref REPL_FETCH_ABI: FunctionDefinition =
-        FunctionDefinitionBuilder::new("fetchAbi", fetch_abi)
-            .add_valid_args(&[
-                FunctionParam::new("name", Type::String),
-                FunctionParam::new("address", Type::Address)
-            ])
-            .build();
-    pub static ref REPL_ACCOUNT: FunctionDefinition =
-        FunctionDefinitionBuilder::property("account", get_account).build();
-    pub static ref REPL_LOAD_PRIVATE_KEY: FunctionDefinition =
-        FunctionDefinitionBuilder::new("loadPrivateKey", load_private_key)
-            .add_valid_args(&[])
-            .add_valid_args(&[FunctionParam::new("privateKey", Type::String)])
-            .build();
-    pub static ref REPL_LIST_LEDGER_WALLETS: FunctionDefinition =
-        FunctionDefinitionBuilder::new("listLedgerWallets", list_ledgers)
-            .add_valid_args(&[])
-            .add_valid_args(&[FunctionParam::new("count", Type::Uint(256))])
-            .build();
-    pub static ref REPL_LOAD_LEDGER: FunctionDefinition =
-        FunctionDefinitionBuilder::new("loadLedger", load_ledger)
-            .add_valid_args(&[])
-            .add_valid_args(&[FunctionParam::new("index", Type::Uint(256))])
-            .build();
+            ]
+        ]
+    );
+    pub static ref REPL_FETCH_ABI: Arc<dyn FunctionDef> = AsyncMethod::arc(
+        "fetchAbi",
+        fetch_abi,
+        vec![vec![
+            FunctionParam::new("name", Type::String),
+            FunctionParam::new("address", Type::Address)
+        ]]
+    );
+    pub static ref REPL_ACCOUNT: Arc<dyn FunctionDef> = SyncProperty::arc("account", get_account);
+    pub static ref REPL_LOAD_PRIVATE_KEY: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "loadPrivateKey",
+        load_private_key,
+        vec![vec![], vec![FunctionParam::new("privateKey", Type::String)]]
+    );
+    pub static ref REPL_LIST_LEDGER_WALLETS: Arc<dyn FunctionDef> = AsyncMethod::arc(
+        "listLedgerWallets",
+        list_ledgers,
+        vec![vec![], vec![FunctionParam::new("count", Type::Uint(256))]]
+    );
+    pub static ref REPL_LOAD_LEDGER: Arc<dyn FunctionDef> = AsyncMethod::arc(
+        "loadLedger",
+        load_ledger,
+        vec![vec![], vec![FunctionParam::new("index", Type::Uint(256))]]
+    );
 }

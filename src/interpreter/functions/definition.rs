@@ -1,97 +1,238 @@
+use std::sync::Arc;
+
 use crate::interpreter::{functions::FunctionParam, Env, Value};
-use anyhow::Result;
-use futures::future::BoxFuture;
-use itertools::Itertools;
+use anyhow::{anyhow, Result};
+use futures::{future::BoxFuture, FutureExt};
 
-pub type Executor =
-    for<'a> fn(&'a FunctionDefinition, &'a mut Env, &'a [Value]) -> BoxFuture<'a, Result<Value>>;
+pub trait FunctionDef: std::fmt::Debug + Send + Sync {
+    fn name(&self) -> &str;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FunctionDefinition {
-    name_: String,
-    property: bool,
-    valid_args: Vec<Vec<FunctionParam>>,
-    execute_fn: Executor,
+    fn get_valid_args(&self, receiver: &Option<Value>) -> Vec<Vec<FunctionParam>>;
+
+    fn is_property(&self) -> bool;
+
+    fn execute<'a>(&'a self, env: &'a mut Env, values: &'a [Value])
+        -> BoxFuture<'a, Result<Value>>;
 }
 
-impl FunctionDefinition {
-    pub fn name(&self) -> &str {
-        &self.name_
+#[derive(Debug)]
+pub struct SyncProperty {
+    name: String,
+    f: fn(&Env, &Value) -> Result<Value>,
+}
+
+impl SyncProperty {
+    pub fn arc(name: &str, f: fn(&Env, &Value) -> Result<Value>) -> Arc<dyn FunctionDef> {
+        Arc::new(Self {
+            name: name.to_string(),
+            f,
+        })
+    }
+}
+
+impl FunctionDef for SyncProperty {
+    fn name(&self) -> &str {
+        &self.name
     }
 
-    pub fn is_property(&self) -> bool {
-        self.property
+    fn get_valid_args(&self, _: &Option<Value>) -> Vec<Vec<FunctionParam>> {
+        vec![vec![]]
     }
 
-    pub fn get_variants(&self) -> Vec<String> {
-        self.valid_args
-            .iter()
-            .map(|args| {
-                let args = args
-                    .iter()
-                    .map(|arg| arg.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                format!("{}({})", self.name_, args)
-            })
-            .collect()
+    fn is_property(&self) -> bool {
+        true
     }
 
-    pub fn get_valid_args(&self) -> &Vec<Vec<FunctionParam>> {
-        &self.valid_args
-    }
-
-    pub fn get_valid_args_lengths(&self) -> Vec<usize> {
-        let valid_lengths = self.valid_args.iter().map(|args| args.len());
-        valid_lengths.dedup().sorted().collect()
-    }
-
-    pub fn execute<'a>(
+    fn execute<'a>(
         &'a self,
         env: &'a mut Env,
-        args: &'a [Value],
+        values: &'a [Value],
     ) -> BoxFuture<'a, Result<Value>> {
-        (self.execute_fn)(self, env, args)
+        async move {
+            let receiver = values.first().ok_or(anyhow!("no receiver"))?;
+            (self.f)(env, receiver)
+        }
+        .boxed()
     }
 }
 
-pub struct FunctionDefinitionBuilder {
+#[derive(Debug)]
+pub struct AsyncProperty {
     name: String,
-    property: bool,
-    valid_args: Vec<Vec<FunctionParam>>,
-    execute_fn: Executor,
+    f: for<'a> fn(&'a Env, &'a Value) -> BoxFuture<'a, Result<Value>>,
 }
 
-impl FunctionDefinitionBuilder {
-    pub fn new(name: &str, execute_fn: Executor) -> Self {
-        Self {
+impl AsyncProperty {
+    pub fn arc(
+        name: &str,
+        f: for<'a> fn(&'a Env, &'a Value) -> BoxFuture<'a, Result<Value>>,
+    ) -> Arc<dyn FunctionDef> {
+        Arc::new(Self {
             name: name.to_string(),
-            property: false,
-            valid_args: vec![],
-            execute_fn,
-        }
+            f,
+        })
+    }
+}
+
+impl FunctionDef for AsyncProperty {
+    fn name(&self) -> &str {
+        &self.name
     }
 
-    pub fn property(name: &str, execute_fn: Executor) -> Self {
-        Self {
+    fn get_valid_args(&self, _: &Option<Value>) -> Vec<Vec<FunctionParam>> {
+        vec![vec![]]
+    }
+
+    fn is_property(&self) -> bool {
+        true
+    }
+
+    fn execute<'a>(
+        &'a self,
+        env: &'a mut Env,
+        values: &'a [Value],
+    ) -> BoxFuture<'a, Result<Value>> {
+        async move {
+            let receiver = values.first().ok_or(anyhow!("no receiver"))?;
+            (self.f)(env, receiver).await
+        }
+        .boxed()
+    }
+}
+
+#[derive(Debug)]
+pub struct SyncMethod {
+    name: String,
+    f: fn(&mut Env, &Value, &[Value]) -> Result<Value>,
+    valid_args: Vec<Vec<FunctionParam>>,
+}
+
+impl SyncMethod {
+    pub fn arc(
+        name: &str,
+        f: fn(&mut Env, &Value, &[Value]) -> Result<Value>,
+        valid_args: Vec<Vec<FunctionParam>>,
+    ) -> Arc<dyn FunctionDef> {
+        Arc::new(Self {
             name: name.to_string(),
-            property: true,
-            valid_args: vec![vec![]],
-            execute_fn,
-        }
+            f,
+            valid_args,
+        })
+    }
+}
+
+impl FunctionDef for SyncMethod {
+    fn name(&self) -> &str {
+        &self.name
     }
 
-    pub fn add_valid_args(mut self, valid_args: &[FunctionParam]) -> Self {
-        self.valid_args.push(valid_args.to_vec());
-        self
+    fn get_valid_args(&self, _: &Option<Value>) -> Vec<Vec<FunctionParam>> {
+        self.valid_args.clone()
     }
 
-    pub fn build(self) -> FunctionDefinition {
-        FunctionDefinition {
-            name_: self.name,
-            property: self.property,
-            valid_args: self.valid_args,
-            execute_fn: self.execute_fn,
+    fn is_property(&self) -> bool {
+        false
+    }
+
+    fn execute<'a>(
+        &'a self,
+        env: &'a mut Env,
+        values: &'a [Value],
+    ) -> BoxFuture<'a, Result<Value>> {
+        async move {
+            let receiver = values.first().ok_or(anyhow!("no receiver"))?;
+            (self.f)(env, receiver, &values[1..])
         }
+        .boxed()
+    }
+}
+
+#[derive(Debug)]
+pub struct SyncFunction {
+    name: String,
+    f: fn(&Env, &[Value]) -> Result<Value>,
+    valid_args: Vec<Vec<FunctionParam>>,
+}
+
+impl SyncFunction {
+    pub fn arc(
+        name: &str,
+        f: fn(&Env, &[Value]) -> Result<Value>,
+        valid_args: Vec<Vec<FunctionParam>>,
+    ) -> Arc<dyn FunctionDef> {
+        Arc::new(Self {
+            name: name.to_string(),
+            f,
+            valid_args,
+        })
+    }
+}
+
+impl FunctionDef for SyncFunction {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn get_valid_args(&self, _: &Option<Value>) -> Vec<Vec<FunctionParam>> {
+        self.valid_args.clone()
+    }
+
+    fn is_property(&self) -> bool {
+        false
+    }
+
+    fn execute<'a>(
+        &'a self,
+        env: &'a mut Env,
+        values: &'a [Value],
+    ) -> BoxFuture<'a, Result<Value>> {
+        async move { (self.f)(env, values) }.boxed()
+    }
+}
+
+#[derive(Debug)]
+pub struct AsyncMethod {
+    name: String,
+    f: for<'a> fn(&'a mut Env, &'a Value, &'a [Value]) -> BoxFuture<'a, Result<Value>>,
+    valid_args: Vec<Vec<FunctionParam>>,
+}
+
+impl AsyncMethod {
+    pub fn arc(
+        name: &str,
+        f: for<'a> fn(&'a mut Env, &'a Value, &'a [Value]) -> BoxFuture<'a, Result<Value>>,
+        valid_args: Vec<Vec<FunctionParam>>,
+    ) -> Arc<dyn FunctionDef> {
+        Arc::new(Self {
+            name: name.to_string(),
+            f,
+            valid_args,
+        })
+    }
+}
+
+impl FunctionDef for AsyncMethod {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn get_valid_args(&self, _: &Option<Value>) -> Vec<Vec<FunctionParam>> {
+        self.valid_args.clone()
+    }
+
+    fn is_property(&self) -> bool {
+        false
+    }
+
+    fn execute<'a>(
+        &'a self,
+        env: &'a mut Env,
+        values: &'a [Value],
+    ) -> BoxFuture<'a, Result<Value>> {
+        async move {
+            let receiver = values.first().ok_or(anyhow!("no receiver"))?;
+            (self.f)(env, receiver, &values[1..]).await
+        }
+        .boxed()
     }
 }

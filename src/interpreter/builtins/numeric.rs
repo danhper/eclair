@@ -1,10 +1,10 @@
-use alloy::transports::BoxFuture;
+use std::sync::Arc;
+
 use anyhow::{bail, Result};
-use futures::FutureExt;
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
+    functions::{FunctionDef, FunctionParam, SyncMethod, SyncProperty},
     Env, Type, Value,
 };
 
@@ -16,63 +16,47 @@ fn mul_div_args(args: &[Value]) -> Result<(Value, u64)> {
     }
 }
 
-fn mul<'a>(
-    _def: &'a FunctionDefinition,
-    _env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let (value, decimals) = mul_div_args(&args[1..])?;
-        (args[0].clone() * value.clone())? / Value::decimal_multiplier(decimals as u8)
-    }
-    .boxed()
+fn mul(_env: &mut Env, receiver: &Value, args: &[Value]) -> Result<Value> {
+    let (value, decimals) = mul_div_args(args)?;
+    (receiver.clone() * value.clone())? / Value::decimal_multiplier(decimals as u8)
 }
 
-fn div<'a>(
-    _def: &'a FunctionDefinition,
-    _env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let (value, decimals) = mul_div_args(&args[1..])?;
-        (args[0].clone() * Value::decimal_multiplier(decimals as u8))? / value.clone()
-    }
-    .boxed()
+fn div(_env: &mut Env, receiver: &Value, args: &[Value]) -> Result<Value> {
+    let (value, decimals) = mul_div_args(args)?;
+    (receiver.clone() * Value::decimal_multiplier(decimals as u8))? / value.clone()
 }
 
-fn type_min<'a>(
-    _def: &'a FunctionDefinition,
-    _env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move { args[0].get_type().min().map(Into::into) }.boxed()
+fn type_min(_env: &Env, receiver: &Value) -> Result<Value> {
+    receiver.get_type().min().map(Into::into)
 }
 
-fn type_max<'a>(
-    _def: &'a FunctionDefinition,
-    _env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move { args[0].get_type().max().map(Into::into) }.boxed()
+fn type_max(_env: &Env, receiver: &Value) -> Result<Value> {
+    receiver.get_type().max().map(Into::into)
 }
 
 lazy_static! {
-    pub static ref NUM_MUL: FunctionDefinition = FunctionDefinitionBuilder::new("mul", mul)
-        .add_valid_args(&[FunctionParam::new("factor", Type::Uint(256))])
-        .add_valid_args(&[
-            FunctionParam::new("factor", Type::Uint(256)),
-            FunctionParam::new("decimals", Type::Uint(8))
-        ])
-        .build();
-    pub static ref NUM_DIV: FunctionDefinition = FunctionDefinitionBuilder::new("div", div)
-        .add_valid_args(&[FunctionParam::new("divisor", Type::Uint(256))])
-        .add_valid_args(&[
-            FunctionParam::new("divisor", Type::Uint(256)),
-            FunctionParam::new("decimals", Type::Uint(8))
-        ])
-        .build();
-    pub static ref TYPE_MAX: FunctionDefinition =
-        FunctionDefinitionBuilder::property("max", type_max).build();
-    pub static ref TYPE_MIN: FunctionDefinition =
-        FunctionDefinitionBuilder::property("min", type_min).build();
+    pub static ref NUM_MUL: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "mul",
+        mul,
+        vec![
+            vec![FunctionParam::new("factor", Type::Uint(256))],
+            vec![
+                FunctionParam::new("factor", Type::Uint(256)),
+                FunctionParam::new("decimals", Type::Uint(8))
+            ]
+        ]
+    );
+    pub static ref NUM_DIV: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "div",
+        div,
+        vec![
+            vec![FunctionParam::new("divisor", Type::Uint(256))],
+            vec![
+                FunctionParam::new("divisor", Type::Uint(256)),
+                FunctionParam::new("decimals", Type::Uint(8))
+            ]
+        ]
+    );
+    pub static ref TYPE_MAX: Arc<dyn FunctionDef> = SyncProperty::arc("max", type_max);
+    pub static ref TYPE_MIN: Arc<dyn FunctionDef> = SyncProperty::arc("max", type_min);
 }

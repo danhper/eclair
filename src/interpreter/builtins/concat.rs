@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    functions::{FunctionDefinition, FunctionDefinitionBuilder, FunctionParam},
-    Env, Type, Value,
+    functions::{FunctionDef, FunctionParam},
+    Env, Value,
 };
 
 fn concat_strings(string: String, args: &[Value]) -> Result<String> {
@@ -35,7 +37,7 @@ fn concat_bytes(bytes: Vec<u8>, args: &[Value]) -> Result<Vec<u8>> {
     }
 }
 
-fn concat(_env: &mut Env, args: &[Value]) -> Result<Value> {
+fn concat(args: &[Value]) -> Result<Value> {
     match args.first() {
         Some(Value::Str(s)) => concat_strings(s.clone(), &args[1..]).map(Value::Str),
         Some(Value::Array(arr, t)) => {
@@ -46,28 +48,29 @@ fn concat(_env: &mut Env, args: &[Value]) -> Result<Value> {
     }
 }
 
-fn concat_async<'a>(
-    _def: &'a FunctionDefinition,
-    _env: &'a mut Env,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async { concat(_env, args) }.boxed()
+#[derive(Debug)]
+pub struct Concat;
+
+impl FunctionDef for Concat {
+    fn name(&self) -> &str {
+        "concat"
+    }
+
+    fn get_valid_args(&self, receiver: &Option<Value>) -> Vec<Vec<FunctionParam>> {
+        receiver.as_ref().map_or(vec![], |r| {
+            vec![vec![FunctionParam::new("other", r.get_type().clone())]]
+        })
+    }
+
+    fn is_property(&self) -> bool {
+        false
+    }
+
+    fn execute<'a>(&'a self, _env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+        async { concat(args) }.boxed()
+    }
 }
 
 lazy_static! {
-    pub static ref CONCAT_STRING: FunctionDefinition =
-        FunctionDefinitionBuilder::new("concat", concat_async)
-            .add_valid_args(&[FunctionParam::new("other", Type::String)])
-            .build();
-    pub static ref CONCAT_BYTES: FunctionDefinition =
-        FunctionDefinitionBuilder::new("concat", concat_async)
-            .add_valid_args(&[FunctionParam::new("other", Type::Bytes)])
-            .build();
-    pub static ref CONCAT_ARRAY: FunctionDefinition =
-        FunctionDefinitionBuilder::new("concat", concat_async)
-            .add_valid_args(&[FunctionParam::new(
-                "other",
-                Type::Array(Box::new(Type::Any))
-            )])
-            .build();
+    pub static ref CONCAT: Arc<dyn FunctionDef> = Arc::new(Concat);
 }

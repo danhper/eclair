@@ -4,8 +4,11 @@ mod param;
 mod user_defined;
 
 pub use call::FunctionCall;
-pub use definition::{FunctionDefinition, FunctionDefinitionBuilder};
+pub use definition::{
+    AsyncMethod, AsyncProperty, FunctionDef, SyncFunction, SyncMethod, SyncProperty,
+};
 pub use param::FunctionParam;
+pub use user_defined::UserDefinedFunction;
 
 use std::fmt::Display;
 
@@ -20,46 +23,8 @@ use alloy::{
     transports::Transport,
 };
 use anyhow::{anyhow, bail, Result};
-use solang_parser::pt::Statement;
 
 use super::{types::ContractInfo, Env, StatementResult, Type, Value};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UserDefinedFunction {
-    pub name: String,
-    params: Vec<FunctionParam>,
-    body: Statement,
-}
-
-impl std::hash::Hash for UserDefinedFunction {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.name.hash(state);
-        self.params.hash(state);
-    }
-}
-
-impl TryFrom<solang_parser::pt::FunctionDefinition> for UserDefinedFunction {
-    type Error = anyhow::Error;
-
-    fn try_from(f: solang_parser::pt::FunctionDefinition) -> Result<Self> {
-        let name = f.name.clone().ok_or(anyhow!("require function name"))?.name;
-        let stmt = f.body.clone().ok_or(anyhow!("require function body"))?;
-        let params = f
-            .params
-            .iter()
-            .map(|(_, p)| {
-                p.clone()
-                    .ok_or(anyhow!("require param"))
-                    .and_then(FunctionParam::try_from)
-            })
-            .collect::<Result<Vec<_>>>()?;
-        Ok(UserDefinedFunction {
-            name,
-            params,
-            body: stmt,
-        })
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum ContractCallMode {

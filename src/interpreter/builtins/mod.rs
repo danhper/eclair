@@ -1,4 +1,6 @@
+use iterable::ITER_LEN;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use lazy_static::lazy_static;
 
@@ -14,8 +16,9 @@ mod numeric;
 mod receipt;
 mod repl;
 
+use crate::interpreter::functions::Function;
 use crate::interpreter::functions::FunctionCall;
-use crate::interpreter::functions::FunctionDefinition;
+use crate::interpreter::functions::FunctionDef;
 use crate::interpreter::types::NonParametricType;
 use crate::interpreter::Type;
 use crate::interpreter::Value;
@@ -33,37 +36,38 @@ lazy_static! {
         );
         m.insert("abi".to_string(), Value::TypeObject(Type::Abi));
 
-        let funcs: Vec<(&str, &FunctionDefinition)> = vec![
-            ("format", &format::FORMAT_FUNCTION),
-            ("keccak256", &misc::KECCAK256),
-            ("type", &misc::GET_TYPE),
+        let funcs: Vec<(&str, Arc<dyn FunctionDef>)> = vec![
+            ("format", format::FORMAT_FUNCTION.clone()),
+            ("keccak256", misc::KECCAK256.clone()),
+            ("type", misc::GET_TYPE.clone()),
         ];
         for (name, func) in funcs {
-            m.insert(name.to_string(), FunctionCall::function(func).into());
+            m.insert(name.to_string(), Value::Func(Function::Call(Box::new(FunctionCall::new(func, None)))));
         }
 
         m
     };
-    pub static ref INSTANCE_METHODS: HashMap<NonParametricType, HashMap<String, FunctionDefinition>> = {
+    pub static ref INSTANCE_METHODS: HashMap<NonParametricType, HashMap<String, Arc<dyn FunctionDef>>> = {
         let mut m = HashMap::new();
 
         let mut string_methods = HashMap::new();
-        string_methods.insert("concat".to_string(), concat::CONCAT_STRING.clone());
-        string_methods.insert("length".to_string(), iterable::ITER_LENGTH.clone());
+
+        string_methods.insert("length".to_string(), iterable::ITER_LEN.clone());
+        string_methods.insert("concat".to_string(), concat::CONCAT.clone());
         string_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
         m.insert(NonParametricType::String, string_methods);
 
         let mut array_methods = HashMap::new();
-        array_methods.insert("length".to_string(), iterable::ITER_LENGTH.clone());
+        array_methods.insert("length".to_string(), ITER_LEN.clone());
         array_methods.insert("map".to_string(), iterable::ITER_MAP.clone());
-        array_methods.insert("concat".to_string(), concat::CONCAT_ARRAY.clone());
+        array_methods.insert("concat".to_string(), concat::CONCAT.clone());
         array_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
         m.insert(NonParametricType::Array, array_methods);
 
         let mut bytes_methods = HashMap::new();
-        bytes_methods.insert("length".to_string(), iterable::ITER_LENGTH.clone());
+        bytes_methods.insert("length".to_string(), iterable::ITER_LEN.clone());
         bytes_methods.insert("map".to_string(), iterable::ITER_MAP.clone());
-        bytes_methods.insert("concat".to_string(), concat::CONCAT_ARRAY.clone());
+        bytes_methods.insert("concat".to_string(), concat::CONCAT.clone());
         bytes_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
         m.insert(NonParametricType::Bytes, bytes_methods);
 
@@ -86,17 +90,17 @@ lazy_static! {
 
         let mut transaction_methods = HashMap::new();
         transaction_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
-        transaction_methods.insert("getReceipt".to_string(), receipt::TX_GET_RECEIPT.clone());
+        // transaction_methods.insert("getReceipt".to_string(), receipt::TX_GET_RECEIPT.clone());
         m.insert(NonParametricType::Transaction, transaction_methods);
 
         let mut mapping_methods = HashMap::new();
         mapping_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
-        mapping_methods.insert("keys".to_string(), misc::MAPPING_KEYS.clone());
+        // mapping_methods.insert("keys".to_string(), misc::MAPPING_KEYS.clone());
         m.insert(NonParametricType::Mapping, mapping_methods);
 
         m
     };
-    pub static ref STATIC_METHODS: HashMap<NonParametricType, HashMap<String, FunctionDefinition>> = {
+    pub static ref STATIC_METHODS: HashMap<NonParametricType, HashMap<String, Arc<dyn FunctionDef>>> = {
         let mut m = HashMap::new();
 
         let mut contract_methods = HashMap::new();
@@ -143,7 +147,7 @@ lazy_static! {
 
         m
     };
-    pub static ref TYPE_METHODS: HashMap<NonParametricType, HashMap<String, FunctionDefinition>> = {
+    pub static ref TYPE_METHODS: HashMap<NonParametricType, HashMap<String, Arc<dyn FunctionDef>>> = {
         let mut m = HashMap::new();
         let mut num_methods = HashMap::new();
         num_methods.insert("max".to_string(), numeric::TYPE_MAX.clone());

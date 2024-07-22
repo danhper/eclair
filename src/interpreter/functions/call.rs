@@ -1,18 +1,41 @@
 use crate::interpreter::{utils::join_with_final, Env, Value};
 use anyhow::{bail, Result};
-use std::fmt;
+use itertools::Itertools;
+use std::{fmt, sync::Arc};
 
-use super::{FunctionDefinition, FunctionParam};
+use super::{definition::FunctionDef, FunctionParam};
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct FunctionCall {
-    def: FunctionDefinition,
+    def: Arc<dyn FunctionDef>,
     receiver: Option<Value>,
 }
 
+impl std::hash::Hash for FunctionCall {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.receiver.hash(state);
+        self.def.name().hash(state);
+        let args = self.def.get_valid_args(&self.receiver);
+        args.hash(state)
+    }
+}
+
+impl std::cmp::PartialEq for FunctionCall {
+    fn eq(&self, other: &Self) -> bool {
+        if self.receiver != other.receiver || self.def.name() != other.def.name() {
+            return false;
+        }
+        let args = self.def.get_valid_args(&self.receiver);
+        let other_args = other.def.get_valid_args(&other.receiver);
+        args == other_args
+    }
+}
+
+impl std::cmp::Eq for FunctionCall {}
+
 impl fmt::Display for FunctionCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let variants = self.def.get_variants();
+        let variants = self.get_variants();
         for (i, variant) in variants.iter().enumerate() {
             if i > 0 {
                 writeln!(f)?;
@@ -27,18 +50,39 @@ impl fmt::Display for FunctionCall {
 }
 
 impl FunctionCall {
-    pub fn new(def: &FunctionDefinition, receiver: Option<&Value>) -> Self {
+    pub fn new(def: Arc<dyn FunctionDef>, receiver: Option<&Value>) -> Self {
         FunctionCall {
             def: def.clone(),
             receiver: receiver.cloned(),
         }
     }
 
-    pub fn method(def: &FunctionDefinition, receiver: &Value) -> Self {
+    pub fn get_valid_args_lengths(&self) -> Vec<usize> {
+        let args = self.def.get_valid_args(&self.receiver);
+        let valid_lengths = args.iter().map(|args| args.len());
+        valid_lengths.dedup().sorted().collect()
+    }
+
+    pub fn get_variants(&self) -> Vec<String> {
+        self.def
+            .get_valid_args(&self.receiver)
+            .iter()
+            .map(|args| {
+                let args = args
+                    .iter()
+                    .map(|arg| arg.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                format!("{}({})", self.def.name(), args)
+            })
+            .collect()
+    }
+
+    pub fn method(def: Arc<dyn FunctionDef>, receiver: &Value) -> Self {
         Self::new(def, Some(receiver))
     }
 
-    pub fn function(def: &FunctionDefinition) -> Self {
+    pub fn function(def: Arc<dyn FunctionDef>) -> Self {
         Self::new(def, None)
     }
 
@@ -55,7 +99,7 @@ impl FunctionCall {
     }
 
     fn get_unified_args(&self, args: &[Value]) -> Result<Vec<Value>> {
-        let valid_args_lengths = self.def.get_valid_args_lengths();
+        let valid_args_lengths = self.get_valid_args_lengths();
 
         // skip validation if no valid args are specified
         if valid_args_lengths.is_empty() {
@@ -71,11 +115,8 @@ impl FunctionCall {
             );
         }
 
-        let potential_types = self
-            .def
-            .get_valid_args()
-            .iter()
-            .filter(|a| a.len() == args.len());
+        let valid_args = self.def.get_valid_args(&self.receiver);
+        let potential_types = valid_args.iter().filter(|a| a.len() == args.len());
 
         for (i, arg_types) in potential_types.enumerate() {
             let res = self._unify_types(args, arg_types.as_slice());
