@@ -13,7 +13,7 @@ use std::{
 
 use super::{
     builtins::{INSTANCE_METHODS, STATIC_METHODS, TYPE_METHODS},
-    functions::{ContractCallMode, Function, FunctionCall},
+    functions::Function,
     types::{ContractInfo, HashableIndexMap, Receipt, Type},
 };
 
@@ -35,7 +35,7 @@ pub enum Value {
     TypeObject(Type),
     Transaction(B256),
     TransactionReceipt(Receipt),
-    Func(Function),
+    Func(Box<Function>),
 }
 
 fn _values_to_string(values: &[Value]) -> String {
@@ -219,9 +219,9 @@ impl From<&str> for Value {
     }
 }
 
-impl From<FunctionCall> for Value {
-    fn from(f: FunctionCall) -> Self {
-        Value::Func(Function::Call(Box::new(f)))
+impl From<Function> for Value {
+    fn from(f: Function) -> Self {
+        Value::Func(Box::new(f))
     }
 }
 
@@ -359,6 +359,13 @@ impl Value {
         }
     }
 
+    pub fn as_contract(&self) -> Result<(ContractInfo, Address)> {
+        match self {
+            Value::Contract(info, addr) => Ok((info.clone(), *addr)),
+            _ => bail!("cannot convert {} to contract", self.get_type()),
+        }
+    }
+
     pub fn as_string(&self) -> Result<String> {
         match self {
             Value::Str(str) => Ok(str.clone()),
@@ -394,6 +401,13 @@ impl Value {
         match self {
             Value::Uint(n, _) => Ok(n.to()),
             _ => bail!("cannot convert {} to u256", self.get_type()),
+        }
+    }
+
+    pub fn as_record(&self) -> Result<&HashableIndexMap<String, Value>> {
+        match self {
+            Value::NamedTuple(_, map) => Ok(map),
+            _ => bail!("cannot convert {} to map", self.get_type()),
         }
     }
 
@@ -437,11 +451,8 @@ impl Value {
                 Ok(kv.0.get(member).unwrap().clone())
             }
             Value::TransactionReceipt(r) if r.contains_key(member) => r.get(member),
-            Value::Contract(c, addr) => c.create_call(member, *addr).map(Value::Func),
-
-            Value::Func(Function::ContractCall(call)) => Ok(Value::Func(Function::ContractCall(
-                call.clone().with_mode(ContractCallMode::try_from(member)?),
-            ))),
+            Value::Contract(c, addr) => c.make_function(member, *addr).map(Into::into),
+            Value::Func(f) => f.member_access(member),
             _ => {
                 let (type_, methods) = match self {
                     Value::TypeObject(Type::Type(type_)) => {
@@ -458,7 +469,7 @@ impl Value {
                     type_,
                     member
                 ))?;
-                Ok(FunctionCall::method(func.clone(), self).into())
+                Ok(Function::method(func.clone(), self).into())
             }
         }
     }

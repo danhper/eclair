@@ -18,7 +18,7 @@ fn map<'a>(
         let mut values = vec![];
         for v in receiver.get_items()? {
             let value = match args.first() {
-                Some(Value::Func(func)) => func.execute(&[v.clone()], env).await?,
+                Some(Value::Func(func)) => func.execute(env, &[v.clone()]).await?,
                 Some(Value::TypeObject(type_)) => type_.cast(&v)?,
                 _ => bail!("map function expects a function or type as an argument"),
             };

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::interpreter::{evaluate_statement, Env, Value};
+use crate::interpreter::{evaluate_statement, types::HashableIndexMap, Env, Value};
 
-use super::{Function, FunctionCall, FunctionDef, FunctionParam};
+use super::{Function, FunctionDef, FunctionParam};
 use anyhow::{anyhow, Result};
 use futures::{future::BoxFuture, FutureExt};
 use solang_parser::pt::Statement;
@@ -16,10 +16,7 @@ pub struct UserDefinedFunction {
 
 impl From<UserDefinedFunction> for Value {
     fn from(f: UserDefinedFunction) -> Self {
-        Value::Func(Function::Call(Box::new(FunctionCall::new(
-            Arc::new(f),
-            None,
-        ))))
+        Value::Func(Box::new(Function::new(Arc::new(f), None)))
     }
 }
 
@@ -40,6 +37,7 @@ impl FunctionDef for UserDefinedFunction {
         &'a self,
         env: &'a mut Env,
         values: &'a [Value],
+        _options: &'a HashableIndexMap<String, Value>,
     ) -> BoxFuture<'a, Result<Value>> {
         async move {
             for (param, arg) in self.params.iter().zip(values.iter()) {

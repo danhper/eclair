@@ -13,7 +13,7 @@ use solang_parser::pt as parser;
 
 use super::{
     builtins::{INSTANCE_METHODS, STATIC_METHODS},
-    functions::{ContractCall, Function},
+    functions::{ContractFunction, Function},
     Value,
 };
 
@@ -22,6 +22,16 @@ pub struct HashableIndexMap<K, V>(pub IndexMap<K, V>)
 where
     K: Eq + std::hash::Hash,
     V: Eq;
+
+impl<K, V> std::default::Default for HashableIndexMap<K, V>
+where
+    K: Eq + std::hash::Hash,
+    V: Eq,
+{
+    fn default() -> Self {
+        Self(IndexMap::default())
+    }
+}
 
 impl<K, V> std::hash::Hash for HashableIndexMap<K, V>
 where
@@ -47,16 +57,15 @@ where
 pub struct ContractInfo(pub String, pub JsonAbi);
 
 impl ContractInfo {
-    pub fn create_call(&self, name: &str, addr: Address) -> Result<Function> {
+    pub fn make_function(&self, name: &str, addr: Address) -> Result<Function> {
         let _func = self
             .1
             .function(name)
             .ok_or_else(|| anyhow::anyhow!("function {} not found in contract {}", name, self.0))?;
-        Ok(Function::ContractCall(ContractCall::new(
-            self.clone(),
-            addr,
-            name.to_string(),
-        )))
+        Ok(Function::new(
+            ContractFunction::arc(name),
+            Some(&Value::Contract(self.clone(), addr)),
+        ))
     }
 }
 
@@ -364,6 +373,15 @@ impl TryFrom<Type> for DynSolType {
     }
 }
 
+fn canonical_string_for_tuple(types: &[Type]) -> Result<String> {
+    let items = types
+        .iter()
+        .map(|t| t.canonical_string())
+        .collect::<Result<Vec<_>>>()?
+        .join(",");
+    Ok(format!("({})", items))
+}
+
 impl Type {
     pub fn default_value(&self) -> Result<Value> {
         let value = match self {
@@ -397,6 +415,27 @@ impl Type {
             _ => bail!("cannot get default value for type {}", self),
         };
         Ok(value)
+    }
+
+    pub fn canonical_string(&self) -> Result<String> {
+        let result = match self {
+            Type::Address => "address".to_string(),
+            Type::Bool => "bool".to_string(),
+            Type::Int(size) => format!("int{}", size),
+            Type::Uint(size) => format!("uint{}", size),
+            Type::FixBytes(size) => format!("bytes{}", size),
+            Type::Bytes => "bytes".to_string(),
+            Type::String => "string".to_string(),
+            Type::Array(t) => format!("{}[]", t.canonical_string()?),
+            Type::FixedArray(t, size) => format!("{}[{}]", t.canonical_string()?, size),
+            Type::NamedTuple(_, fields) => {
+                let types = fields.0.values().cloned().collect_vec();
+                canonical_string_for_tuple(&types)?
+            }
+            Type::Tuple(types) => canonical_string_for_tuple(types.as_slice())?,
+            _ => bail!("cannot get canonical string for type {}", self),
+        };
+        Ok(result)
     }
 
     pub fn is_int(&self) -> bool {

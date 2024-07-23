@@ -6,6 +6,7 @@ use lazy_static::lazy_static;
 
 use crate::interpreter::{
     functions::{FunctionDef, FunctionParam},
+    types::HashableIndexMap,
     Env, Value,
 };
 
@@ -66,7 +67,12 @@ impl FunctionDef for Concat {
         false
     }
 
-    fn execute<'a>(&'a self, _env: &'a mut Env, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+    fn execute<'a>(
+        &'a self,
+        _env: &'a mut Env,
+        args: &'a [Value],
+        _options: &'a HashableIndexMap<String, Value>,
+    ) -> BoxFuture<'a, Result<Value>> {
         async { concat(args) }.boxed()
     }
 }

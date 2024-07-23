@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::interpreter::{functions::FunctionParam, Env, Value};
+use crate::interpreter::{functions::FunctionParam, types::HashableIndexMap, Env, Value};
 use anyhow::{anyhow, Result};
 use futures::{future::BoxFuture, FutureExt};
 
@@ -11,8 +11,16 @@ pub trait FunctionDef: std::fmt::Debug + Send + Sync {
 
     fn is_property(&self) -> bool;
 
-    fn execute<'a>(&'a self, env: &'a mut Env, values: &'a [Value])
-        -> BoxFuture<'a, Result<Value>>;
+    fn execute<'a>(
+        &'a self,
+        env: &'a mut Env,
+        values: &'a [Value],
+        options: &'a HashableIndexMap<String, Value>,
+    ) -> BoxFuture<'a, Result<Value>>;
+
+    fn member_access(&self, _receiver: &Option<Value>, _member: &str) -> Option<Value> {
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -47,6 +55,7 @@ impl FunctionDef for SyncProperty {
         &'a self,
         env: &'a mut Env,
         values: &'a [Value],
+        _options: &'a HashableIndexMap<String, Value>,
     ) -> BoxFuture<'a, Result<Value>> {
         async move {
             let receiver = values.first().ok_or(anyhow!("no receiver"))?;
@@ -91,6 +100,7 @@ impl FunctionDef for AsyncProperty {
         &'a self,
         env: &'a mut Env,
         values: &'a [Value],
+        _options: &'a HashableIndexMap<String, Value>,
     ) -> BoxFuture<'a, Result<Value>> {
         async move {
             let receiver = values.first().ok_or(anyhow!("no receiver"))?;
@@ -138,6 +148,7 @@ impl FunctionDef for SyncMethod {
         &'a self,
         env: &'a mut Env,
         values: &'a [Value],
+        _options: &'a HashableIndexMap<String, Value>,
     ) -> BoxFuture<'a, Result<Value>> {
         async move {
             let receiver = values.first().ok_or(anyhow!("no receiver"))?;
@@ -185,6 +196,7 @@ impl FunctionDef for SyncFunction {
         &'a self,
         env: &'a mut Env,
         values: &'a [Value],
+        _options: &'a HashableIndexMap<String, Value>,
     ) -> BoxFuture<'a, Result<Value>> {
         async move { (self.f)(env, values) }.boxed()
     }
@@ -228,6 +240,7 @@ impl FunctionDef for AsyncMethod {
         &'a self,
         env: &'a mut Env,
         values: &'a [Value],
+        _options: &'a HashableIndexMap<String, Value>,
     ) -> BoxFuture<'a, Result<Value>> {
         async move {
             let receiver = values.first().ok_or(anyhow!("no receiver"))?;

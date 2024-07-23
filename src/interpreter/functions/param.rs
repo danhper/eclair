@@ -1,3 +1,4 @@
+use alloy::{dyn_abi::Specifier, json_abi::Param};
 use anyhow::{bail, Result};
 use solang_parser::pt::{Expression, Identifier, Parameter};
 use std::fmt;
@@ -30,6 +31,16 @@ impl FunctionParam {
 impl fmt::Display for FunctionParam {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", self.type_, self.name)
+    }
+}
+
+impl TryFrom<Param> for FunctionParam {
+    type Error = anyhow::Error;
+
+    fn try_from(param: Param) -> std::result::Result<Self, Self::Error> {
+        let name = param.name.clone();
+        let type_ = param.resolve()?.into();
+        Ok(FunctionParam { name, type_ })
     }
 }
 

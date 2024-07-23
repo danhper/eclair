@@ -1,17 +1,18 @@
-use crate::interpreter::{utils::join_with_final, Env, Value};
-use anyhow::{bail, Result};
+use crate::interpreter::{types::HashableIndexMap, utils::join_with_final, Env, Value};
+use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
 use std::{fmt, sync::Arc};
 
 use super::{definition::FunctionDef, FunctionParam};
 
 #[derive(Debug, Clone)]
-pub struct FunctionCall {
+pub struct Function {
     def: Arc<dyn FunctionDef>,
     receiver: Option<Value>,
+    options: HashableIndexMap<String, Value>,
 }
 
-impl std::hash::Hash for FunctionCall {
+impl std::hash::Hash for Function {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.receiver.hash(state);
         self.def.name().hash(state);
@@ -20,7 +21,7 @@ impl std::hash::Hash for FunctionCall {
     }
 }
 
-impl std::cmp::PartialEq for FunctionCall {
+impl std::cmp::PartialEq for Function {
     fn eq(&self, other: &Self) -> bool {
         if self.receiver != other.receiver || self.def.name() != other.def.name() {
             return false;
@@ -31,9 +32,9 @@ impl std::cmp::PartialEq for FunctionCall {
     }
 }
 
-impl std::cmp::Eq for FunctionCall {}
+impl std::cmp::Eq for Function {}
 
-impl fmt::Display for FunctionCall {
+impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let variants = self.get_variants();
         for (i, variant) in variants.iter().enumerate() {
@@ -49,12 +50,25 @@ impl fmt::Display for FunctionCall {
     }
 }
 
-impl FunctionCall {
+impl Function {
     pub fn new(def: Arc<dyn FunctionDef>, receiver: Option<&Value>) -> Self {
-        FunctionCall {
+        Function {
             def: def.clone(),
             receiver: receiver.cloned(),
+            options: HashableIndexMap::default(),
         }
+    }
+
+    pub fn member_access(&self, member: &str) -> Result<Value> {
+        self.def
+            .member_access(&self.receiver, member)
+            .ok_or(anyhow!("no member {} for {}", member, self))
+    }
+
+    pub fn with_opts(self, opts: HashableIndexMap<String, Value>) -> Self {
+        let mut new = self;
+        new.options = opts;
+        new
     }
 
     pub fn get_valid_args_lengths(&self) -> Vec<usize> {
@@ -82,20 +96,23 @@ impl FunctionCall {
         Self::new(def, Some(receiver))
     }
 
-    pub fn function(def: Arc<dyn FunctionDef>) -> Self {
-        Self::new(def, None)
-    }
-
     pub fn is_property(&self) -> bool {
         self.def.is_property()
     }
 
     pub async fn execute(&self, env: &mut Env, args: &[Value]) -> Result<Value> {
+        env.push_scope();
+        let result = self.execute_in_current_scope(env, args).await;
+        env.pop_scope();
+        result
+    }
+
+    pub async fn execute_in_current_scope(&self, env: &mut Env, args: &[Value]) -> Result<Value> {
         let mut unified_args = self.get_unified_args(args)?;
         if let Some(receiver) = &self.receiver {
             unified_args.insert(0, receiver.clone());
         }
-        self.def.execute(env, &unified_args).await
+        self.def.execute(env, &unified_args, &self.options).await
     }
 
     fn get_unified_args(&self, args: &[Value]) -> Result<Vec<Value>> {

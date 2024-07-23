@@ -17,7 +17,6 @@ mod receipt;
 mod repl;
 
 use crate::interpreter::functions::Function;
-use crate::interpreter::functions::FunctionCall;
 use crate::interpreter::functions::FunctionDef;
 use crate::interpreter::types::NonParametricType;
 use crate::interpreter::Type;
@@ -42,7 +41,10 @@ lazy_static! {
             ("type", misc::GET_TYPE.clone()),
         ];
         for (name, func) in funcs {
-            m.insert(name.to_string(), Value::Func(Function::Call(Box::new(FunctionCall::new(func, None)))));
+            m.insert(
+                name.to_string(),
+                Value::Func(Box::new(Function::new(func, None))),
+            );
         }
 
         m
@@ -90,12 +92,12 @@ lazy_static! {
 
         let mut transaction_methods = HashMap::new();
         transaction_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
-        // transaction_methods.insert("getReceipt".to_string(), receipt::TX_GET_RECEIPT.clone());
+        transaction_methods.insert("getReceipt".to_string(), receipt::TX_GET_RECEIPT.clone());
         m.insert(NonParametricType::Transaction, transaction_methods);
 
         let mut mapping_methods = HashMap::new();
         mapping_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
-        // mapping_methods.insert("keys".to_string(), misc::MAPPING_KEYS.clone());
+        mapping_methods.insert("keys".to_string(), misc::MAPPING_KEYS.clone());
         m.insert(NonParametricType::Mapping, mapping_methods);
 
         m

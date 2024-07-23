@@ -48,6 +48,10 @@ impl StatementResult {
             _ => None,
         }
     }
+
+    pub fn as_value(&self) -> Result<&Value> {
+        self.value().ok_or(anyhow!("expected value, got {}", self))
+    }
 }
 
 unsafe impl std::marker::Send for StatementResult {}
@@ -77,7 +81,7 @@ pub async fn evaluate_setup(env: &mut Env, code: &str) -> Result<()> {
     evaluate_contract_parts(env, &def.parts).await?;
     let setup = env.get_var(SETUP_FUNCTION_NAME).cloned();
     if let Some(Value::Func(func)) = setup {
-        func.execute_in_current_scope(&[], env).await?;
+        func.execute_in_current_scope(env, &[]).await?;
         env.delete_var(SETUP_FUNCTION_NAME)
     }
 
@@ -430,7 +434,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::MemberAccess(_, receiver_expr, method) => {
                 let receiver = evaluate_expression(env, receiver_expr).await?;
                 match receiver.member_access(&method.name) {
-                    Result::Ok(Value::Func(f)) if f.is_property() => f.execute(&[], env).await,
+                    Result::Ok(Value::Func(f)) if f.is_property() => f.execute(env, &[]).await,
                     v => v,
                 }
             }
@@ -564,7 +568,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                     args.push(evaluate_expression(env, Box::new(arg.clone())).await?);
                 }
                 match evaluate_expression(env, func_expr).await? {
-                    Value::Func(f) => f.execute(&args, env).await,
+                    Value::Func(f) => f.execute(env, &args).await,
                     Value::TypeObject(type_) => {
                         if let [arg] = &args[..] {
                             type_.cast(arg)
@@ -579,7 +583,10 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::FunctionCallBlock(_, func_expr, stmt) => {
                 let res = evaluate_statement(env, stmt).await?;
                 match evaluate_expression(env, func_expr).await? {
-                    Value::Func(f) => Ok(Value::Func(f.with_opts(res.try_into()?))),
+                    Value::Func(f) => {
+                        let opts = res.as_value()?.as_record()?.clone();
+                        Ok(f.with_opts(opts).into())
+                    }
                     _ => bail!("expected function"),
                 }
             }
