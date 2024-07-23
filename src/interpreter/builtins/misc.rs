@@ -16,7 +16,7 @@ fn keccak256(_env: &Env, args: &[Value]) -> Result<Value> {
     Ok(Value::FixBytes(alloy::primitives::keccak256(data), 32))
 }
 
-fn get_type<'a>(_env: &Env, args: &[Value]) -> Result<Value> {
+fn get_type(_env: &Env, args: &[Value]) -> Result<Value> {
     args.first()
         .map(|v| Value::TypeObject(v.get_type()))
         .ok_or(anyhow!("get_type function expects one argument"))
