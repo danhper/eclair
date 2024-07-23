@@ -12,9 +12,9 @@ use itertools::Itertools;
 use solang_parser::pt as parser;
 
 use super::{
-    block_functions::BlockFunction,
-    functions::{ContractCall, Function},
-    Directive, Value,
+    builtins::{INSTANCE_METHODS, STATIC_METHODS},
+    functions::{ContractFunction, Function},
+    Value,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,6 +22,16 @@ pub struct HashableIndexMap<K, V>(pub IndexMap<K, V>)
 where
     K: Eq + std::hash::Hash,
     V: Eq;
+
+impl<K, V> std::default::Default for HashableIndexMap<K, V>
+where
+    K: Eq + std::hash::Hash,
+    V: Eq,
+{
+    fn default() -> Self {
+        Self(IndexMap::default())
+    }
+}
 
 impl<K, V> std::hash::Hash for HashableIndexMap<K, V>
 where
@@ -47,16 +57,15 @@ where
 pub struct ContractInfo(pub String, pub JsonAbi);
 
 impl ContractInfo {
-    pub fn create_call(&self, name: &str, addr: Address) -> Result<Function> {
+    pub fn make_function(&self, name: &str, addr: Address) -> Result<Function> {
         let _func = self
             .1
             .function(name)
             .ok_or_else(|| anyhow::anyhow!("function {} not found in contract {}", name, self.0))?;
-        Ok(Function::ContractCall(ContractCall::new(
-            self.clone(),
-            addr,
-            name.to_string(),
-        )))
+        Ok(Function::new(
+            ContractFunction::arc(name),
+            Some(&Value::Contract(self.clone(), addr)),
+        ))
     }
 }
 
@@ -80,10 +89,17 @@ impl Receipt {
             "status" => Value::Bool(self.status),
             "gas_used" => Value::Uint(U256::from(self.gas_used), 256),
             "effective_gas_price" => Value::Uint(U256::from(self.effective_gas_price), 256),
-            "logs" => Value::Array(self.logs.iter().map(|log| log.into()).collect()),
+            "logs" => Value::Array(
+                self.logs.iter().map(|log| log.into()).collect(),
+                Box::new(Type::FixBytes(32)),
+            ),
             _ => bail!("receipt has no field {}", field),
         };
         Ok(result)
+    }
+
+    pub fn contains_key(&self, key: &str) -> bool {
+        Self::keys().contains(&key.to_string())
     }
 
     pub fn keys() -> Vec<String> {
@@ -125,8 +141,36 @@ impl Display for Receipt {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NonParametricType {
+    Any,
+    Null,
+    Address,
+    Bool,
+    Int,
+    Uint,
+    FixBytes,
+    Bytes,
+    String,
+    Array,
+    FixedArray,
+    NamedTuple,
+    Tuple,
+    Mapping,
+    Contract,
+    Transaction,
+    TransactionReceipt,
+    Function,
+    Repl,
+    Block,
+    Console,
+    Abi,
+    Type,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
+    Any,
     Null,
     Address,
     Bool,
@@ -154,6 +198,7 @@ pub enum Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Type::Any => write!(f, "any"),
             Type::Null => write!(f, "null"),
             Type::Address => write!(f, "address"),
             Type::Bool => write!(f, "bool"),
@@ -176,8 +221,8 @@ impl Display for Type {
             Type::Contract(ContractInfo(name, _)) => write!(f, "{}", name),
             Type::Function => write!(f, "function"),
 
-            Type::Transaction => write!(f, "transaction"),
-            Type::TransactionReceipt => write!(f, "transactionReceipt"),
+            Type::Transaction => write!(f, "Transaction"),
+            Type::TransactionReceipt => write!(f, "TransactionReceipt"),
 
             Type::Repl => write!(f, "repl"),
             Type::Block => write!(f, "block"),
@@ -185,6 +230,42 @@ impl Display for Type {
             Type::Abi => write!(f, "abi"),
             Type::Type(t) => write!(f, "type({})", t),
         }
+    }
+}
+
+impl<T: AsRef<Type>> From<T> for NonParametricType {
+    fn from(value: T) -> Self {
+        match value.as_ref() {
+            Type::Any => NonParametricType::Any,
+            Type::Null => NonParametricType::Null,
+            Type::Address => NonParametricType::Address,
+            Type::Bool => NonParametricType::Bool,
+            Type::Int(_) => NonParametricType::Int,
+            Type::Uint(_) => NonParametricType::Uint,
+            Type::FixBytes(_) => NonParametricType::FixBytes,
+            Type::Bytes => NonParametricType::Bytes,
+            Type::String => NonParametricType::String,
+            Type::Array(_) => NonParametricType::Array,
+            Type::FixedArray(..) => NonParametricType::FixedArray,
+            Type::NamedTuple(..) => NonParametricType::NamedTuple,
+            Type::Tuple(_) => NonParametricType::Tuple,
+            Type::Mapping(..) => NonParametricType::Mapping,
+            Type::Contract(..) => NonParametricType::Contract,
+            Type::Function => NonParametricType::Function,
+            Type::Transaction => NonParametricType::Transaction,
+            Type::TransactionReceipt => NonParametricType::TransactionReceipt,
+            Type::Repl => NonParametricType::Repl,
+            Type::Block => NonParametricType::Block,
+            Type::Console => NonParametricType::Console,
+            Type::Abi => NonParametricType::Abi,
+            Type::Type(_) => NonParametricType::Type,
+        }
+    }
+}
+
+impl AsRef<Type> for Type {
+    fn as_ref(&self) -> &Type {
+        self
     }
 }
 
@@ -292,6 +373,15 @@ impl TryFrom<Type> for DynSolType {
     }
 }
 
+fn canonical_string_for_tuple(types: &[Type]) -> Result<String> {
+    let items = types
+        .iter()
+        .map(|t| t.canonical_string())
+        .collect::<Result<Vec<_>>>()?
+        .join(",");
+    Ok(format!("({})", items))
+}
+
 impl Type {
     pub fn default_value(&self) -> Result<Value> {
         let value = match self {
@@ -303,8 +393,8 @@ impl Type {
             Type::FixBytes(size) => Value::FixBytes(B256::default(), *size),
             Type::Bytes => Value::Bytes(vec![]),
             Type::String => Value::Str("".to_string()),
-            Type::Array(_) => Value::Array(vec![]),
-            Type::FixedArray(t, size) => Value::Array(vec![t.default_value()?; *size]),
+            Type::Array(t) => Value::Array(vec![], t.clone()),
+            Type::FixedArray(t, size) => Value::Array(vec![t.default_value()?; *size], t.clone()),
             Type::NamedTuple(_, fields) => Value::NamedTuple(
                 "".to_string(),
                 fields
@@ -313,7 +403,7 @@ impl Type {
                     .map(|(k, v)| v.default_value().map(|v_| (k.clone(), v_)))
                     .collect::<Result<HashableIndexMap<_, _>>>()?,
             ),
-            Type::Tuple(types) => Value::Array(
+            Type::Tuple(types) => Value::Tuple(
                 types
                     .iter()
                     .map(|t| t.default_value())
@@ -325,6 +415,27 @@ impl Type {
             _ => bail!("cannot get default value for type {}", self),
         };
         Ok(value)
+    }
+
+    pub fn canonical_string(&self) -> Result<String> {
+        let result = match self {
+            Type::Address => "address".to_string(),
+            Type::Bool => "bool".to_string(),
+            Type::Int(size) => format!("int{}", size),
+            Type::Uint(size) => format!("uint{}", size),
+            Type::FixBytes(size) => format!("bytes{}", size),
+            Type::Bytes => "bytes".to_string(),
+            Type::String => "string".to_string(),
+            Type::Array(t) => format!("{}[]", t.canonical_string()?),
+            Type::FixedArray(t, size) => format!("{}[{}]", t.canonical_string()?, size),
+            Type::NamedTuple(_, fields) => {
+                let types = fields.0.values().cloned().collect_vec();
+                canonical_string_for_tuple(&types)?
+            }
+            Type::Tuple(types) => canonical_string_for_tuple(types.as_slice())?,
+            _ => bail!("cannot get canonical string for type {}", self),
+        };
+        Ok(result)
     }
 
     pub fn is_int(&self) -> bool {
@@ -349,11 +460,13 @@ impl Type {
             "uint256".to_string(),
             "bytes".to_string(),
             "string".to_string(),
+            "mapping".to_string(),
         ]
     }
 
     pub fn cast(&self, value: &Value) -> Result<Value> {
         match (self, value) {
+            (Type::Any, value) => Ok(value.clone()),
             (type_, value) if type_ == &value.get_type() => Ok(value.clone()),
             (Type::Contract(info), Value::Addr(addr)) => Ok(Value::Contract(info.clone(), *addr)),
             (Type::Address, Value::Contract(_, addr)) => Ok(Value::Addr(*addr)),
@@ -394,17 +507,17 @@ impl Type {
                     HashableIndexMap(new_values),
                 ))
             }
-            (Type::Array(t), Value::Array(v)) => v
+            (Type::Array(t), Value::Array(v, _)) => v
                 .iter()
                 .map(|value| t.cast(value))
                 .collect::<Result<Vec<_>>>()
-                .map(Value::Array),
+                .map(|items| Value::Array(items, t.clone())),
             (Type::Tuple(types), Value::Tuple(v)) => v
                 .iter()
                 .zip(types.iter())
                 .map(|(value, t)| t.cast(value))
                 .collect::<Result<Vec<_>>>()
-                .map(Value::Array),
+                .map(Value::Tuple),
             _ => bail!("cannot cast {} to {}", value.get_type(), self),
         }
     }
@@ -415,44 +528,22 @@ impl Type {
                 abi.functions.keys().map(|s| s.to_string()).collect()
             }
             Type::NamedTuple(_, fields) => fields.0.keys().map(|s| s.to_string()).collect(),
-            Type::Uint(_) | Type::Int(_) => {
-                vec!["format".to_string()]
-            }
-            Type::Transaction => vec!["getReceipt".to_string()],
             Type::TransactionReceipt => Receipt::keys(),
-            Type::Array(_) => vec![
-                "concat".to_string(),
-                "length".to_string(),
-                "map".to_string(),
-            ],
-            Type::String => vec!["concat".to_string(), "length".to_string()],
-
-            Type::Bytes => vec!["concat".to_string(), "length".to_string()],
-
-            Type::Mapping(_, _) => vec!["keys".to_string()],
-
-            Type::Type(t) => match *t.clone() {
-                Type::Contract(_) => vec!["decode".to_string()],
-                Type::Abi => vec![
-                    "encode".to_string(),
-                    "decode".to_string(),
-                    "encodePacked".to_string(),
-                ],
-                Type::Console => vec!["log".to_string()],
-                Type::Block => BlockFunction::all(),
-                Type::Repl => Directive::all()
-                    .into_iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-                Type::Uint(_) | Type::Int(_) => vec!["max".to_string(), "min".to_string()],
-                _ => vec![],
-            },
-            _ => vec![],
+            Type::Type(type_) => STATIC_METHODS
+                .get(&type_.into())
+                .map_or(vec![], |m| m.keys().cloned().collect()),
+            _ => INSTANCE_METHODS
+                .get(&self.into())
+                .map_or(vec![], |m| m.keys().cloned().collect()),
         }
     }
 
     pub fn max(&self) -> Result<Value> {
-        let res = match self {
+        let inner_type = match self {
+            Type::Type(t) => t.as_ref(),
+            _ => self,
+        };
+        let res = match inner_type {
             Type::Uint(256) => Value::Uint(U256::MAX, 256),
             Type::Uint(size) => {
                 Value::Uint((U256::from(1) << U256::from(*size)) - U256::from(1), 256)
@@ -467,7 +558,11 @@ impl Type {
     }
 
     pub fn min(&self) -> Result<Value> {
-        match self {
+        let inner_type = match self {
+            Type::Type(t) => t.as_ref(),
+            _ => self,
+        };
+        match inner_type {
             Type::Uint(_) => Ok(0u64.into()),
             Type::Int(256) => Ok(Value::Int(I256::MIN, 256)),
             Type::Int(size) => {

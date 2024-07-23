@@ -3,7 +3,7 @@ use alloy::{
     hex,
     primitives::{Address, B256, I256, U256},
 };
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use std::{
@@ -12,6 +12,7 @@ use std::{
 };
 
 use super::{
+    builtins::{INSTANCE_METHODS, STATIC_METHODS, TYPE_METHODS},
     functions::Function,
     types::{ContractInfo, HashableIndexMap, Receipt, Type},
 };
@@ -29,12 +30,12 @@ pub enum Value {
     Contract(ContractInfo, Address),
     Tuple(Vec<Value>),
     NamedTuple(String, HashableIndexMap<String, Value>),
-    Array(Vec<Value>),
+    Array(Vec<Value>, Box<Type>),
     Mapping(HashableIndexMap<Value, Value>, Box<Type>, Box<Type>),
     TypeObject(Type),
     Transaction(B256),
     TransactionReceipt(Receipt),
-    Func(Function),
+    Func(Box<Function>),
 }
 
 fn _values_to_string(values: &[Value]) -> String {
@@ -76,7 +77,7 @@ impl Display for Value {
                 write!(f, "{} {{ {} }}", name, _format_struct_fields(&v.0))
             }
             Value::Tuple(v) => write!(f, "({})", _values_to_string(v)),
-            Value::Array(v) => write!(f, "[{}]", _values_to_string(v)),
+            Value::Array(v, _) => write!(f, "[{}]", _values_to_string(v)),
             Value::Mapping(v, kt, vt) => {
                 let values = v.0.iter().map(|(k, v)| format!("{}: {}", k, v)).join(", ");
                 write!(f, "mapping({} => {}) {{ {} }}", kt, vt, values)
@@ -120,7 +121,7 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
                 }
             }
             Value::Tuple(vs) => DynSolValue::Tuple(_values_to_dyn_sol_values(vs)?),
-            Value::Array(vs) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
+            Value::Array(vs, _) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
             Value::Mapping(_, _, _) => bail!("cannot convert mapping to Solidity type"),
             Value::Null => bail!("cannot convert null to Solidity type"),
             Value::TransactionReceipt(_) => bail!("cannot convert receipt to Solidity type"),
@@ -142,6 +143,7 @@ impl From<alloy::rpc::types::Log> for Value {
                     .iter()
                     .map(|t| Value::FixBytes(*t, 32))
                     .collect(),
+                Box::new(Type::FixBytes(32)),
             ),
         );
         fields.insert("data".to_string(), Value::Bytes(log.data().data.to_vec()));
@@ -163,7 +165,10 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
             DynSolValue::FixedBytes(w, s) => Ok(Value::FixBytes(w, s)),
             DynSolValue::Bytes(v) => Ok(Value::Bytes(v)),
             DynSolValue::Tuple(vs) => _dyn_sol_values_to_values(vs).map(Value::Tuple),
-            DynSolValue::Array(vs) => _dyn_sol_values_to_values(vs).map(Value::Array),
+            DynSolValue::Array(vs) => _dyn_sol_values_to_values(vs).map(|xs| {
+                let type_ = xs.first().map(Value::get_type).unwrap_or(Type::Any);
+                Value::Array(xs, Box::new(type_))
+            }),
             DynSolValue::CustomStruct {
                 name,
                 prop_names,
@@ -179,7 +184,7 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
                     HashableIndexMap(IndexMap::from_iter(vs)),
                 ))
             }
-            v => Err(anyhow::anyhow!("{:?} not supported", v)),
+            v => Err(anyhow!("{:?} not supported", v)),
         }
     }
 }
@@ -196,6 +201,12 @@ impl From<u64> for Value {
     }
 }
 
+impl From<usize> for Value {
+    fn from(n: usize) -> Self {
+        Value::Uint(U256::from(n), 256)
+    }
+}
+
 impl From<u128> for Value {
     fn from(n: u128) -> Self {
         Value::Uint(U256::from(n), 256)
@@ -205,6 +216,12 @@ impl From<u128> for Value {
 impl From<&str> for Value {
     fn from(s: &str) -> Self {
         Value::Str(s.to_string())
+    }
+}
+
+impl From<Function> for Value {
+    fn from(f: Function) -> Self {
+        Value::Func(Box::new(f))
     }
 }
 
@@ -223,6 +240,33 @@ where
     }
 }
 
+impl<T: Into<Value>> From<(T,)> for Value
+where
+    T: Into<Value>,
+{
+    fn from(t: (T,)) -> Self {
+        Value::Tuple(vec![t.0.into()])
+    }
+}
+
+impl<T: Into<Value>, U: Into<Value>> From<(T, U)> for Value
+where
+    T: Into<Value>,
+{
+    fn from(t: (T, U)) -> Self {
+        Value::Tuple(vec![t.0.into(), t.1.into()])
+    }
+}
+
+impl<T: Into<Value>, U: Into<Value>, V: Into<Value>> From<(T, U, V)> for Value
+where
+    T: Into<Value>,
+{
+    fn from(t: (T, U, V)) -> Self {
+        Value::Tuple(vec![t.0.into(), t.1.into(), t.2.into()])
+    }
+}
+
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
@@ -235,7 +279,7 @@ impl PartialOrd for Value {
             (Value::Addr(a), Value::Addr(b)) => a.partial_cmp(b),
             (Value::FixBytes(a, _), Value::FixBytes(b, _)) => a.partial_cmp(b),
             (Value::Tuple(a), Value::Tuple(b)) => a.partial_cmp(b),
-            (Value::Array(a), Value::Array(b)) => a.partial_cmp(b),
+            (Value::Array(a, _), Value::Array(b, _)) => a.partial_cmp(b),
             (Value::Contract(_, a), Value::Contract(_, b)) => a.partial_cmp(b),
             _ => None,
         }
@@ -259,10 +303,7 @@ impl Value {
                     .collect(),
             ),
             Value::Tuple(vs) => Type::Tuple(vs.iter().map(Value::get_type).collect()),
-            Value::Array(vs) => {
-                let t = vs.iter().map(Value::get_type).next().unwrap_or(Type::Bool);
-                Type::Array(Box::new(t))
-            }
+            Value::Array(_, t) => Type::Array(t.clone()),
             Value::Mapping(_, kt, vt) => Type::Mapping(kt.clone(), vt.clone()),
             Value::Contract(c, _) => Type::Contract(c.clone()),
             Value::Null => Type::Null,
@@ -277,7 +318,7 @@ impl Value {
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> Result<usize> {
         let len = match self {
-            Value::Array(items) => items.len(),
+            Value::Array(items, _) => items.len(),
             Value::Tuple(items) => items.len(),
             Value::Bytes(b) => b.len(),
             Value::Str(s) => s.len(),
@@ -288,12 +329,12 @@ impl Value {
 
     pub fn set_index(&mut self, index: &Value, value: Value) -> Result<()> {
         match self {
-            Value::Array(items) => {
+            Value::Array(items, t) => {
                 let int_index = index.as_usize()?;
                 if int_index >= items.len() {
                     bail!("index out of bounds")
                 }
-                items[int_index] = value;
+                items[int_index] = t.cast(&value)?;
                 Ok(())
             }
             Value::Mapping(v, kt, vt) => {
@@ -307,9 +348,7 @@ impl Value {
     pub fn is_builtin(&self) -> bool {
         matches!(
             self,
-            Value::TypeObject(Type::Console)
-                | Value::TypeObject(Type::Repl)
-                | Value::Func(Function::Builtin(_))
+            Value::TypeObject(Type::Console) | Value::TypeObject(Type::Repl)
         )
     }
 
@@ -317,6 +356,13 @@ impl Value {
         match self {
             Value::Addr(addr) => Ok(*addr),
             _ => bail!("cannot convert {} to address", self.get_type()),
+        }
+    }
+
+    pub fn as_contract(&self) -> Result<(ContractInfo, Address)> {
+        match self {
+            Value::Contract(info, addr) => Ok((info.clone(), *addr)),
+            _ => bail!("cannot convert {} to contract", self.get_type()),
         }
     }
 
@@ -358,20 +404,27 @@ impl Value {
         }
     }
 
+    pub fn as_record(&self) -> Result<&HashableIndexMap<String, Value>> {
+        match self {
+            Value::NamedTuple(_, map) => Ok(map),
+            _ => bail!("cannot convert {} to map", self.get_type()),
+        }
+    }
+
     pub fn get_field(&self, field: &str) -> Result<Value> {
         match self {
             Value::NamedTuple(_, fields) => fields
                 .0
                 .get(field)
                 .cloned()
-                .ok_or_else(|| anyhow::anyhow!("field {} not found", field)),
+                .ok_or(anyhow!("field {} not found", field)),
             _ => bail!("{} is not a struct", self.get_type()),
         }
     }
 
     pub fn get_items(&self) -> Result<Vec<Value>> {
         match self {
-            Value::Array(items) => Ok(items.clone()),
+            Value::Array(items, _) => Ok(items.clone()),
             Value::Tuple(items) => Ok(items.clone()),
             Value::NamedTuple(_, items) => Ok(items.0.values().cloned().collect()),
             _ => bail!("{} is not iterable", self.get_type()),
@@ -390,6 +443,35 @@ impl Value {
             bail!("{} is out of range for {}", self, type_)
         }
         Ok(self)
+    }
+
+    pub fn member_access(&self, member: &str) -> Result<Value> {
+        match self {
+            Value::NamedTuple(_, kv) if kv.0.contains_key(member) => {
+                Ok(kv.0.get(member).unwrap().clone())
+            }
+            Value::TransactionReceipt(r) if r.contains_key(member) => r.get(member),
+            Value::Contract(c, addr) => c.make_function(member, *addr).map(Into::into),
+            Value::Func(f) => f.member_access(member),
+            _ => {
+                let (type_, methods) = match self {
+                    Value::TypeObject(Type::Type(type_)) => {
+                        (type_.as_ref().clone(), TYPE_METHODS.get(&type_.into()))
+                    }
+                    Value::TypeObject(type_) => (type_.clone(), STATIC_METHODS.get(&type_.into())),
+                    _ => (
+                        self.get_type(),
+                        INSTANCE_METHODS.get(&(&self.get_type()).into()),
+                    ),
+                };
+                let func = methods.and_then(|m| m.get(member)).ok_or(anyhow!(
+                    "{} does not have member {}",
+                    type_,
+                    member
+                ))?;
+                Ok(Function::method(func.clone(), self).into())
+            }
+        }
     }
 }
 

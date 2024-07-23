@@ -1,5 +1,5 @@
 use futures_util::lock::Mutex;
-use solang_parser::pt::{Expression, Identifier};
+use solang_parser::pt::{Expression, Identifier, Statement};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -24,6 +24,7 @@ pub struct Env {
     variables: Vec<HashMap<String, Value>>,
     types: HashMap<String, Type>,
     provider: Arc<dyn Provider<Http<Client>, Ethereum>>,
+    function_bodies: HashMap<String, Statement>,
     wallet: Option<EthereumWallet>,
     ledger: Option<Arc<Mutex<Ledger>>>,
     pub config: Config,
@@ -39,10 +40,19 @@ impl Env {
             variables: vec![HashMap::new()],
             types: HashMap::new(),
             provider: Arc::new(provider),
+            function_bodies: HashMap::new(),
             wallet: None,
             ledger: None,
             config,
         }
+    }
+
+    pub fn set_function_body(&mut self, name: &str, body: Statement) {
+        self.function_bodies.insert(name.to_string(), body);
+    }
+
+    pub fn get_function_body(&self, name: &str) -> Option<&Statement> {
+        self.function_bodies.get(name)
     }
 
     pub fn push_scope(&mut self) {

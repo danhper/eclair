@@ -12,8 +12,8 @@ use solang_parser::pt::{ContractPart, Expression, Statement};
 use crate::loaders::types::Project;
 
 use super::assignment::Lhs;
-use super::builtin_functions::BuiltinFunction;
-use super::functions::{Function, UserDefinedFunction};
+use super::builtins;
+use super::functions::{FunctionDef, UserDefinedFunction};
 use super::parsing::ParsedCode;
 use super::types::{HashableIndexMap, Type};
 use super::{env::Env, parsing, value::Value};
@@ -48,25 +48,18 @@ impl StatementResult {
             _ => None,
         }
     }
+
+    pub fn as_value(&self) -> Result<&Value> {
+        self.value().ok_or(anyhow!("expected value, got {}", self))
+    }
 }
 
 unsafe impl std::marker::Send for StatementResult {}
 
 pub fn load_builtins(env: &mut Env) {
-    env.set_var("repl", Value::TypeObject(Type::Repl));
-    env.set_var("console", Value::TypeObject(Type::Console));
-    env.set_var("block", Value::TypeObject(Type::Block));
-    env.set_var("Transaction", Value::TypeObject(Type::Transaction));
-    env.set_var("abi", Value::TypeObject(Type::Abi));
-
-    for name in BuiltinFunction::functions() {
-        env.set_var(
-            &name,
-            Value::Func(Function::Builtin(
-                BuiltinFunction::from_name(&name).unwrap(),
-            )),
-        );
-    }
+    builtins::VALUES.iter().for_each(|(name, value)| {
+        env.set_var(name, value.clone());
+    });
 }
 
 pub fn load_project(env: &mut Env, project: &Project) -> Result<()> {
@@ -87,8 +80,8 @@ pub async fn evaluate_setup(env: &mut Env, code: &str) -> Result<()> {
     let def = parsing::parse_contract(code)?;
     evaluate_contract_parts(env, &def.parts).await?;
     let setup = env.get_var(SETUP_FUNCTION_NAME).cloned();
-    if let Some(Value::Func(func @ Function::UserDefined(_))) = setup {
-        func.execute_in_current_scope(&[], env).await?;
+    if let Some(Value::Func(func)) = setup {
+        func.execute_in_current_scope(env, &[]).await?;
         env.delete_var(SETUP_FUNCTION_NAME)
     }
 
@@ -140,7 +133,8 @@ pub async fn evaluate_contract_part(
     match part {
         ContractPart::FunctionDefinition(def) => {
             let func = UserDefinedFunction::try_from(def.as_ref().clone())?;
-            env.set_var(&func.name, Value::Func(Function::UserDefined(func.clone())));
+            let name = func.name().to_string();
+            env.set_var(&name, func.into());
         }
         ContractPart::VariableDefinition(def) => {
             env.init_variable(&def.name, &def.ty, &def.initializer)
@@ -387,10 +381,12 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             },
 
             Expression::Equal(_, lhs, rhs) => {
-                _eval_comparison(env, lhs, rhs, |o| o == Ordering::Equal).await
+                let eq = _equals(env, lhs.clone(), rhs.clone()).await?;
+                Ok(Value::Bool(eq))
             }
             Expression::NotEqual(_, lhs, rhs) => {
-                _eval_comparison(env, lhs, rhs, |o| o == Ordering::Equal).await
+                let eq = _equals(env, lhs.clone(), rhs.clone()).await?;
+                Ok(Value::Bool(!eq))
             }
             Expression::Less(_, lhs, rhs) => {
                 _eval_comparison(env, lhs, rhs, |o| o == Ordering::Less).await
@@ -437,11 +433,9 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
 
             Expression::MemberAccess(_, receiver_expr, method) => {
                 let receiver = evaluate_expression(env, receiver_expr).await?;
-                let function = Function::with_receiver(&receiver, &method.name)?;
-                if function.is_property() {
-                    Ok(function.execute(&[], env).await?)
-                } else {
-                    Ok(Value::Func(function))
+                match receiver.member_access(&method.name) {
+                    Result::Ok(Value::Func(f)) if f.is_property() => f.execute(env, &[]).await,
+                    v => v,
                 }
             }
 
@@ -463,13 +457,17 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 for expr in exprs.iter() {
                     values.push(evaluate_expression(env, Box::new(expr.clone())).await?);
                 }
-                Ok(Value::Array(values))
+                let type_ = values
+                    .first()
+                    .map(|v| v.get_type().clone())
+                    .unwrap_or(Type::Any);
+                Ok(Value::Array(values, Box::new(type_)))
             }
 
             Expression::ArraySubscript(_, expr, subscript_opt) => {
                 let lhs = evaluate_expression(env, expr).await?;
                 match lhs {
-                    Value::Tuple(values) | Value::Array(values) => {
+                    Value::Tuple(values) | Value::Array(values, _) => {
                         let subscript = subscript_opt
                             .ok_or(anyhow!("tuples and arrays do not support empty subscript"))?;
                         let index = evaluate_expression(env, subscript).await?.as_usize()?;
@@ -500,8 +498,8 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             }
 
             Expression::ArraySlice(_, arr_expr, start_expr, end_expr) => {
-                let values = match evaluate_expression(env, arr_expr).await? {
-                    Value::Array(v) => v,
+                let (values, type_) = match evaluate_expression(env, arr_expr).await? {
+                    Value::Array(v, t) => (v, t),
                     v => bail!("invalid type for slice, expected tuple, got {}", v),
                 };
                 let start = match start_expr {
@@ -515,7 +513,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 if end > values.len() {
                     bail!("end index out of bounds");
                 }
-                Ok(Value::Array(values[start..end].to_vec()))
+                Ok(Value::Array(values[start..end].to_vec(), type_.clone()))
             }
 
             Expression::Add(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::add).await,
@@ -570,7 +568,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                     args.push(evaluate_expression(env, Box::new(arg.clone())).await?);
                 }
                 match evaluate_expression(env, func_expr).await? {
-                    Value::Func(f) => f.execute(&args, env).await,
+                    Value::Func(f) => f.execute(env, &args).await,
                     Value::TypeObject(type_) => {
                         if let [arg] = &args[..] {
                             type_.cast(arg)
@@ -585,7 +583,10 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::FunctionCallBlock(_, func_expr, stmt) => {
                 let res = evaluate_statement(env, stmt).await?;
                 match evaluate_expression(env, func_expr).await? {
-                    Value::Func(f) => Ok(Value::Func(f.with_opts(res.try_into()?))),
+                    Value::Func(f) => {
+                        let opts = res.as_value()?.as_record()?.clone();
+                        Ok(f.with_opts(opts).into())
+                    }
                     _ => bail!("expected function"),
                 }
             }
@@ -597,6 +598,12 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
         }
     }
     .boxed()
+}
+
+async fn _equals(env: &mut Env, lexpr: Box<Expression>, rexpr: Box<Expression>) -> Result<bool> {
+    let lhs = evaluate_expression(env, lexpr).await?;
+    let rhs = evaluate_expression(env, rexpr).await?;
+    Ok(lhs == rhs)
 }
 
 async fn _eval_comparison(
