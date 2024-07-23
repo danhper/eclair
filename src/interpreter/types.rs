@@ -507,6 +507,19 @@ impl Type {
                     HashableIndexMap(new_values),
                 ))
             }
+            (Type::NamedTuple(name, types_), Value::NamedTuple(_, kvs)) => {
+                if kvs.0.keys().ne(types_.0.keys()) {
+                    bail!("named tuple keys do not match")
+                }
+                let mut new_values = IndexMap::new();
+                for (key, type_) in types_.0.iter() {
+                    new_values.insert(key.clone(), type_.cast(kvs.0.get(key).unwrap())?);
+                }
+                Ok(Value::NamedTuple(
+                    name.to_string(),
+                    HashableIndexMap(new_values),
+                ))
+            }
             (Type::Array(t), Value::Array(v, _)) => v
                 .iter()
                 .map(|value| t.cast(value))
