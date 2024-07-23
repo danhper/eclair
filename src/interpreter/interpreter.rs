@@ -16,6 +16,7 @@ use super::builtins;
 use super::functions::{FunctionDef, UserDefinedFunction};
 use super::parsing::ParsedCode;
 use super::types::{HashableIndexMap, Type};
+use super::utils::parse_rational_literal;
 use super::{env::Env, parsing, value::Value};
 
 pub const SETUP_FUNCTION_NAME: &str = "setUp";
@@ -320,35 +321,8 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             }
 
             Expression::RationalNumberLiteral(_, whole, raw_fraction, raw_exponent, _) => {
-                let mut n = if whole.is_empty() {
-                    U256::from(0)
-                } else {
-                    U256::from_str(&whole).map_err(|e| anyhow!("{}", e.to_string()))?
-                };
-                let exponent = if raw_exponent.is_empty() {
-                    U256::from(0)
-                } else {
-                    U256::from_str(&raw_exponent)?
-                };
-                n *= U256::from(10).pow(exponent);
-
-                let fraction = if raw_fraction.is_empty() {
-                    U256::from(0)
-                } else {
-                    U256::from_str(&raw_fraction)?
-                };
-                let decimals_count = if fraction.is_zero() {
-                    U256::from(0)
-                } else {
-                    U256::from(fraction.log10() + 1)
-                };
-                if decimals_count > exponent {
-                    bail!("fraction has more digits than decimals");
-                }
-                let adjusted_fraction = fraction * U256::from(10).pow(exponent - decimals_count);
-                n += adjusted_fraction;
-
-                Ok(Value::Uint(n, 256))
+                parse_rational_literal(&whole, &raw_fraction, &raw_exponent)
+                    .map(|v| Value::Uint(v, 256))
             }
 
             Expression::And(_, lexpr, rexpr) => {
