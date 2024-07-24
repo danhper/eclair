@@ -1,6 +1,8 @@
 # Configuration
 
 Eclair can be used without any configuration but it is possible to configure it to make the experience smoother.
+Eclair will also load [Foundry's configuration](https://book.getfoundry.sh/reference/config/overview) which can be used for some settings such as the RPC URL and the Etherscan API key.
+Using the global configuration at `~/.foundry/foundry.toml` can be convenient for such settings.
 
 ## RPC URL
 
@@ -9,6 +11,20 @@ The RPC url can be configured in several ways:
 - Using the `ETH_RPC_URL` environment variable
 - Using the `--rpc-url` option in the command line
 - Using the `repl.rpc(RPC_URL)` function inside a session
+
+### Using Foundry configuration file
+
+The [`rpc_endpoints` section](https://book.getfoundry.sh/reference/config/testing#rpc_endpoints) of `foundry.toml` to set aliases for your RPC URLs.
+Here is a sample configuration:
+
+```toml
+# ~/.foundry/foundry.toml
+[rpc_endpoints]
+mainnet = "https://eth.llamarpc.com"
+optimism = "https://mainnet.optimism.io"
+```
+
+This then allows to use `repl.rpc("mainnet")` or `repl.rpc("optimism")` to connect to the respective networks.
 
 ## Etherscan API Key
 
@@ -24,6 +40,10 @@ For a per-chain configuration, the following environment variables can be used:
 - Base: `BASESCAN_API_KEY`
 - Arbitrum: `ARBISCAN_API_KEY`
 - Sepolia: `SEPOLIA_ETHERSCAN_API_KEY`
+
+### Using Foundry configuration file
+
+The [`etherscan` section](https://book.getfoundry.sh/reference/config/etherscan) of `foundry.toml` can be used to set the API key for different chains.
 
 ## Initial setup
 
