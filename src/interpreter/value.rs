@@ -489,7 +489,7 @@ impl Add for Value {
             (Value::Uint(a, s1), Value::Int(b, s2)) => {
                 Ok(Value::Int(I256::from_raw(a) + b, s1.max(s2)))
             }
-            (Value::Str(a), Value::Str(b)) => Ok(Value::Str(a + &b)),
+            (Value::Str(a), Value::Str(b)) => return Ok(Value::Str(a + &b)),
             _ => bail!(error_msg),
         }
         .and_then(Value::validate_int)

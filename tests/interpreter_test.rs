@@ -8,6 +8,7 @@ async fn test_binops() {
     _check_result(&mut env, "int256(1) - 8", Value::from(-7)).await;
     _check_result(&mut env, "3 + 8 * 4", Value::from(35u64)).await;
     _check_result(&mut env, "(10 + 4) % 3", Value::from(2u64)).await;
+    _check_result(&mut env, "\"foo\" + \"bar\"", Value::from("foobar")).await;
 }
 
 #[tokio::test]
