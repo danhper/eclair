@@ -133,11 +133,14 @@ impl Function {
         }
 
         let valid_args = self.def.get_valid_args(&self.receiver);
-        let potential_types = valid_args.iter().filter(|a| a.len() == args.len());
+        let potential_types = valid_args
+            .iter()
+            .filter(|a| a.len() == args.len())
+            .collect_vec();
 
-        for (i, arg_types) in potential_types.enumerate() {
+        for (i, arg_types) in potential_types.iter().enumerate() {
             let res = self._unify_types(args, arg_types.as_slice());
-            if res.is_ok() || i == valid_args_lengths.len() - 1 {
+            if res.is_ok() || i == potential_types.len() - 1 {
                 return res;
             }
         }
