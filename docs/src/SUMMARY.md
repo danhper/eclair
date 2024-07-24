@@ -7,4 +7,8 @@
 - [Installation](./installation.md)
 - [Configuration](./configuration.md)
 
+# Guides
+
+- [Differences with Solidity](./differences_with_solidity.md)
+
 # Reference
