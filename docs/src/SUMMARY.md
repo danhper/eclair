@@ -9,6 +9,9 @@
 
 # Guides
 
+- [Account management](./account_management.md)
+- [Contracts management](./contracts_management.md)
+- [Interacting with contracts](./interacting_with_contracts.md)
 - [Differences with Solidity](./differences_with_solidity.md)
 
 # Reference
