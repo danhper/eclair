@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use futures::{future::BoxFuture, FutureExt};
 
 pub trait FunctionDef: std::fmt::Debug + Send + Sync {
-    fn name(&self) -> &str;
+    fn name(&self) -> String;
 
     fn get_valid_args(&self, receiver: &Option<Value>) -> Vec<Vec<FunctionParam>>;
 
@@ -39,8 +39,8 @@ impl SyncProperty {
 }
 
 impl FunctionDef for SyncProperty {
-    fn name(&self) -> &str {
-        &self.name
+    fn name(&self) -> String {
+        self.name.clone()
     }
 
     fn get_valid_args(&self, _: &Option<Value>) -> Vec<Vec<FunctionParam>> {
@@ -84,8 +84,8 @@ impl AsyncProperty {
 }
 
 impl FunctionDef for AsyncProperty {
-    fn name(&self) -> &str {
-        &self.name
+    fn name(&self) -> String {
+        self.name.clone()
     }
 
     fn get_valid_args(&self, _: &Option<Value>) -> Vec<Vec<FunctionParam>> {
@@ -132,8 +132,8 @@ impl SyncMethod {
 }
 
 impl FunctionDef for SyncMethod {
-    fn name(&self) -> &str {
-        &self.name
+    fn name(&self) -> String {
+        self.name.clone()
     }
 
     fn get_valid_args(&self, _: &Option<Value>) -> Vec<Vec<FunctionParam>> {
@@ -180,8 +180,8 @@ impl SyncFunction {
 }
 
 impl FunctionDef for SyncFunction {
-    fn name(&self) -> &str {
-        &self.name
+    fn name(&self) -> String {
+        self.name.clone()
     }
 
     fn get_valid_args(&self, _: &Option<Value>) -> Vec<Vec<FunctionParam>> {
@@ -224,8 +224,8 @@ impl AsyncMethod {
 }
 
 impl FunctionDef for AsyncMethod {
-    fn name(&self) -> &str {
-        &self.name
+    fn name(&self) -> String {
+        self.name.clone()
     }
 
     fn get_valid_args(&self, _: &Option<Value>) -> Vec<Vec<FunctionParam>> {

@@ -25,6 +25,17 @@ pub enum ContractCallMode {
     Send,
 }
 
+impl std::fmt::Display for ContractCallMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ContractCallMode::Default => write!(f, "default"),
+            ContractCallMode::Encode => write!(f, "encode"),
+            ContractCallMode::Call => write!(f, "call"),
+            ContractCallMode::Send => write!(f, "send"),
+        }
+    }
+}
+
 impl TryFrom<&str> for ContractCallMode {
     type Error = anyhow::Error;
 
@@ -107,13 +118,16 @@ impl ContractFunction {
 }
 
 impl FunctionDef for ContractFunction {
-    fn name(&self) -> &str {
-        &self.func_name
+    fn name(&self) -> String {
+        match self.mode {
+            ContractCallMode::Default => self.func_name.clone(),
+            _ => format!("{}.{}", self.func_name, self.mode),
+        }
     }
 
     fn get_valid_args(&self, receiver: &Option<Value>) -> Vec<Vec<FunctionParam>> {
         let (ContractInfo(_, abi), _) = receiver.clone().unwrap().as_contract().unwrap();
-        let functions = abi.function(self.name()).cloned().unwrap_or(vec![]);
+        let functions = abi.function(&self.func_name).cloned().unwrap_or(vec![]);
 
         functions
             .into_iter()

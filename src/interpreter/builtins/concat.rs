@@ -53,8 +53,8 @@ fn concat(args: &[Value]) -> Result<Value> {
 pub struct Concat;
 
 impl FunctionDef for Concat {
-    fn name(&self) -> &str {
-        "concat"
+    fn name(&self) -> String {
+        "concat".to_string()
     }
 
     fn get_valid_args(&self, receiver: &Option<Value>) -> Vec<Vec<FunctionParam>> {

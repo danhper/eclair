@@ -21,8 +21,8 @@ impl From<UserDefinedFunction> for Value {
 }
 
 impl FunctionDef for UserDefinedFunction {
-    fn name(&self) -> &str {
-        self.func_name.as_str()
+    fn name(&self) -> String {
+        self.func_name.clone()
     }
 
     fn get_valid_args(&self, _receiver: &Option<Value>) -> Vec<Vec<FunctionParam>> {
