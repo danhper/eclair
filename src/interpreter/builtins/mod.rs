@@ -73,6 +73,11 @@ lazy_static! {
         bytes_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
         m.insert(NonParametricType::Bytes, bytes_methods);
 
+        let mut tuple_methods = HashMap::new();
+        tuple_methods.insert("length".to_string(), iterable::ITER_LEN.clone());
+        tuple_methods.insert("map".to_string(), iterable::ITER_MAP.clone());
+        m.insert(NonParametricType::Tuple, tuple_methods);
+
         let mut fix_bytes_methods = HashMap::new();
         fix_bytes_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
         m.insert(NonParametricType::FixBytes, fix_bytes_methods);

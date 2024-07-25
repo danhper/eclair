@@ -81,16 +81,29 @@ fn format_bytes(bytes: &[u8]) -> String {
     }
 }
 
-fn format(value: &Value, args: &[Value]) -> Result<Value> {
+fn format_items(items: &[Value], args: &[Value]) -> Result<String> {
+    items
+        .iter()
+        .map(|v| format_value(v, args))
+        .collect::<Result<Vec<_>>>()
+        .map(|a| a.join(", "))
+}
+
+fn format_value(value: &Value, args: &[Value]) -> Result<String> {
     match value {
         Value::Uint(n, _) => to_decimals(*n, args, uint_to_decimals),
         Value::Int(n, _) => to_decimals(*n, args, int_to_decimals),
         Value::Str(s) => Ok(s.clone()),
         Value::Bytes(b) => Ok(format_bytes(b)),
         Value::FixBytes(b, _) => Ok(format_bytes(&b.0)),
+        Value::Array(items, _) => Ok(format!("[{}]", format_items(items, args)?)),
+        Value::Tuple(items) => Ok(format!("({})", format_items(items, args)?)),
         v => Ok(format!("{}", v)),
     }
-    .map(Value::Str)
+}
+
+fn format(value: &Value, args: &[Value]) -> Result<Value> {
+    format_value(value, args).map(Value::Str)
 }
 
 fn format_method(_env: &mut Env, value: &Value, args: &[Value]) -> Result<Value> {
