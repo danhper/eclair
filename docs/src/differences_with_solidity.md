@@ -8,7 +8,7 @@ This section highlights some of the differences between Eclair and Solidity.
 ## Static vs dynamic typing
 
 Solidity is statically typed, meaning that the type of each variable must be known at compile time and the compiler will check that the types are used correctly.
-On the other hand, Eclair is not dynamically typed and variables are only checked at runtime. Furthermore, variables do not need to be declared explicitly.
+On the other hand, Eclair is dynamically typed and variables are only checked at runtime. Furthermore, variables do not need to be declared explicitly.
 
 ```javascript
 >> a = 1; // a is an integer
