@@ -6,6 +6,10 @@ on:
     types: [completed]
     branches: [main]
 
+concurrency:
+  group: "cd"
+  cancel-in-progress: true
+
 env:
   PROJECT_NAME: eclair
 
