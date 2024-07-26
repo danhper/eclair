@@ -21,7 +21,7 @@ chisel = { git = "https://github.com/foundry-rs/foundry", tag = "nightly-5ac78a9
 url = "2.5.1"
 futures = "0.3.30"
 tokio = "1.38.0"
-alloy = { version = "0.1.2", features = ["full", "signer-ledger"] }
+alloy = { version = "0.2.0", features = ["full", "signer-ledger"] }
 itertools = "0.13.0"
 rpassword = "7.3.1"
 coins-ledger = "0.11.1"
