@@ -18,3 +18,4 @@
 # Reference
 
 - [Builtin values](./builtin_functions.md)
+- [Builtin methods](./builtin_methods.md)

@@ -91,7 +91,14 @@ impl Receipt {
             "effective_gas_price" => Value::Uint(U256::from(self.effective_gas_price), 256),
             "logs" => Value::Array(
                 self.logs.iter().map(|log| log.into()).collect(),
-                Box::new(Type::FixBytes(32)),
+                Box::new(Type::NamedTuple(
+                    "Log".to_string(),
+                    HashableIndexMap::from_iter([
+                        ("address".to_string(), Type::Address),
+                        ("topics".to_string(), Type::Array(Box::new(Type::Uint(256)))),
+                        ("data".to_string(), Type::Bytes),
+                    ]),
+                )),
             ),
             _ => bail!("receipt has no field {}", field),
         };
