@@ -143,3 +143,53 @@ Logs the values to the console.
 "foo"
 0x6B175474E89094C44Da98b954EedeAC495271d0F
 ```
+
+## `abi` functions
+
+### `abi.encode(any... args) -> bytes`
+
+Encodes the arguments according to the ABI encoding rules.
+Behaves like the regular Solidity `abi.encode` function.
+
+```javascript
+>> abi.encode(uint8(1), 0x789f8F7B547183Ab8E99A5e0E6D567E90e0EB03B)
+0x0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000789f8f7b547183ab8e99a5e0e6d567e90e0eb03b
+```
+
+### `abi.encodePacked(any... args) -> bytes`
+
+Concatenates all the arguments without padding.
+Behaves like the regular Solidity `abi.encodePacked` function.
+
+```javascript
+>> abi.encodePacked(uint8(1), 0x789f8F7B547183Ab8E99A5e0E6D567E90e0EB03B)
+0x01789f8f7b547183ab8e99a5e0e6d567e90e0eb03b
+```
+
+### `abi.decode(bytes data, (type...)) -> any`
+
+Decodes the data according to the ABI encoding rules, given the types.
+Behaves like the regular Solidity `abi.decode` function.
+
+```javascript
+>> abi.decode(0x0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000789f8f7b547183ab8e99a5e0e6d567e90e0eb03b, (uint8, address))
+(1, 0x789f8F7B547183Ab8E99A5e0E6D567E90e0EB03B)
+```
+
+## `block` functions
+
+### `block.number -> uint256`
+
+Returns the current block number.
+
+### `block.timestamp -> uint256`
+
+Returns the current block timestamp.
+
+### `block.basefee -> uint256`
+
+Returns the current block base fee.
+
+### `block.chainid -> uint256`
+
+Returns the current chain ID.
