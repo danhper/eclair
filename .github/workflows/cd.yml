@@ -1,11 +1,10 @@
 name: Upload binary to S3
 
 on:
-  workflow_dispatch:
-  # workflow_run:
-    # workflows: [CI]
-    # types: [completed]
-    # branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
 
 env:
   PROJECT_NAME: eclair

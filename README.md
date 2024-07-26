@@ -1,5 +1,7 @@
 # Eclair: a Solidity Interpreter
 
+![ci](https://github.com/danhper/eclair/actions/workflows/ci.yml/badge.svg)
+
 Eclair is a Solidity interpreter designed to provide a fast and intuitive [REPL](https://en.wikipedia.org/wiki/Read%E2%80%93eval%E2%80%93print_loop)
 to interact with EVM smart contracts using Solidity.
 
