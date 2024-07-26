@@ -1,6 +1,7 @@
 # Summary
 
 [Overview](./overview.md)
+[Project status](./project_status.md)
 
 # Getting Started
 
