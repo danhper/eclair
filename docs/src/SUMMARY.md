@@ -18,5 +18,5 @@
 
 # Reference
 
-- [Builtin values](./builtin_functions.md)
+- [Builtin values](./builtin_values.md)
 - [Builtin methods](./builtin_methods.md)

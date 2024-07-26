@@ -1,6 +1,18 @@
 # Builtin values
 
-## Global functions
+## Globals
+
+### `_`
+
+The underscore `_` variable stores the result of the last expression evaluated.
+
+```javascript
+>> 1 + 1
+2
+>> _
+2
+```
+
 
 ### `keccak256(bytes data) -> bytes32`
 
