@@ -5,8 +5,8 @@ use alloy::{
     json_abi::StateMutability,
     network::{Network, TransactionBuilder},
     primitives::{keccak256, Address, FixedBytes},
-    providers::Provider,
-    rpc::types::{TransactionInput, TransactionRequest},
+    providers::{ext::TraceApi, Provider},
+    rpc::types::{trace::parity::TraceType, TransactionInput, TransactionRequest},
     transports::Transport,
 };
 use anyhow::{anyhow, bail, Result};
@@ -22,6 +22,7 @@ pub enum ContractCallMode {
     Default,
     Encode,
     Call,
+    TraceCall,
     Send,
 }
 
@@ -31,6 +32,7 @@ impl std::fmt::Display for ContractCallMode {
             ContractCallMode::Default => write!(f, "default"),
             ContractCallMode::Encode => write!(f, "encode"),
             ContractCallMode::Call => write!(f, "call"),
+            ContractCallMode::TraceCall => write!(f, "trace_call"),
             ContractCallMode::Send => write!(f, "send"),
         }
     }
@@ -43,6 +45,7 @@ impl TryFrom<&str> for ContractCallMode {
         match s {
             "encode" => Ok(ContractCallMode::Encode),
             "call" => Ok(ContractCallMode::Call),
+            "trace_call" => Ok(ContractCallMode::TraceCall),
             "send" => Ok(ContractCallMode::Send),
             _ => bail!("{} does not exist for contract call", s),
         }
@@ -181,6 +184,8 @@ impl FunctionDef for ContractFunction {
             if self.mode == ContractCallMode::Encode {
                 let encoded = func.calldata();
                 Ok(Value::Bytes(encoded[..].to_vec()))
+            } else if self.mode == ContractCallMode::TraceCall {
+                _execute_contract_trace_call(&addr, func, env).await
             } else if self.mode == ContractCallMode::Call
                 || (self.mode == ContractCallMode::Default && is_view)
             {
@@ -233,6 +238,37 @@ where
 {
     let result = func.call().await?;
     let return_values = result
+        .into_iter()
+        .map(Value::try_from)
+        .collect::<Result<Vec<_>>>()?;
+    if return_values.len() == 1 {
+        Ok(return_values.into_iter().next().unwrap())
+    } else {
+        Ok(Value::Tuple(return_values))
+    }
+}
+
+async fn _execute_contract_trace_call<T, P, N>(
+    addr: &Address,
+    func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    env: &Env,
+) -> Result<Value>
+where
+    T: Transport + Clone,
+    P: Provider<T, N>,
+    N: Network,
+{
+    let data = func.calldata();
+    let input = TransactionInput::new(data.clone());
+    let tx_req = TransactionRequest::default().with_to(*addr).input(input);
+
+    let provider = env.get_provider();
+    let trace_type = [TraceType::Trace];
+
+    let tx = provider.root().trace_call(&tx_req, &trace_type).await?;
+    println!("{:?}", tx.trace);
+    let decoded = func.decode_output(tx.output, true)?;
+    let return_values = decoded
         .into_iter()
         .map(Value::try_from)
         .collect::<Result<Vec<_>>>()?;
