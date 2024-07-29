@@ -496,6 +496,18 @@ impl Type {
             (Type::Int(size), Value::Uint(v, _)) => {
                 Value::Int((*v).try_into()?, *size).validate_int()
             }
+            (Type::FixBytes(bytes_num), Value::Uint(v, bits_num))
+                if *bytes_num * 8 == *bits_num =>
+            {
+                let bytes = B256::from_slice(&v.to_be_bytes_vec());
+                Ok(Value::FixBytes(bytes, *bytes_num))
+            }
+            (Type::Uint(bits_num), Value::FixBytes(v, bytes_num))
+                if *bytes_num * 8 == *bits_num =>
+            {
+                let num = U256::from_be_slice(v.as_slice());
+                Ok(Value::Uint(num, *bits_num))
+            }
             (Type::Transaction, Value::FixBytes(v, 32)) => Ok(Value::Transaction(*v)),
             (Type::Bytes, Value::Str(v)) => Ok(Value::Bytes(v.as_bytes().to_vec())),
             (type_ @ Type::FixBytes(_), Value::Str(_)) => type_.cast(&Type::Bytes.cast(value)?),
