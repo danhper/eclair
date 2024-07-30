@@ -8,27 +8,6 @@ use alloy::dyn_abi::{DynSolType, DynSolValue, JsonAbiExt};
 use anyhow::{bail, Result};
 use lazy_static::lazy_static;
 
-fn abi_decode(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
-    let (data, sol_type) = match args {
-        [Value::Bytes(data_), Value::Tuple(values)] => {
-            let types = values
-                .iter()
-                .map(|v| match v {
-                    Value::TypeObject(ty) => ty.clone().try_into(),
-                    _ => bail!("abi.decode function expects tuple of types as argument"),
-                })
-                .collect::<Result<Vec<_>>>()?;
-            (data_, DynSolType::Tuple(types))
-        }
-        [Value::Bytes(data_), Value::TypeObject(ty)] => {
-            (data_, DynSolType::Tuple(vec![ty.clone().try_into()?]))
-        }
-        _ => bail!("abi.decode function expects bytes and tuple of types as argument"),
-    };
-    let decoded = sol_type.abi_decode(data)?;
-    decoded.try_into()
-}
-
 fn abi_decode_calldata(_env: &mut Env, receiver: &Value, args: &[Value]) -> Result<Value> {
     let (name, abi) = match receiver {
         Value::TypeObject(Type::Contract(ContractInfo(name, abi))) => (name, abi),
@@ -58,28 +37,161 @@ fn abi_decode_calldata(_env: &mut Env, receiver: &Value, args: &[Value]) -> Resu
     ]))
 }
 
-fn abi_encode(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
-    let arr = Value::Tuple(args.to_vec());
-    let dyn_sol = DynSolValue::try_from(&arr)?;
-    let abi_encoded = dyn_sol.abi_encode();
+fn abi_decode(args: &[Value]) -> Result<Value> {
+    let decoded = match args {
+        [Value::Bytes(data_), Value::Tuple(values)] => {
+            let types = values
+                .iter()
+                .map(|v| match v {
+                    Value::TypeObject(ty) => ty.clone().try_into(),
+                    _ => bail!("abi.decode function expects tuple of types as argument"),
+                })
+                .collect::<Result<Vec<_>>>()?;
+            DynSolType::Tuple(types).abi_decode_params(data_)?
+        }
+        [Value::Bytes(data_), Value::TypeObject(ty)] => {
+            DynSolType::try_from(ty.clone())?.abi_decode(data_)?
+        }
+        _ => bail!("abi.decode function expects bytes and tuple of types as argument"),
+    };
+    decoded.try_into()
+}
+
+fn abi_decode_(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    abi_decode(args)
+}
+
+fn abi_encode(args: &[Value]) -> Result<Value> {
+    let abi_encoded = if args.len() == 1 {
+        DynSolValue::try_from(&args[0])?.abi_encode()
+    } else {
+        let arr = Value::Tuple(args.to_vec());
+        DynSolValue::try_from(&arr)?.abi_encode_params()
+    };
     Ok(Value::Bytes(abi_encoded))
 }
 
-fn abi_encode_packed(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+fn abi_encode_(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    abi_encode(args)
+}
+
+fn abi_encode_packed(args: &[Value]) -> Result<Value> {
     let arr = Value::Tuple(args.to_vec());
     let dyn_sol = DynSolValue::try_from(&arr)?;
     let abi_encoded = dyn_sol.abi_encode_packed();
     Ok(Value::Bytes(abi_encoded))
 }
 
+fn abi_encode_packed_(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    abi_encode_packed(args)
+}
+
 lazy_static! {
-    pub static ref ABI_ENCODE: Arc<dyn FunctionDef> = SyncMethod::arc("encode", abi_encode, vec![]);
+    pub static ref ABI_ENCODE: Arc<dyn FunctionDef> =
+        SyncMethod::arc("encode", abi_encode_, vec![]);
     pub static ref ABI_ENCODE_PACKED: Arc<dyn FunctionDef> =
-        SyncMethod::arc("encodePacked", abi_encode_packed, vec![]);
-    pub static ref ABI_DECODE: Arc<dyn FunctionDef> = SyncMethod::arc("decode", abi_decode, vec![]);
+        SyncMethod::arc("encodePacked", abi_encode_packed_, vec![]);
+    pub static ref ABI_DECODE: Arc<dyn FunctionDef> =
+        SyncMethod::arc("decode", abi_decode_, vec![]);
     pub static ref ABI_DECODE_CALLDATA: Arc<dyn FunctionDef> = SyncMethod::arc(
         "decode",
         abi_decode_calldata,
         vec![vec![FunctionParam::new("calldata", Type::Bytes)]]
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy::hex;
+
+    use super::*;
+
+    #[test]
+    fn test_abi_encode_single_string() {
+        let args = vec![Value::from("foo")];
+        let expected_bytes = hex::decode("0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000003666f6f0000000000000000000000000000000000000000000000000000000000").unwrap();
+        let expected = Value::Bytes(expected_bytes);
+        let actual = abi_encode(&args).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_abi_encode_single_uint256() {
+        let args = vec![Value::from(1)];
+        let expected_bytes =
+            hex::decode("0x0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap();
+        let expected = Value::Bytes(expected_bytes);
+        let actual = abi_encode(&args).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_abi_encode_multiple_strings() {
+        let args = vec![Value::from("foo"), Value::from("bar")];
+        let expected_bytes = hex::decode("0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000003666f6f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000036261720000000000000000000000000000000000000000000000000000000000").unwrap();
+        let expected = Value::Bytes(expected_bytes);
+        let actual = abi_encode(&args).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_abi_encode_multiple_uint256() {
+        let args = vec![Value::from(1u64), Value::from(2u64)];
+        let expected_bytes =
+            hex::decode("0x00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002")
+                .unwrap();
+        let expected = Value::Bytes(expected_bytes);
+        let actual = abi_encode(&args).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_abi_encode_multiple_types() {
+        let args = vec![Value::from(1u64), Value::from("foo")];
+        let expected_bytes =
+            hex::decode("0x000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000003666f6f0000000000000000000000000000000000000000000000000000000000")
+                .unwrap();
+        let expected = Value::Bytes(expected_bytes);
+        let actual = abi_encode(&args).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_abi_decode_single_string() {
+        let value = Value::from("foo");
+        let encoded = abi_encode(&[value.clone()]).unwrap();
+        let decoded = abi_decode(&[encoded.clone(), Value::TypeObject(Type::String)]).unwrap();
+        assert_eq!(value, decoded);
+    }
+
+    #[test]
+    fn test_abi_decode_multiple_strings() {
+        let args = vec![Value::from("foo"), Value::from("bar")];
+        let encoded = abi_encode(&args).unwrap();
+        let decoded = abi_decode(&[
+            encoded.clone(),
+            Value::Tuple(vec![
+                Value::TypeObject(Type::String),
+                Value::TypeObject(Type::String),
+            ]),
+        ])
+        .unwrap();
+        assert_eq!(Value::Tuple(args), decoded);
+    }
+
+    #[test]
+    fn test_abi_decode_multiple_types() {
+        let args = vec![Value::from("foo"), Value::from(2u64)];
+        let encoded = abi_encode(&args).unwrap();
+        let decoded = abi_decode(&[
+            encoded.clone(),
+            Value::Tuple(vec![
+                Value::TypeObject(Type::String),
+                Value::TypeObject(Type::Uint(256)),
+            ]),
+        ])
+        .unwrap();
+        assert_eq!(Value::Tuple(args), decoded);
+    }
 }

@@ -49,7 +49,7 @@ async fn test_abi_encode_decode() {
     _check_result(
         &mut env,
         "abi.decode(abi.encode(1), (uint256))",
-        Value::from((1u64,)),
+        Value::from(1u64),
     )
     .await;
 
