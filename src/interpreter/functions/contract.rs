@@ -184,7 +184,7 @@ impl FunctionDef for ContractFunction {
             } else if self.mode == ContractCallMode::Call
                 || (self.mode == ContractCallMode::Default && is_view)
             {
-                _execute_contract_call(func).await
+                _execute_contract_call(env, func).await
             } else {
                 _execute_contract_send(&addr, func, &call_options, env).await
             }
@@ -224,6 +224,7 @@ where
 }
 
 async fn _execute_contract_call<T, P, N>(
+    env: &Env,
     func: CallBuilder<T, P, alloy::json_abi::Function, N>,
 ) -> Result<Value>
 where
@@ -231,7 +232,11 @@ where
     P: Provider<T, N>,
     N: Network,
 {
-    let result = func.call().await?;
+    let mut call = func.call();
+    if let Some(b) = env.block() {
+        call = call.block(b);
+    }
+    let result = call.await?;
     let return_values = result
         .into_iter()
         .map(Value::try_from)
