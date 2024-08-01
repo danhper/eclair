@@ -55,4 +55,4 @@ jobs:
         shell: bash
         run: |
           BIN_OUTPUT=target/${{ matrix.target }}/release/${PROJECT_NAME}
-          aws s3 cp $BIN_OUTPUT s3://eclair-releases/${{ matrix.target }}/${PROJECT_NAME}
+          aws s3 cp $BIN_OUTPUT s3://eclair-releases/${{ matrix.name }}/${PROJECT_NAME}
