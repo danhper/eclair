@@ -2,7 +2,7 @@
 set -eo pipefail
 
 # This script is used to install the latest version of Eclair binary into Foundry's bin directory
-# The content of the script is mostly borrowed from foundryup
+# The content of the script is largely borrowed from foundryup
 
 
 BASE_DIR=${XDG_CONFIG_HOME:-$HOME}
@@ -99,11 +99,14 @@ main() {
 
   if [ -z "$ECLAIR_PLATFORM" ]; then
     ECLAIR_PLATFORM=$(tolower $(uname -s))
+    if [ "$ECLAIR_PLATFORM" = "darwin" ]; then
+      ECLAIR_PLATFORM="macos"
+    fi
   fi
 
   case $ECLAIR_VERSION in
     ""|latest)
-      BASE_URL=$NIGHTLY_BASE_URL
+      BASE_URL="$NIGHTLY_BASE_URL"
       ;;
     release)
       BASE_URL="$(printf $GITHUB_RELEASE_BASE_URL $(latest_release))/eclair-%s"
