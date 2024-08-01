@@ -32,3 +32,24 @@ Note that only the ledger live derivation is supported for now.
 >> repl.account
 0x669F44bB2DFb534707E6FAE940d7558ab0FE254D
 ```
+
+
+## Using a keystore
+
+Accounts can be loaded from a keystore created by [`cast`](https://book.getfoundry.sh/reference/cli/cast/wallet/import), using the `repl.loadKeystore` function.
+
+The keystore can be created using the `cast wallet import` command:
+
+```
+cast wallet import my-account --interactive
+```
+
+This will create a keystore file in `~/.foundry/keystore/my-account`.
+It can then be loaded into Eclair using:
+
+```javascript
+>> repl.loadKeystore("my-account")
+```
+
+`loadKeystore` will prompt for the password to decrypt the keystore.
+The password can also be passed as a second argument.

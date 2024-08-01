@@ -11,7 +11,7 @@ use alloy::{
     network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet, TxSigner},
     primitives::Address,
     providers::{Provider, ProviderBuilder},
-    signers::{ledger::HDPath, local::PrivateKeySigner, Signature},
+    signers::{ledger::HDPath, Signature},
     transports::http::{Client, Http},
 };
 use anyhow::{anyhow, bail, Result};
@@ -126,8 +126,10 @@ impl Env {
             .map(NetworkWallet::<AnyNetwork>::default_signer_address)
     }
 
-    pub fn set_private_key(&mut self, private_key: &str) -> Result<()> {
-        let signer: PrivateKeySigner = private_key.parse()?;
+    pub fn set_signer<S>(&mut self, signer: S) -> Result<()>
+    where
+        S: TxSigner<Signature> + Send + Sync + 'static,
+    {
         self.set_wallet(signer)
     }
 

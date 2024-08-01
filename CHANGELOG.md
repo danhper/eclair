@@ -13,6 +13,7 @@
   * `priorityFee` - priority fee to pay for the transaction
   * `gasPrice` - gas price to use for the (legacy) transaction
 * Allow to select version of Eclair when installing using install script
+* Add `repl.loadKeystore` to load keystore from a file created by `cast`
 
 ## 0.1.1 (2024-07-30)
 

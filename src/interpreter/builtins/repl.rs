@@ -1,6 +1,9 @@
 use std::{process::Command, sync::Arc};
 
-use alloy::providers::Provider;
+use alloy::{
+    providers::Provider,
+    signers::local::{LocalSigner, PrivateKeySigner},
+};
 use anyhow::{anyhow, bail, Ok, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
@@ -140,7 +143,25 @@ fn load_private_key(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<
         [] => rpassword::prompt_password("Enter private key: ")?,
         _ => bail!("loadPrivateKey: invalid arguments"),
     };
-    env.set_private_key(key.as_str())?;
+    let signer: PrivateKeySigner = key.parse()?;
+    env.set_signer(signer)?;
+    Ok(get_default_sender(env))
+}
+
+fn load_keystore(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    let (account, password) = match args {
+        [Value::Str(account)] => (
+            account.clone(),
+            rpassword::prompt_password("Enter password: ")?,
+        ),
+        [Value::Str(account), Value::Str(password)] => (account.clone(), password.clone()),
+        _ => bail!("loadKeystore: invalid arguments"),
+    };
+    let foundry_dir =
+        foundry_config::Config::foundry_dir().ok_or(anyhow!("foundry dir not found"))?;
+    let keystore_file_path = foundry_dir.join("keystores").join(account.as_str());
+    let signer = LocalSigner::decrypt_keystore(keystore_file_path, password)?;
+    env.set_signer(signer)?;
     Ok(get_default_sender(env))
 }
 
@@ -239,6 +260,17 @@ lazy_static! {
         "loadPrivateKey",
         load_private_key,
         vec![vec![], vec![FunctionParam::new("privateKey", Type::String)]]
+    );
+    pub static ref REPL_LOAD_KEYSTORE: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "loadKeystore",
+        load_keystore,
+        vec![
+            vec![FunctionParam::new("account", Type::String)],
+            vec![
+                FunctionParam::new("account", Type::String),
+                FunctionParam::new("password", Type::String)
+            ]
+        ]
     );
     pub static ref REPL_LIST_LEDGER_WALLETS: Arc<dyn FunctionDef> = AsyncMethod::arc(
         "listLedgerWallets",

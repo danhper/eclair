@@ -713,6 +713,8 @@ dependencies = [
  "alloy-primitives",
  "alloy-signer 0.2.0",
  "async-trait",
+ "elliptic-curve",
+ "eth-keystore",
  "k256",
  "rand",
  "thiserror",
