@@ -27,7 +27,7 @@ pub struct Env {
     provider: Arc<dyn Provider<Http<Client>, Ethereum>>,
     wallet: Option<EthereumWallet>,
     ledger: Option<Arc<Mutex<Ledger>>>,
-    block_id: Option<BlockId>,
+    block_id: BlockId,
     pub config: Config,
 }
 
@@ -43,7 +43,7 @@ impl Env {
             provider: Arc::new(provider),
             wallet: None,
             ledger: None,
-            block_id: None,
+            block_id: BlockId::latest(),
             config,
         }
     }
@@ -65,10 +65,10 @@ impl Env {
     }
 
     pub fn set_block(&mut self, block: BlockId) {
-        self.block_id = Some(block);
+        self.block_id = block;
     }
 
-    pub fn block(&self) -> Option<BlockId> {
+    pub fn block(&self) -> BlockId {
         self.block_id
     }
 
