@@ -155,6 +155,13 @@ Returns the currently loaded account or null if none.
 Sets the current account to the one corresponding to the provided private key and returns the loaded address.
 If no private key is provided, the user will be prompted to enter one.
 
+### `repl.loadKeystore(string name, string? password) -> address`
+
+Loads the keystore located in `~/.foundry/keystore/<name>` and sets the current account to the one corresponding to the keystore.
+If the password is not provided as the second argument, it will be prompted.
+
+See [Using a keystore](./account_management.md#using-a-keystore) for more information.
+
 ### `repl.listLedgerWallets(uint256 count) -> address[]`
 
 Returns a list of `count` wallets in the ledger.

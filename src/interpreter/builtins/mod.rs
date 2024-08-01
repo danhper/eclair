@@ -146,6 +146,7 @@ lazy_static! {
             "loadPrivateKey".to_string(),
             repl::REPL_LOAD_PRIVATE_KEY.clone(),
         );
+        repl_methods.insert("loadKeystore".to_string(), repl::REPL_LOAD_KEYSTORE.clone());
         repl_methods.insert(
             "listLedgerWallets".to_string(),
             repl::REPL_LIST_LEDGER_WALLETS.clone(),
