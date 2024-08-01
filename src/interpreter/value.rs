@@ -419,6 +419,13 @@ impl Value {
         }
     }
 
+    pub fn as_u128(&self) -> Result<u128> {
+        match self {
+            Value::Uint(n, _) => Ok(n.to()),
+            _ => bail!("cannot convert {} to u128", self.get_type()),
+        }
+    }
+
     pub fn as_u256(&self) -> Result<U256> {
         match self {
             Value::Uint(n, _) => Ok(n.to()),
