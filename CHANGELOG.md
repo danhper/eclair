@@ -7,6 +7,7 @@
 * Add `repl.block()`
 * Allow to customize `block` through call options
 * Allow to customize `from` through call options
+* Allow to select version of Eclair when installing using install script
 
 ## 0.1.1 (2024-07-30)
 
