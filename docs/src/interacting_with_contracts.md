@@ -42,6 +42,10 @@ The following options are currently supported:
 * `value`: sets the `msg.value` of the transaction
 * `block`: sets the block number to execute the call on (only works for calls, not for sending transactions)
 * `from`: sets the `from` for the call (only works for calls, not for sending transactions)
+* `gasLimit`: sets the gas limit to use for the transaction
+* `maxFee`: sets the maximum fee to pay for the transaction
+* `priorityFee`: sets the priority fee to pay for the transaction
+* `gasPrice`: sets gas price to use for the (legacy) transaction
 
 ## Transaction receipts
 

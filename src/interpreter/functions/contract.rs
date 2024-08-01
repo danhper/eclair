@@ -5,7 +5,7 @@ use alloy::{
     eips::BlockId,
     json_abi::StateMutability,
     network::{Network, TransactionBuilder},
-    primitives::{keccak256, Address, FixedBytes},
+    primitives::{keccak256, Address, FixedBytes, U256},
     providers::Provider,
     rpc::types::{TransactionInput, TransactionRequest},
     transports::Transport,
@@ -52,9 +52,13 @@ impl TryFrom<&str> for ContractCallMode {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CallOptions {
-    value: Option<Box<Value>>,
+    value: Option<U256>,
     block: Option<BlockId>,
     from: Option<Address>,
+    gas_limit: Option<u128>,
+    max_fee: Option<u128>,
+    priority_fee: Option<u128>,
+    gas_price: Option<u128>,
 }
 
 impl CallOptions {
@@ -63,6 +67,18 @@ impl CallOptions {
             bail!("block is only available for calls");
         } else if self.from.is_some() {
             bail!("from is only available for calls");
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn validate_call(&self) -> Result<()> {
+        if self.max_fee.is_some() {
+            bail!("maxFee is only available for sends");
+        } else if self.priority_fee.is_some() {
+            bail!("priorityFee is only available for sends");
+        } else if self.gas_price.is_some() {
+            bail!("gasPrice is only available for sends");
         } else {
             Ok(())
         }
@@ -97,9 +113,13 @@ impl TryFrom<&HashableIndexMap<String, Value>> for CallOptions {
         let mut opts = CallOptions::default();
         for (k, v) in value.0.iter() {
             match k.as_str() {
-                "value" => opts.value = Some(Box::new(v.clone())),
+                "value" => opts.value = Some(v.as_u256()?),
                 "block" => opts.block = Some(v.as_block_id()?),
                 "from" => opts.from = Some(v.as_address()?),
+                "gasLimit" => opts.gas_limit = Some(v.as_u128()?),
+                "gasPrice" => opts.gas_price = Some(v.as_u128()?),
+                "maxFee" => opts.max_fee = Some(v.as_u128()?),
+                "priorityFee" => opts.priority_fee = Some(v.as_u128()?),
                 _ => bail!("unexpected key {}", k),
             }
         }
@@ -236,8 +256,10 @@ where
 
     let mut tx_req = TransactionRequest::default().with_to(*addr).input(input);
     if let Some(value) = opts.value.as_ref() {
-        let value = value.as_u256()?;
-        tx_req = tx_req.with_value(value);
+        tx_req = tx_req.with_value(*value);
+    }
+    if let Some(gas) = opts.gas_limit.as_ref() {
+        tx_req = tx_req.with_gas_limit(*gas);
     }
 
     Ok(tx_req)
@@ -260,6 +282,15 @@ where
         .get_default_sender()
         .ok_or(anyhow!("no wallet connected"))?;
     tx_req = tx_req.with_from(from_);
+    if let Some(gas_price) = opts.gas_price.as_ref() {
+        tx_req = tx_req.with_gas_price(*gas_price);
+    }
+    if let Some(max_fee) = opts.max_fee.as_ref() {
+        tx_req = tx_req.with_max_fee_per_gas(*max_fee);
+    }
+    if let Some(priority_fee) = opts.priority_fee.as_ref() {
+        tx_req = tx_req.with_max_priority_fee_per_gas(*priority_fee);
+    }
 
     let provider = env.get_provider();
     let tx = provider.send_transaction(tx_req).await?;
