@@ -308,6 +308,7 @@ where
     P: Provider<T, N>,
     N: Network,
 {
+    opts.validate_call()?;
     let mut tx_req = _build_transaction(addr, &func, opts)?;
     if let Some(from_) = opts.from {
         tx_req = tx_req.with_from(from_);
