@@ -87,6 +87,28 @@ If the [RPC URL](./configuration.md#rpc-url) is set in the configuration file, t
 >> repl.rpc("optimism")
 ```
 
+### `repl.block() -> uint256 | string`
+
+Returns the current block in use for contract calls.
+
+```javascript
+>> repl.block()
+"latest"
+```
+
+### `repl.block(uint256 number) | repl.block(string tag) | repl.block(bytes32 hash)`
+
+
+Sets the block to use for contract calls.
+Can be a number, a tag (e.g. "latest" or "safe"), or a block hash.
+
+```javascript
+>> repl.block(123436578)
+>> repl.block()
+123436578
+```
+
+
 ### `repl.exec(string command) -> uint256`
 
 Executes a command in the shell, displays the output and returns the exit code.

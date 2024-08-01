@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{hash::Hash, sync::Arc};
 
 use alloy::{
     contract::{CallBuilder, ContractInstance, Interface},
+    eips::BlockId,
     json_abi::StateMutability,
     network::{Network, TransactionBuilder},
     primitives::{keccak256, Address, FixedBytes},
@@ -49,9 +50,34 @@ impl TryFrom<&str> for ContractCallMode {
     }
 }
 
-#[derive(Debug, Clone, Default, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CallOptions {
     value: Option<Box<Value>>,
+    block: Option<BlockId>,
+    from: Option<Address>,
+}
+
+impl CallOptions {
+    pub fn validate_send(&self) -> Result<()> {
+        if self.block.is_some() {
+            bail!("block is only available for calls");
+        } else if self.from.is_some() {
+            bail!("from is only available for calls");
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Hash for CallOptions {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value.hash(state);
+        match self.block {
+            Some(BlockId::Hash(h)) => h.block_hash.hash(state),
+            Some(BlockId::Number(n)) => n.hash(state),
+            None => 0.hash(state),
+        }
+    }
 }
 
 impl std::fmt::Display for CallOptions {
@@ -72,6 +98,8 @@ impl TryFrom<&HashableIndexMap<String, Value>> for CallOptions {
         for (k, v) in value.0.iter() {
             match k.as_str() {
                 "value" => opts.value = Some(Box::new(v.clone())),
+                "block" => opts.block = Some(v.as_block_id()?),
+                "from" => opts.from = Some(v.as_address()?),
                 _ => bail!("unexpected key {}", k),
             }
         }
@@ -184,13 +212,35 @@ impl FunctionDef for ContractFunction {
             } else if self.mode == ContractCallMode::Call
                 || (self.mode == ContractCallMode::Default && is_view)
             {
-                _execute_contract_call(func).await
+                _execute_contract_call(&addr, func, &call_options, env).await
             } else {
                 _execute_contract_send(&addr, func, &call_options, env).await
             }
         }
         .boxed()
     }
+}
+
+fn _build_transaction<T, P, N>(
+    addr: &Address,
+    func: &CallBuilder<T, P, alloy::json_abi::Function, N>,
+    opts: &CallOptions,
+) -> Result<TransactionRequest>
+where
+    T: Transport + Clone,
+    P: Provider<T, N>,
+    N: Network,
+{
+    let data = func.calldata();
+    let input = TransactionInput::new(data.clone());
+
+    let mut tx_req = TransactionRequest::default().with_to(*addr).input(input);
+    if let Some(value) = opts.value.as_ref() {
+        let value = value.as_u256()?;
+        tx_req = tx_req.with_value(value);
+    }
+
+    Ok(tx_req)
 }
 
 async fn _execute_contract_send<T, P, N>(
@@ -204,19 +254,12 @@ where
     P: Provider<T, N>,
     N: Network,
 {
-    let data = func.calldata();
-    let input = TransactionInput::new(data.clone());
+    opts.validate_send()?;
+    let mut tx_req = _build_transaction(addr, &func, opts)?;
     let from_ = env
         .get_default_sender()
         .ok_or(anyhow!("no wallet connected"))?;
-    let mut tx_req = TransactionRequest::default()
-        .with_from(from_)
-        .with_to(*addr)
-        .input(input);
-    if let Some(value) = opts.value.as_ref() {
-        let value = value.as_u256()?;
-        tx_req = tx_req.with_value(value);
-    }
+    tx_req = tx_req.with_from(from_);
 
     let provider = env.get_provider();
     let tx = provider.send_transaction(tx_req).await?;
@@ -224,14 +267,24 @@ where
 }
 
 async fn _execute_contract_call<T, P, N>(
+    addr: &Address,
     func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    opts: &CallOptions,
+    env: &Env,
 ) -> Result<Value>
 where
     T: Transport + Clone,
     P: Provider<T, N>,
     N: Network,
 {
-    let result = func.call().await?;
+    let mut tx_req = _build_transaction(addr, &func, opts)?;
+    if let Some(from_) = opts.from {
+        tx_req = tx_req.with_from(from_);
+    }
+    let block = opts.block.unwrap_or(env.block());
+    let provider = env.get_provider();
+    let return_bytes = provider.call(&tx_req).block(block).await?;
+    let result = func.decode_output(return_bytes, true)?;
     let return_values = result
         .into_iter()
         .map(Value::try_from)

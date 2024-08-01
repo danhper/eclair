@@ -28,6 +28,21 @@ Transaction(0x6a2f1b956769d06257475d18ceeec9ee9487d91c97d36346a3cc84d568e36e5c)
 Transaction(0xf3e85039345ff864bb216b10e84c7d009e99ec55b370dae22706b0d48ea41583)
 ```
 
+### Transaction options
+
+There are different options available when calling and sending transactions to contracts.
+The options can be passed using the `{key: value}` Solidity syntax, for example:
+
+```javascript
+>> tx = weth.deposit{value: 1e18}()
+```
+
+The following options are currently supported:
+
+* `value`: sets the `msg.value` of the transaction
+* `block`: sets the block number to execute the call on (only works for calls, not for sending transactions)
+* `from`: sets the `from` for the call (only works for calls, not for sending transactions)
+
 ## Transaction receipts
 
 After sending a transaction, you can get the transaction receipt using the `Transaction.getReceipt` method.

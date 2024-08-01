@@ -1,5 +1,6 @@
 use alloy::{
     dyn_abi::DynSolValue,
+    eips::{BlockId, BlockNumberOrTag},
     hex,
     primitives::{Address, B256, I256, U256},
 };
@@ -9,6 +10,7 @@ use itertools::Itertools;
 use std::{
     fmt::{self, Display, Formatter},
     ops::{Add, Div, Mul, Rem, Sub},
+    str::FromStr,
 };
 
 use super::{
@@ -225,6 +227,22 @@ impl From<Function> for Value {
     }
 }
 
+impl From<BlockId> for Value {
+    fn from(block_id: BlockId) -> Self {
+        match block_id {
+            BlockId::Hash(hash) => Value::FixBytes(hash.block_hash, 32),
+            BlockId::Number(n) => match n {
+                BlockNumberOrTag::Earliest => Value::Str("earliest".to_string()),
+                BlockNumberOrTag::Latest => Value::Str("latest".to_string()),
+                BlockNumberOrTag::Pending => Value::Str("pending".to_string()),
+                BlockNumberOrTag::Number(n) => Value::Uint(U256::from(n), 256),
+                BlockNumberOrTag::Finalized => Value::Str("finalized".to_string()),
+                BlockNumberOrTag::Safe => Value::Str("safe".to_string()),
+            },
+        }
+    }
+}
+
 impl<const N: usize> From<alloy::primitives::FixedBytes<N>> for Value {
     fn from(bytes: alloy::primitives::FixedBytes<N>) -> Self {
         Value::FixBytes(B256::from_slice(&bytes[..]), N)
@@ -345,6 +363,10 @@ impl Value {
         }
     }
 
+    pub fn is_number(&self) -> bool {
+        matches!(self, Value::Uint(..) | Value::Int(..))
+    }
+
     pub fn is_builtin(&self) -> bool {
         matches!(
             self,
@@ -401,6 +423,15 @@ impl Value {
         match self {
             Value::Uint(n, _) => Ok(n.to()),
             _ => bail!("cannot convert {} to u256", self.get_type()),
+        }
+    }
+
+    pub fn as_block_id(&self) -> Result<BlockId> {
+        match self {
+            Value::FixBytes(hash, 32) => Ok(BlockId::Hash((*hash).into())),
+            Value::Str(s) => BlockId::from_str(s).map_err(Into::into),
+            n if n.is_number() => Ok(BlockId::number(n.as_u64()?)),
+            _ => bail!("cannot convert {} to block id", self.get_type()),
         }
     }
 

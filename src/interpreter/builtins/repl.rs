@@ -63,6 +63,17 @@ fn debug(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
     }
 }
 
+fn block(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    match args {
+        [] => Ok(env.block().into()),
+        [value] => {
+            env.set_block(value.as_block_id()?);
+            Ok(Value::Null)
+        }
+        _ => bail!("block: invalid arguments"),
+    }
+}
+
 fn exec(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
     let cmd = args
         .first()
@@ -184,6 +195,16 @@ lazy_static! {
         "debug",
         debug,
         vec![vec![], vec![FunctionParam::new("debug", Type::Bool)]]
+    );
+    pub static ref REPL_BLOCK: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "block",
+        block,
+        vec![
+            vec![],
+            vec![FunctionParam::new("block", Type::Uint(256))],
+            vec![FunctionParam::new("block", Type::String)],
+            vec![FunctionParam::new("block", Type::FixBytes(32))],
+        ]
     );
     pub static ref REPL_EXEC: Arc<dyn FunctionDef> = SyncMethod::arc(
         "exec",

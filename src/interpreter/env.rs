@@ -1,5 +1,5 @@
 use futures_util::lock::Mutex;
-use solang_parser::pt::{Expression, Identifier, Statement};
+use solang_parser::pt::{Expression, Identifier};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -7,6 +7,7 @@ use std::{
 use url::Url;
 
 use alloy::{
+    eips::BlockId,
     network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet, TxSigner},
     primitives::Address,
     providers::{Provider, ProviderBuilder},
@@ -24,9 +25,9 @@ pub struct Env {
     variables: Vec<HashMap<String, Value>>,
     types: HashMap<String, Type>,
     provider: Arc<dyn Provider<Http<Client>, Ethereum>>,
-    function_bodies: HashMap<String, Statement>,
     wallet: Option<EthereumWallet>,
     ledger: Option<Arc<Mutex<Ledger>>>,
+    block_id: BlockId,
     pub config: Config,
 }
 
@@ -40,19 +41,11 @@ impl Env {
             variables: vec![HashMap::new()],
             types: HashMap::new(),
             provider: Arc::new(provider),
-            function_bodies: HashMap::new(),
             wallet: None,
             ledger: None,
+            block_id: BlockId::latest(),
             config,
         }
-    }
-
-    pub fn set_function_body(&mut self, name: &str, body: Statement) {
-        self.function_bodies.insert(name.to_string(), body);
-    }
-
-    pub fn get_function_body(&self, name: &str) -> Option<&Statement> {
-        self.function_bodies.get(name)
     }
 
     pub fn push_scope(&mut self) {
@@ -69,6 +62,14 @@ impl Env {
 
     pub fn is_debug(&self) -> bool {
         self.config.debug
+    }
+
+    pub fn set_block(&mut self, block: BlockId) {
+        self.block_id = block;
+    }
+
+    pub fn block(&self) -> BlockId {
+        self.block_id
     }
 
     pub fn get_provider(&self) -> Arc<dyn Provider<Http<Client>, Ethereum>> {

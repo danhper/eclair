@@ -137,6 +137,7 @@ lazy_static! {
         repl_methods.insert("connected".to_string(), repl::REPL_IS_CONNECTED.clone());
         repl_methods.insert("rpc".to_string(), repl::REPL_RPC.clone());
         repl_methods.insert("debug".to_string(), repl::REPL_DEBUG.clone());
+        repl_methods.insert("block".to_string(), repl::REPL_BLOCK.clone());
         repl_methods.insert("exec".to_string(), repl::REPL_EXEC.clone());
         repl_methods.insert("loadAbi".to_string(), repl::REPL_LOAD_ABI.clone());
         repl_methods.insert("fetchAbi".to_string(), repl::REPL_FETCH_ABI.clone());
