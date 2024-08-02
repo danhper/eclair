@@ -508,6 +508,15 @@ impl Type {
                 let num = U256::from_be_slice(v.as_slice());
                 Ok(Value::Uint(num, *bits_num))
             }
+            (Type::FixBytes(target_bytes_num), Value::FixBytes(bytes, _)) => {
+                let mut new_bytes = bytes.0.to_vec();
+                new_bytes.resize(*target_bytes_num, 0); // "erase" all bytes after target_bytes_num
+                new_bytes.resize(32, 0); // pad with zero to be able to create a B256
+                Ok(Value::FixBytes(
+                    B256::from_slice(&new_bytes),
+                    *target_bytes_num,
+                ))
+            }
             (Type::Transaction, Value::FixBytes(v, 32)) => Ok(Value::Transaction(*v)),
             (Type::Bytes, Value::Str(v)) => Ok(Value::Bytes(v.as_bytes().to_vec())),
             (type_ @ Type::FixBytes(_), Value::Str(_)) => type_.cast(&Type::Bytes.cast(value)?),
@@ -612,7 +621,10 @@ impl Type {
 #[cfg(test)]
 mod tests {
     use crate::interpreter::Value;
-    use alloy::primitives::{I128, I256, I32, I64, I8, U128, U256, U32, U64, U8};
+    use alloy::{
+        hex::FromHex,
+        primitives::{I128, I256, I32, I64, I8, U128, U256, U32, U64, U8},
+    };
 
     use super::Type;
 
@@ -672,5 +684,19 @@ mod tests {
             let expected = I256::from_dec_str(&expected_str).unwrap();
             assert_eq!(t.min().unwrap(), Value::Int(expected, 256));
         }
+    }
+
+    #[test]
+    fn cast_bytes() {
+        let signature =
+            Value::from_hex("0x70a08231b98ef4ca268c9cc3f6b4590e4bfec28280db06bb5d45e689f2a360be")
+                .unwrap();
+        let selector = Value::from_hex("0x70a08231").unwrap();
+        assert_eq!(Type::FixBytes(4).cast(&signature).unwrap(), selector);
+        let padded_selector = "0x70a0823100000000000000000000000000000000000000000000000000000000";
+        assert_eq!(
+            Type::FixBytes(32).cast(&selector).unwrap(),
+            Value::from_hex(padded_selector).unwrap()
+        );
     }
 }

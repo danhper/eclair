@@ -3,7 +3,7 @@ use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 use std::str::FromStr;
 
 use alloy::hex::FromHex;
-use alloy::primitives::{Address, B256, I256, U256};
+use alloy::primitives::{I256, U256};
 use anyhow::{anyhow, bail, Ok, Result};
 use futures::future::{BoxFuture, FutureExt};
 use indexmap::IndexMap;
@@ -309,16 +309,7 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 _eval_binop_assign(env, left, right, |a, b| a % b).await
             }
 
-            Expression::HexNumberLiteral(_, n, _) => {
-                let result = if n.len() == 42 {
-                    Value::Addr(Address::from_hex(n)?)
-                } else if n.len() <= 66 {
-                    Value::FixBytes(B256::from_hex(&n)?, 32)
-                } else {
-                    Value::Bytes(Vec::from_hex(&n[2..])?)
-                };
-                Ok(result)
-            }
+            Expression::HexNumberLiteral(_, n, _) => Value::from_hex(n),
 
             Expression::RationalNumberLiteral(_, whole, raw_fraction, raw_exponent, _) => {
                 parse_rational_literal(&whole, &raw_fraction, &raw_exponent)

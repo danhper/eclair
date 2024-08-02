@@ -14,6 +14,11 @@
   * `gasPrice` - gas price to use for the (legacy) transaction
 * Allow to select version of Eclair when installing using install script
 * Add `repl.loadKeystore` to load keystore from a file created by `cast`
+* Allow conversion between different fixed-size bytes types (e.g. bytes32 -> bytes4 or vice-versa)
+
+### Bug fixes
+
+* Fix parsing of fix bytes with less than 32 bytes (e.g. bytes4)
 
 ## 0.1.1 (2024-07-30)
 

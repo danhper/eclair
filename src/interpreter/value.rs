@@ -1,7 +1,7 @@
 use alloy::{
     dyn_abi::DynSolValue,
     eips::{BlockId, BlockNumberOrTag},
-    hex,
+    hex::{self, FromHex},
     primitives::{Address, B256, I256, U256},
 };
 use anyhow::{anyhow, bail, Result};
@@ -282,6 +282,25 @@ where
 {
     fn from(t: (T, U, V)) -> Self {
         Value::Tuple(vec![t.0.into(), t.1.into(), t.2.into()])
+    }
+}
+
+impl FromHex for Value {
+    type Error = anyhow::Error;
+
+    fn from_hex<T: AsRef<[u8]>>(hex: T) -> Result<Self> {
+        let result = if hex.as_ref().len() % 2 == 1 {
+            bail!("hex number literal must have an even number of digits")
+        } else if hex.as_ref().len() == 42 {
+            Value::Addr(Address::from_hex(hex)?)
+        } else if hex.as_ref().len() <= 66 {
+            let mut bytes = Vec::from_hex(&hex.as_ref()[2..])?;
+            bytes.resize(32, 0);
+            Value::FixBytes(B256::from_slice(&bytes), (hex.as_ref().len() - 2) / 2)
+        } else {
+            Value::Bytes(Vec::from_hex(&hex.as_ref()[2..])?)
+        };
+        Ok(result)
     }
 }
 
@@ -611,5 +630,23 @@ impl Rem for Value {
             _ => bail!(error_msg),
         }
         .and_then(Value::validate_int)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_value_from_hex() {
+        let addr = Address::from_hex("0x7a250d5630b4cf539739df2c5dacb4c659f2488d").unwrap();
+        let value = Value::from_hex("0x7a250d5630b4cf539739df2c5dacb4c659f2488d").unwrap();
+        assert_eq!(value, Value::Addr(addr));
+
+        let value = Value::from_hex("0xdeadbeef").unwrap();
+        let mut bytes = Vec::from_hex("deadbeef").unwrap();
+        bytes.resize(32, 0);
+        let fix_bytes = B256::from_slice(&bytes);
+        assert_eq!(value, Value::FixBytes(fix_bytes, 4));
     }
 }
