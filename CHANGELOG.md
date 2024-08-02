@@ -15,6 +15,7 @@
 * Allow to select version of Eclair when installing using install script
 * Add `repl.loadKeystore` to load keystore from a file created by `cast`
 * Allow conversion between different fixed-size bytes types (e.g. bytes32 -> bytes4 or vice-versa)
+* Allow slicing on bytes and strings
 
 ### Bug fixes
 

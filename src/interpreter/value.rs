@@ -530,6 +530,29 @@ impl Value {
             }
         }
     }
+
+    pub fn slice(&self, start: Option<usize>, end: Option<usize>) -> Result<Value> {
+        let start = start.unwrap_or(0);
+        let end = end.unwrap_or(self.len()?);
+        if end > self.len()? {
+            bail!("index out of bounds")
+        }
+        match self {
+            Value::Array(items, t) => {
+                let items = items[start..end].to_vec();
+                Ok(Value::Array(items, t.clone()))
+            }
+            Value::Bytes(bytes) => {
+                let bytes = bytes[start..end].to_vec();
+                Ok(Value::Bytes(bytes))
+            }
+            Value::Str(s) => {
+                let s = s.chars().skip(start).take(end - start).collect();
+                Ok(Value::Str(s))
+            }
+            _ => bail!("{} is not sliceable", self.get_type()),
+        }
+    }
 }
 
 impl Add for Value {
@@ -648,5 +671,30 @@ mod tests {
         bytes.resize(32, 0);
         let fix_bytes = B256::from_slice(&bytes);
         assert_eq!(value, Value::FixBytes(fix_bytes, 4));
+    }
+
+    #[test]
+    fn test_slice() {
+        let array = Value::Array(
+            vec![Value::from(1u64), Value::from(2u64), Value::from(3u64)],
+            Box::new(Type::Int(256)),
+        );
+        let slice = array.slice(Some(1), Some(2)).unwrap();
+        assert_eq!(
+            slice,
+            Value::Array(vec![Value::from(2u64)], Box::new(Type::Int(256)))
+        );
+
+        let bytes = Value::Bytes(vec![1, 2, 3]);
+        let slice = bytes.slice(Some(1), Some(2)).unwrap();
+        assert_eq!(slice, Value::Bytes(vec![2]));
+
+        let bytes = Value::Bytes(vec![1, 2, 3]);
+        let slice = bytes.slice(Some(1), None).unwrap();
+        assert_eq!(slice, Value::Bytes(vec![2, 3]));
+
+        let str = Value::Str("hello".to_string());
+        let slice = str.slice(Some(1), Some(3)).unwrap();
+        assert_eq!(slice, Value::Str("el".to_string()));
     }
 }

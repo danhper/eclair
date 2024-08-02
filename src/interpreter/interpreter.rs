@@ -463,22 +463,16 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             }
 
             Expression::ArraySlice(_, arr_expr, start_expr, end_expr) => {
-                let (values, type_) = match evaluate_expression(env, arr_expr).await? {
-                    Value::Array(v, t) => (v, t),
-                    v => bail!("invalid type for slice, expected tuple, got {}", v),
-                };
+                let value = evaluate_expression(env, arr_expr).await?;
                 let start = match start_expr {
-                    Some(expr) => evaluate_expression(env, expr).await?.as_usize()?,
-                    None => 0,
+                    Some(expr) => Some(evaluate_expression(env, expr).await?.as_usize()?),
+                    None => None,
                 };
                 let end = match end_expr {
-                    Some(expr) => evaluate_expression(env, expr).await?.as_usize()?,
-                    None => values.len(),
+                    Some(expr) => Some(evaluate_expression(env, expr).await?.as_usize()?),
+                    None => None,
                 };
-                if end > values.len() {
-                    bail!("end index out of bounds");
-                }
-                Ok(Value::Array(values[start..end].to_vec(), type_.clone()))
+                value.slice(start, end)
             }
 
             Expression::Add(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::add).await,
