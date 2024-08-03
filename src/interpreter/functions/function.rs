@@ -36,7 +36,10 @@ impl std::cmp::Eq for Function {}
 
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let variants = self.get_variants();
+        let mut variants = self.get_variants();
+        if variants.is_empty() {
+            variants = vec![format!("{}(any... args)", self.def.name())];
+        }
         for (i, variant) in variants.iter().enumerate() {
             if i > 0 {
                 writeln!(f)?;

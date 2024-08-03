@@ -20,6 +20,7 @@
 ### Bug fixes
 
 * Fix parsing of fix bytes with less than 32 bytes (e.g. bytes4)
+* Fix display of functions that don't check argument types
 
 ## 0.1.1 (2024-07-30)
 
