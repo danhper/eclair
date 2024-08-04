@@ -13,13 +13,13 @@ This will install Eclair in the Foundry bin directory, typically `~/.foundry/bin
 If you want the latest published release instead, you can use the following command:
 
 ```bash
-curl -L https://install.eclair.so | bash -s --version release
+curl -L https://install.eclair.so | bash -s -- --version release
 ```
 
 To install a specific version, you can use the following command:
 
 ```bash
-curl -L https://install.eclair.so | bash -s --version VERSION
+curl -L https://install.eclair.so | bash -s -- --version VERSION
 ```
 
 where `VERSION` should be replaced with [a release version](https://github.com/danhper/eclair/releases).
