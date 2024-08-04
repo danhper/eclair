@@ -1,0 +1,25 @@
+name: Create release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download binaries
+        run: bash ./scripts/download-binaries.sh ./tmp
+      - name: Create release body
+        run: bash ./scripts/generate-release-body.sh ./tmp
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./tmp/eclair-*
+          body_path: ./tmp/release-body.md

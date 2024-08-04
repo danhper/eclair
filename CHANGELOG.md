@@ -1,6 +1,6 @@
 # Changelog
 
-## Not released
+## v0.1.2 (2024-08-04)
 
 ### Features
 
@@ -22,7 +22,7 @@
 * Fix parsing of fix bytes with less than 32 bytes (e.g. bytes4)
 * Fix display of functions that don't check argument types
 
-## 0.1.1 (2024-07-30)
+## v0.1.1 (2024-07-30)
 
 ### Features
 
