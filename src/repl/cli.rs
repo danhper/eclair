@@ -2,8 +2,10 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+pub const ECLAIR_VERSION: &str = env!("ECLAIR_VERSION");
+
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(version = ECLAIR_VERSION, about, long_about = None)]
 pub struct Cli {
     /// Set the RPC URL to use
     #[arg(long, value_name = "URL", env = "ETH_RPC_URL")]
