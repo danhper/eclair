@@ -7,6 +7,7 @@ use lazy_static::lazy_static;
 
 use crate::interpreter::{
     functions::{AsyncMethod, FunctionDef, FunctionParam},
+    utils::receipt_to_value,
     Env, Type, Value,
 };
 
@@ -31,7 +32,7 @@ fn wait_for_receipt<'a>(
             .with_timeout(Some(std::time::Duration::from_secs(timeout)))
             .get_receipt()
             .await?;
-        Ok(Value::TransactionReceipt(receipt.into()))
+        receipt_to_value(env, receipt)
     }
     .boxed()
 }

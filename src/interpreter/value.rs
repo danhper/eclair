@@ -3,6 +3,7 @@ use alloy::{
     eips::{BlockId, BlockNumberOrTag},
     hex::{self, FromHex},
     primitives::{Address, B256, I256, U256},
+    rpc::types::TransactionReceipt,
 };
 use anyhow::{anyhow, bail, Result};
 use indexmap::IndexMap;
@@ -16,7 +17,7 @@ use std::{
 use super::{
     builtins::{INSTANCE_METHODS, STATIC_METHODS, TYPE_METHODS},
     functions::Function,
-    types::{ContractInfo, HashableIndexMap, Receipt, Type},
+    types::{ContractInfo, HashableIndexMap, Type},
 };
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -36,7 +37,6 @@ pub enum Value {
     Mapping(HashableIndexMap<Value, Value>, Box<Type>, Box<Type>),
     TypeObject(Type),
     Transaction(B256),
-    TransactionReceipt(Receipt),
     Func(Box<Function>),
 }
 
@@ -86,7 +86,6 @@ impl Display for Value {
             }
             Value::TypeObject(t) => write!(f, "{}", t),
             Value::Transaction(t) => write!(f, "Transaction({})", t),
-            Value::TransactionReceipt(r) => write!(f, "TransactionReceipt {{ {} }}", r),
             Value::Contract(ContractInfo(name, _), addr) => {
                 write!(f, "{}({})", name, addr.to_checksum(None))
             }
@@ -126,7 +125,6 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::Array(vs, _) => DynSolValue::Array(_values_to_dyn_sol_values(vs)?),
             Value::Mapping(_, _, _) => bail!("cannot convert mapping to Solidity type"),
             Value::Null => bail!("cannot convert null to Solidity type"),
-            Value::TransactionReceipt(_) => bail!("cannot convert receipt to Solidity type"),
             Value::TypeObject(_) => bail!("cannot convert type objects to Solidity type"),
             Value::Func(_) => bail!("cannot convert function to Solidity type"),
         };
@@ -348,7 +346,6 @@ impl Value {
             Value::TypeObject(type_ @ Type::Type(_)) => type_.clone(),
             Value::TypeObject(type_) => Type::Type(Box::new(type_.clone())),
             Value::Transaction(_) => Type::Transaction,
-            Value::TransactionReceipt(_) => Type::TransactionReceipt,
         }
     }
 
@@ -507,7 +504,6 @@ impl Value {
             Value::NamedTuple(_, kv) if kv.0.contains_key(member) => {
                 Ok(kv.0.get(member).unwrap().clone())
             }
-            Value::TransactionReceipt(r) if r.contains_key(member) => r.get(member),
             Value::Contract(c, addr) => c.make_function(member, *addr).map(Into::into),
             Value::Func(f) => f.member_access(member),
             _ => {
@@ -552,6 +548,41 @@ impl Value {
             }
             _ => bail!("{} is not sliceable", self.get_type()),
         }
+    }
+
+    pub fn from_receipt(receipt: TransactionReceipt, parsed_logs: Vec<Value>) -> Self {
+        let log_type = Type::NamedTuple(
+            "Log".to_string(),
+            HashableIndexMap::from_iter([
+                ("address".to_string(), Type::Address),
+                ("topics".to_string(), Type::Array(Box::new(Type::Uint(256)))),
+                ("data".to_string(), Type::Bytes),
+                ("args".to_string(), Type::Any),
+            ]),
+        );
+        let fields = IndexMap::from([
+            (
+                "txHash".to_string(),
+                Value::FixBytes(receipt.transaction_hash, 32),
+            ),
+            (
+                "blockHash".to_string(),
+                Value::FixBytes(receipt.block_hash.unwrap_or_default(), 32),
+            ),
+            (
+                "blockNumber".to_string(),
+                receipt.block_number.unwrap_or(0u64).into(),
+            ),
+            ("status".to_string(), Value::Bool(receipt.status())),
+            ("gasUsed".to_string(), receipt.gas_used.into()),
+            ("gasPrice".to_string(), receipt.effective_gas_price.into()),
+            (
+                "logs".to_string(),
+                Value::Array(parsed_logs, Box::new(log_type)),
+            ),
+        ]);
+
+        Value::NamedTuple("Receipt".to_string(), HashableIndexMap(fields))
     }
 }
 

@@ -13,7 +13,7 @@ use crate::{
         functions::{
             AsyncMethod, AsyncProperty, FunctionDef, FunctionParam, SyncMethod, SyncProperty,
         },
-        ContractInfo, Env, Type, Value,
+        Env, Type, Value,
     },
     loaders,
 };
@@ -99,8 +99,7 @@ fn load_abi(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
         _ => bail!("loadAbi: invalid arguments"),
     };
     let abi = loaders::file::load_abi(filepath, key)?;
-    let contract_info = ContractInfo(name.to_string(), abi);
-    env.set_type(name, Type::Contract(contract_info.clone()));
+    env.add_contract(name, abi);
     Ok(Value::Null)
 }
 
@@ -116,8 +115,7 @@ fn fetch_abi<'a>(
                 let etherscan_config = env.config.get_etherscan_config(chain_id)?;
                 let abi =
                     loaders::etherscan::load_abi(etherscan_config, &address.to_string()).await?;
-                let contract_info = ContractInfo(name.to_string(), abi);
-                env.set_type(name, Type::Contract(contract_info.clone()));
+                let contract_info = env.add_contract(name, abi);
                 Ok(Value::Contract(contract_info, *address))
             }
             _ => bail!("fetchAbi: invalid arguments"),

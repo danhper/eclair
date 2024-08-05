@@ -1,7 +1,16 @@
 use anyhow::{bail, Result};
+use indexmap::IndexMap;
+use itertools::{Either, Itertools};
 use std::str::FromStr;
 
-use alloy::primitives::U256;
+use alloy::{
+    dyn_abi::EventExt,
+    json_abi::Event,
+    primitives::U256,
+    rpc::types::{Log, TransactionReceipt},
+};
+
+use super::{types::HashableIndexMap, Env, Type, Value};
 
 pub fn join_with_final<T>(separator: &str, final_separator: &str, strings: Vec<T>) -> String
 where
@@ -50,8 +59,73 @@ pub fn parse_rational_literal(whole: &str, raw_fraction: &str, raw_exponent: &st
     Ok(n)
 }
 
+pub fn decode_log_args(log: &Log, event: &Event) -> Result<Value> {
+    let decoded = event.decode_log(log.data(), true)?;
+    let mut fully_decoded = IndexMap::new();
+    let (indexed_names, body_names): (Vec<_>, Vec<_>) = event.inputs.iter().partition_map(|v| {
+        if v.indexed {
+            Either::Left(v.name.clone())
+        } else {
+            Either::Right(v.name.clone())
+        }
+    });
+    for (value, name) in decoded.indexed.iter().zip(indexed_names.iter()) {
+        fully_decoded.insert(name.clone(), value.clone().try_into()?);
+    }
+    for (value, name) in decoded.body.iter().zip(body_names.iter()) {
+        fully_decoded.insert(name.clone(), value.clone().try_into()?);
+    }
+
+    Ok(Value::NamedTuple(
+        event.name.clone(),
+        HashableIndexMap(fully_decoded),
+    ))
+}
+
+pub fn log_to_value(env: &Env, log: Log) -> Result<Value> {
+    let mut fields = IndexMap::new();
+    fields.insert("address".to_string(), Value::Addr(log.address()));
+    fields.insert(
+        "topics".to_string(),
+        Value::Array(
+            log.topics()
+                .iter()
+                .map(|t| Value::FixBytes(*t, 32))
+                .collect(),
+            Box::new(Type::FixBytes(32)),
+        ),
+    );
+    fields.insert("data".to_string(), Value::Bytes(log.data().data.to_vec()));
+
+    if let Some(evt) = log.topic0().and_then(|t| env.get_event(t)) {
+        let decoded_args = decode_log_args(&log, evt)?;
+        fields.insert("args".to_string(), decoded_args);
+    } else {
+        fields.insert("args".to_string(), Value::Null);
+    }
+
+    Ok(Value::NamedTuple(
+        "Log".to_string(),
+        HashableIndexMap(fields),
+    ))
+}
+
+pub fn receipt_to_value(env: &Env, receipt: TransactionReceipt) -> Result<Value> {
+    let logs = receipt.inner.logs().to_vec();
+    let transformed_logs = logs
+        .into_iter()
+        .map(|log| log_to_value(env, log))
+        .collect::<Result<Vec<Value>>>()?;
+    Ok(Value::from_receipt(receipt, transformed_logs))
+}
+
 #[cfg(test)]
 mod tests {
+    use alloy::{
+        json_abi::EventParam,
+        primitives::{address, b256, bytes, LogData},
+    };
+
     use super::*;
 
     #[test]
@@ -82,10 +156,7 @@ mod tests {
             U256::from(1200)
         );
         // 1.0
-        assert_eq!(
-            parse_rational_literal("1", "0", "").unwrap(),
-            U256::from(1)
-        );
+        assert_eq!(parse_rational_literal("1", "0", "").unwrap(), U256::from(1));
         // 1.01e3
         assert_eq!(
             parse_rational_literal("1", "01", "3").unwrap(),
@@ -116,5 +187,89 @@ mod tests {
             parse_rational_literal("", "1", "3").unwrap(),
             U256::from(100)
         );
+    }
+
+    #[test]
+    fn test_decode_event() {
+        let event = Event {
+            name: "Transfer".to_string(),
+            inputs: vec![
+                EventParam {
+                    ty: "address".to_string(),
+                    name: "from".to_string(),
+                    indexed: true,
+                    components: vec![],
+                    internal_type: None,
+                },
+                EventParam {
+                    ty: "address".to_string(),
+                    name: "to".to_string(),
+                    indexed: true,
+                    components: vec![],
+                    internal_type: None,
+                },
+                EventParam {
+                    ty: "uint256".to_string(),
+                    name: "value".to_string(),
+                    indexed: false,
+                    components: vec![],
+                    internal_type: None,
+                },
+            ],
+            anonymous: false,
+        };
+        let log = _get_log();
+        let decoded = decode_log_args(&log, &event).unwrap();
+        assert_eq!(
+            decoded,
+            Value::NamedTuple(
+                "Transfer".to_string(),
+                HashableIndexMap(
+                    vec![
+                        (
+                            "from".to_string(),
+                            Value::Addr(address!("35641673a0ce64f644ad2f395be19668a06a5616"))
+                        ),
+                        (
+                            "to".to_string(),
+                            Value::Addr(address!("9748a9de5a2d81e96c2070f7f0d1d128bbb4d3c4"))
+                        ),
+                        (
+                            "value".to_string(),
+                            Value::Uint(U256::from_str("2270550663541970860349").unwrap(), 256)
+                        ),
+                    ]
+                    .into_iter()
+                    .collect()
+                )
+            )
+        );
+    }
+
+    fn _get_log() -> Log {
+        Log {
+            inner: alloy::primitives::Log {
+                address: address!("e07f9d810a48ab5c3c914ba3ca53af14e4491e8a"),
+                data: LogData::new_unchecked(
+                    vec![
+                        b256!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                        b256!("00000000000000000000000035641673a0ce64f644ad2f395be19668a06a5616"),
+                        b256!("0000000000000000000000009748a9de5a2d81e96c2070f7f0d1d128bbb4d3c4"),
+                    ],
+                    bytes!("00000000000000000000000000000000000000000000007b1638669932a6793d"),
+                ),
+            },
+            block_hash: Some(b256!(
+                "d82cbdd9aba2827815d8db2e0665b1f54e6decc4f59042e53344f6562301e55b"
+            )),
+            block_number: Some(18735365),
+            block_timestamp: None,
+            transaction_hash: Some(b256!(
+                "fb89e2333b81f2751eedaf2aeffb787917d42ea6ea7c5afd4d45371f3f1b8079"
+            )),
+            transaction_index: Some(134),
+            log_index: Some(207),
+            removed: false,
+        }
     }
 }

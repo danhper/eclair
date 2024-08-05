@@ -110,40 +110,28 @@ Returns the receipt of the transaction.
 The function will wait for the transaction for up to `timeout` seconds, or 30 seconds by default.
 
 ```javascript
->> tx = Transaction(0xad8a96e212d8d95187bdbb06b44f63ab1a0718a4b4d9086cbd229b6bffc43089)
+>> tx = Transaction(0xfb89e2333b81f2751eedaf2aeffb787917d42ea6ea7c5afd4d45371f3f1b8079)
 >> tx.getReceipt()
-TransactionReceipt { tx_hash: 0xad8a96e212d8d95187bdbb06b44f63ab1a0718a4b4d9086cbd229b6bffc43089, block_hash: 0xec8704cc21a047e95287adad403138739b7b79fae7fd15aa14f1d315aae1db1f, block_number: 20387117, status: true, gas_used: 34742, gas_price: 3552818949 }
+Receipt { txHash: 0xfb89e2333b81f2751eedaf2aeffb787917d42ea6ea7c5afd4d45371f3f1b8079, blockHash: 0xd82cbdd9aba2827815d8db2e0665b1f54e6decc4f59042e53344f6562301e55b, blockNumber: 18735365, status: true, gasUsed: 54017, gasPrice: 71885095452, logs: [Log { address: 0xe07F9D810a48ab5c3c914BA3cA53AF14E4491e8A, topics: [0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef, 0x00000000000000000000000035641673a0ce64f644ad2f395be19668a06a5616, 0x0000000000000000000000009748a9de5a2d81e96c2070f7f0d1d128bbb4d3c4], data: 0x00000000000000000000000000000000000000000000007b1638669932a6793d, args: Transfer { from: 0x35641673A0Ce64F644Ad2f395be19668A06A5616, to: 0x9748a9dE5A2D81e96C2070f7F0D1d128BbB4d3c4, value: 2270550663541970860349 } }] }
 ```
 
-## `Receipt` methods
+The receipt is a named tuple with the following fields:
 
-### `Receipt.status -> bool`
+- `txHash` (`bytes32`): the hash of the transaction.
+- `blockHash` (`bytes32`): the hash of the block containing the transaction.
+- `blockNumber` (`uint256`): the number of the block containing the transaction.
+- `status` (`bool`): the status of the transaction.
+- `gasUsed` (`uint256`): the amount of gas used by the transaction.
+- `gasPrice` (`uint256`): the gas price of the transaction.
+- `logs` (`NamedTuple[]`): the logs of the transaction.
 
-Returns the status of the transaction.
+Logs is an array of named tuples with the following fields:
 
-### `Receipt.tx_hash -> bytes32`
+- `address` (`address`): the address of the contract that emitted the log.
+- `topics` (`bytes32[]`): the topics of the log.
+- `data` (`bytes`): the data of the log.
+- `args` (`NamedTuple`): the decoded arguments of the log, if the event is known (present in one of the loaded ABIs).
 
-Returns the hash of the transaction.
-
-### `Receipt.gas_used -> uint256`
-
-Returns the amount of gas used by the transaction.
-
-### `Receipt.effective_gas_price -> uint256`
-
-Returns the gas price of the transaction.
-
-### `Receipt.block_number -> uint256`
-
-Returns the block number of the transaction.
-
-### `Receipt.block_hash -> uint256`
-
-Returns the block hash of the transaction.
-
-### `Receipt.logs -> array`
-
-Returns the logs of the transaction.
 
 ## `Contract` static methods
 

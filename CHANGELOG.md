@@ -1,5 +1,15 @@
 # Changelog
 
+## Not released
+
+### Features
+
+* Decode logs returned by `Transaction.getReceipt()` when available in ABI
+
+### Other changes
+
+* Drop `Receipt` type and use `NamedTuple` instead
+
 ## v0.1.2 (2024-08-04)
 
 ### Features

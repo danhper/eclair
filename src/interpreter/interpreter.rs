@@ -66,13 +66,7 @@ pub fn load_builtins(env: &mut Env) {
 pub fn load_project(env: &mut Env, project: &Project) -> Result<()> {
     for contract_name in project.contract_names().iter() {
         let contract = project.get_contract(contract_name);
-        env.set_type(
-            contract_name,
-            Type::Contract(super::types::ContractInfo(
-                contract_name.clone(),
-                contract.clone(),
-            )),
-        );
+        env.add_contract(contract_name, contract.clone());
     }
     Ok(())
 }

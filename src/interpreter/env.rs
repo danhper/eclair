@@ -8,8 +8,9 @@ use url::Url;
 
 use alloy::{
     eips::BlockId,
+    json_abi::{Event, JsonAbi},
     network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet, TxSigner},
-    primitives::Address,
+    primitives::{Address, B256},
     providers::{Provider, ProviderBuilder},
     signers::{ledger::HDPath, Signature},
     transports::http::{Client, Http},
@@ -19,7 +20,7 @@ use coins_ledger::{transports::LedgerAsync, Ledger};
 
 use crate::{interpreter::Config, vendor::ledger_signer::LedgerSigner};
 
-use super::{evaluate_expression, types::Type, Value};
+use super::{evaluate_expression, types::Type, ContractInfo, Value};
 
 pub struct Env {
     variables: Vec<HashMap<String, Value>>,
@@ -28,6 +29,7 @@ pub struct Env {
     wallet: Option<EthereumWallet>,
     ledger: Option<Arc<Mutex<Ledger>>>,
     block_id: BlockId,
+    events: HashMap<B256, Event>,
     pub config: Config,
 }
 
@@ -44,6 +46,7 @@ impl Env {
             wallet: None,
             ledger: None,
             block_id: BlockId::latest(),
+            events: HashMap::new(),
             config,
         }
     }
@@ -62,6 +65,27 @@ impl Env {
 
     pub fn is_debug(&self) -> bool {
         self.config.debug
+    }
+
+    pub fn get_event(&self, selector: &B256) -> Option<&Event> {
+        self.events.get(selector)
+    }
+
+    pub fn add_contract(&mut self, name: &str, abi: JsonAbi) -> ContractInfo {
+        for event in abi.events() {
+            self.register_event(event.clone());
+        }
+        let contract_info = ContractInfo(name.to_string(), abi);
+        self.set_type(name, Type::Contract(contract_info.clone()));
+        contract_info
+    }
+
+    pub fn list_events(&mut self) -> Vec<&Event> {
+        self.events.values().collect()
+    }
+
+    pub fn register_event(&mut self, event: Event) {
+        self.events.insert(event.selector(), event);
     }
 
     pub fn set_block(&mut self, block: BlockId) {

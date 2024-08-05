@@ -4,7 +4,6 @@ use alloy::{
     dyn_abi::DynSolType,
     json_abi::JsonAbi,
     primitives::{Address, B256, I256, U160, U256},
-    rpc::types::{Log, TransactionReceipt},
 };
 use anyhow::{bail, Result};
 use indexmap::IndexMap;
@@ -66,85 +65,6 @@ impl ContractInfo {
             ContractFunction::arc(name),
             Some(&Value::Contract(self.clone(), addr)),
         ))
-    }
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Receipt {
-    tx_hash: B256,
-    block_hash: B256,
-    block_number: u64,
-    status: bool,
-    gas_used: u128,
-    effective_gas_price: u128,
-    logs: Vec<Log>,
-}
-
-impl Receipt {
-    pub fn get(&self, field: &str) -> Result<Value> {
-        let result = match field {
-            "tx_hash" => Value::FixBytes(self.tx_hash, 32),
-            "block_hash" => Value::FixBytes(self.block_hash, 32),
-            "block_number" => Value::Uint(U256::from(self.block_number), 256),
-            "status" => Value::Bool(self.status),
-            "gas_used" => Value::Uint(U256::from(self.gas_used), 256),
-            "effective_gas_price" => Value::Uint(U256::from(self.effective_gas_price), 256),
-            "logs" => Value::Array(
-                self.logs.iter().map(|log| log.into()).collect(),
-                Box::new(Type::NamedTuple(
-                    "Log".to_string(),
-                    HashableIndexMap::from_iter([
-                        ("address".to_string(), Type::Address),
-                        ("topics".to_string(), Type::Array(Box::new(Type::Uint(256)))),
-                        ("data".to_string(), Type::Bytes),
-                    ]),
-                )),
-            ),
-            _ => bail!("receipt has no field {}", field),
-        };
-        Ok(result)
-    }
-
-    pub fn contains_key(&self, key: &str) -> bool {
-        Self::keys().contains(&key.to_string())
-    }
-
-    pub fn keys() -> Vec<String> {
-        let keys = [
-            "tx_hash",
-            "block_hash",
-            "block_number",
-            "status",
-            "gas_used",
-            "effective_gas_price",
-            "logs",
-        ];
-        keys.map(|s| s.to_string()).to_vec()
-    }
-}
-
-impl From<TransactionReceipt> for Receipt {
-    fn from(receipt: TransactionReceipt) -> Self {
-        let logs = receipt.inner.logs().to_vec();
-        Receipt {
-            tx_hash: receipt.transaction_hash,
-            block_hash: receipt.block_hash.unwrap_or_default(),
-            block_number: receipt.block_number.unwrap_or(0),
-            status: receipt.status(),
-            gas_used: receipt.gas_used,
-            effective_gas_price: receipt.effective_gas_price,
-            logs,
-        }
-    }
-}
-
-impl Display for Receipt {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "tx_hash: {}, block_hash: {}, block_number: {}, status: {}, gas_used: {}, gas_price: {}",
-            self.tx_hash, self.block_hash, self.block_number, self.status, self.gas_used, self.effective_gas_price
-        )
     }
 }
 
@@ -569,7 +489,6 @@ impl Type {
                 abi.functions.keys().map(|s| s.to_string()).collect()
             }
             Type::NamedTuple(_, fields) => fields.0.keys().map(|s| s.to_string()).collect(),
-            Type::TransactionReceipt => Receipt::keys(),
             Type::Type(type_) => STATIC_METHODS
                 .get(&type_.into())
                 .map_or(vec![], |m| m.keys().cloned().collect()),
