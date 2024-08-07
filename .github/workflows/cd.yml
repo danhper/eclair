@@ -42,6 +42,8 @@ jobs:
 
       - name: Setup Cache
         uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
       - name: Build Binary
         run: cargo build --verbose --locked --release --target ${{ matrix.target }} --jobs 1
