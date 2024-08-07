@@ -6,6 +6,7 @@
 
 * Decode logs returned by `Transaction.getReceipt()` when available in ABI
 * Add support for array concatenation
+* Add `array.filter` function
 
 ### Other changes
 

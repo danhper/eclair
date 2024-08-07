@@ -62,6 +62,7 @@ lazy_static! {
         let mut array_methods = HashMap::new();
         array_methods.insert("length".to_string(), ITER_LEN.clone());
         array_methods.insert("map".to_string(), iterable::ITER_MAP.clone());
+        array_methods.insert("filter".to_string(), iterable::ITER_FILTER.clone());
         array_methods.insert("concat".to_string(), concat::CONCAT.clone());
         array_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
         m.insert(NonParametricType::Array, array_methods);

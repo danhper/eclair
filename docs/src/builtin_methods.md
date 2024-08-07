@@ -57,6 +57,16 @@ Applies the function `f` to each element of the array and returns a new array wi
 [2, 4, 6]
 ```
 
+### `array.filter(function p) -> array`
+
+Applies the predicate `p` to each element and only includes the elements for which the predicate returns `true`.
+
+```javascript
+>> function isEven(x) { return x % 2 == 0; }
+>> [1, 2, 3, 4, 5].filter(isEven)
+[2, 4]
+```
+
 ### `array.concat(array other) -> array`
 
 Concatenates two arrays.
@@ -65,6 +75,7 @@ Concatenates two arrays.
 >> [1, 2].concat([3, 4])
 [1, 2, 3, 4]
 ```
+
 
 ## `tuple` methods
 
