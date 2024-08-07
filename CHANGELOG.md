@@ -5,6 +5,7 @@
 ### Features
 
 * Decode logs returned by `Transaction.getReceipt()` when available in ABI
+* Add support for array concatenation
 
 ### Other changes
 

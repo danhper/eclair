@@ -601,6 +601,11 @@ impl Add for Value {
                 Ok(Value::Int(I256::from_raw(a) + b, s1.max(s2)))
             }
             (Value::Str(a), Value::Str(b)) => return Ok(Value::Str(a + &b)),
+            (Value::Array(a, t1), Value::Array(b, t2)) if t1 == t2 => {
+                let mut new_arr = a.clone();
+                new_arr.extend(b);
+                return Ok(Value::Array(new_arr, t1));
+            }
             _ => bail!(error_msg),
         }
         .and_then(Value::validate_int)
@@ -690,6 +695,29 @@ impl Rem for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_add() {
+        assert_eq!(
+            (Value::from(1u64) + Value::from(2u64)).unwrap(),
+            Value::from(3u64)
+        );
+
+        assert_eq!(
+            (Value::from("foo") + Value::from("bar")).unwrap(),
+            Value::from("foobar")
+        );
+
+        assert_eq!(
+            (Value::Array(vec![Value::from(1u64)], Box::new(Type::Uint(256)))
+                + Value::Array(vec![Value::from(2u64)], Box::new(Type::Uint(256))))
+            .unwrap(),
+            Value::Array(
+                vec![Value::from(1u64), Value::from(2u64)],
+                Box::new(Type::Uint(256))
+            )
+        );
+    }
 
     #[test]
     fn test_value_from_hex() {
