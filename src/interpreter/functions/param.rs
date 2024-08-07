@@ -9,6 +9,7 @@ use crate::interpreter::Type;
 pub struct FunctionParam {
     name: String,
     type_: Type,
+    vararg: bool,
 }
 
 impl FunctionParam {
@@ -16,6 +17,15 @@ impl FunctionParam {
         Self {
             name: name.to_string(),
             type_,
+            vararg: false,
+        }
+    }
+
+    pub fn vararg(name: &str, type_: Type) -> Self {
+        Self {
+            name: name.to_string(),
+            type_,
+            vararg: true,
         }
     }
 
@@ -38,9 +48,8 @@ impl TryFrom<Param> for FunctionParam {
     type Error = anyhow::Error;
 
     fn try_from(param: Param) -> std::result::Result<Self, Self::Error> {
-        let name = param.name.clone();
         let type_ = param.resolve()?.into();
-        Ok(FunctionParam { name, type_ })
+        Ok(FunctionParam::new(&param.name, type_))
     }
 }
 
@@ -51,12 +60,11 @@ impl TryFrom<Parameter> for FunctionParam {
         match (p.name, p.ty) {
             (Some(Identifier { name, .. }), Expression::Type(_, t)) => {
                 let type_ = t.try_into()?;
-                Ok(FunctionParam { name, type_ })
+                Ok(FunctionParam::new(&name, type_))
             }
-            (None, Expression::Variable(Identifier { name, .. })) => Ok(FunctionParam {
-                name,
-                type_: Type::Any,
-            }),
+            (None, Expression::Variable(Identifier { name, .. })) => {
+                Ok(FunctionParam::new(&name, Type::Any))
+            }
             _ => bail!("require param name or type and name"),
         }
     }
