@@ -37,22 +37,25 @@ fn abi_decode_calldata(_env: &mut Env, receiver: &Value, args: &[Value]) -> Resu
     ]))
 }
 
+fn value_to_soltype(value: &Value) -> Result<DynSolType> {
+    match value {
+        Value::TypeObject(ty) => Ok(DynSolType::try_from(ty.clone())?),
+        Value::Tuple(values) => values
+            .iter()
+            .map(value_to_soltype)
+            .collect::<Result<Vec<_>>>()
+            .map(DynSolType::Tuple),
+        _ => bail!("abi.decode expects tuple of types as second argument"),
+    }
+}
+
 fn abi_decode(args: &[Value]) -> Result<Value> {
     let decoded = match args {
-        [Value::Bytes(data_), Value::Tuple(values)] => {
-            let types = values
-                .iter()
-                .map(|v| match v {
-                    Value::TypeObject(ty) => ty.clone().try_into(),
-                    _ => bail!("abi.decode function expects tuple of types as argument"),
-                })
-                .collect::<Result<Vec<_>>>()?;
-            DynSolType::Tuple(types).abi_decode_params(data_)?
+        [Value::Bytes(data_), value] => {
+            let ty = value_to_soltype(value)?;
+            ty.abi_decode_params(data_)?
         }
-        [Value::Bytes(data_), Value::TypeObject(ty)] => {
-            DynSolType::try_from(ty.clone())?.abi_decode(data_)?
-        }
-        _ => bail!("abi.decode function expects bytes and tuple of types as argument"),
+        _ => bail!("abi.decode expects bytes and tuple of types as argument"),
     };
     decoded.try_into()
 }
@@ -189,6 +192,27 @@ mod tests {
             Value::Tuple(vec![
                 Value::TypeObject(Type::String),
                 Value::TypeObject(Type::Uint(256)),
+            ]),
+        ])
+        .unwrap();
+        assert_eq!(Value::Tuple(args), decoded);
+    }
+
+    #[test]
+    fn test_abi_decode_nested_types() {
+        let args = vec![
+            Value::Bool(true),
+            Value::Tuple(vec![Value::from("foo"), Value::from(2u64)]),
+        ];
+        let encoded = abi_encode(&args).unwrap();
+        let decoded = abi_decode(&[
+            encoded.clone(),
+            Value::Tuple(vec![
+                Value::TypeObject(Type::Bool),
+                Value::Tuple(vec![
+                    Value::TypeObject(Type::String),
+                    Value::TypeObject(Type::Uint(256)),
+                ]),
             ]),
         ])
         .unwrap();

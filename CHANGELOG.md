@@ -9,6 +9,10 @@
 * Add `array.filter` function
 * Add support for bitwise operators
 
+### Bug fixes
+
+* Fix `abi.decode` for nested types
+
 ### Other changes
 
 * Drop `Receipt` type and use `NamedTuple` instead
