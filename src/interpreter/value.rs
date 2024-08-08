@@ -10,7 +10,7 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use std::{
     fmt::{self, Display, Formatter},
-    ops::{Add, Div, Mul, Rem, Sub},
+    ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub},
     str::FromStr,
 };
 
@@ -584,31 +584,46 @@ impl Value {
 
         Value::NamedTuple("Receipt".to_string(), HashableIndexMap(fields))
     }
+
+    fn apply_operation<F1, F2>(self, other: Self, iop: F1, uop: F2, op_name: &str) -> Result<Value>
+    where
+        F1: Fn(I256, I256) -> I256,
+        F2: Fn(U256, U256) -> U256,
+    {
+        let error_msg = format!(
+            "cannot {} {} and {}",
+            op_name,
+            self.get_type(),
+            other.get_type()
+        );
+        match (self, other) {
+            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(iop(a, b), s1.max(s2))),
+            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(uop(a, b), s1.max(s2))),
+            (Value::Int(a, s1), Value::Uint(b, s2)) => {
+                Ok(Value::Int(iop(a, I256::from_raw(b)), s1.max(s2)))
+            }
+            (Value::Uint(a, s1), Value::Int(b, s2)) => {
+                Ok(Value::Int(iop(I256::from_raw(a), b), s1.max(s2)))
+            }
+            _ => bail!(error_msg),
+        }
+        .and_then(Value::validate_int)
+    }
 }
 
 impl Add for Value {
     type Output = Result<Value>;
 
     fn add(self, other: Self) -> Self::Output {
-        let error_msg = format!("cannot add {} and {}", self.get_type(), other.get_type());
         match (self, other) {
-            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(a + b, s1.max(s2))),
-            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a + b, s1.max(s2))),
-            (Value::Int(a, s1), Value::Uint(b, s2)) => {
-                Ok(Value::Int(a + I256::from_raw(b), s1.max(s2)))
-            }
-            (Value::Uint(a, s1), Value::Int(b, s2)) => {
-                Ok(Value::Int(I256::from_raw(a) + b, s1.max(s2)))
-            }
-            (Value::Str(a), Value::Str(b)) => return Ok(Value::Str(a + &b)),
+            (Value::Str(a), Value::Str(b)) => Ok(Value::Str(a + &b)),
             (Value::Array(a, t1), Value::Array(b, t2)) if t1 == t2 => {
                 let mut new_arr = a.clone();
                 new_arr.extend(b);
-                return Ok(Value::Array(new_arr, t1));
+                Ok(Value::Array(new_arr, t1))
             }
-            _ => bail!(error_msg),
+            (s, o) => s.apply_operation(o, |a, b| a + b, |a, b| a + b, "add"),
         }
-        .and_then(Value::validate_int)
     }
 }
 
@@ -616,19 +631,7 @@ impl Sub for Value {
     type Output = Result<Value>;
 
     fn sub(self, other: Self) -> Self::Output {
-        let error_msg = format!("cannot sub {} and {}", self.get_type(), other.get_type());
-        match (self, other) {
-            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(a - b, s1.max(s2))),
-            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a - b, s1.max(s2))),
-            (Value::Int(a, s1), Value::Uint(b, s2)) => {
-                Ok(Value::Int(a - I256::from_raw(b), s1.max(s2)))
-            }
-            (Value::Uint(a, s1), Value::Int(b, s2)) => {
-                Ok(Value::Int(I256::from_raw(a) - b, s1.max(s2)))
-            }
-            _ => bail!(error_msg),
-        }
-        .and_then(Value::validate_int)
+        self.apply_operation(other, |a, b| a - b, |a, b| a - b, "sub")
     }
 }
 
@@ -636,19 +639,7 @@ impl Mul for Value {
     type Output = Result<Value>;
 
     fn mul(self, other: Self) -> Self::Output {
-        let error_msg = format!("cannot mul {} and {}", self.get_type(), other.get_type());
-        match (self, other) {
-            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(a * b, s1.max(s2))),
-            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a * b, s1.max(s2))),
-            (Value::Int(a, s1), Value::Uint(b, s2)) => {
-                Ok(Value::Int(a * I256::from_raw(b), s1.max(s2)))
-            }
-            (Value::Uint(a, s1), Value::Int(b, s2)) => {
-                Ok(Value::Int(I256::from_raw(a) * b, s1.max(s2)))
-            }
-            _ => bail!(error_msg),
-        }
-        .and_then(Value::validate_int)
+        self.apply_operation(other, |a, b| a * b, |a, b| a * b, "mul")
     }
 }
 
@@ -656,19 +647,7 @@ impl Div for Value {
     type Output = Result<Value>;
 
     fn div(self, other: Self) -> Self::Output {
-        let error_msg = format!("cannot div {} and {}", self.get_type(), other.get_type());
-        match (self, other) {
-            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(a / b, s1.max(s2))),
-            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a / b, s1.max(s2))),
-            (Value::Int(a, s1), Value::Uint(b, s2)) => {
-                Ok(Value::Int(a / I256::from_raw(b), s1.max(s2)))
-            }
-            (Value::Uint(a, s1), Value::Int(b, s2)) => {
-                Ok(Value::Int(I256::from_raw(a) / b, s1.max(s2)))
-            }
-            _ => bail!(error_msg),
-        }
-        .and_then(Value::validate_int)
+        self.apply_operation(other, |a, b| a / b, |a, b| a / b, "div")
     }
 }
 
@@ -676,19 +655,53 @@ impl Rem for Value {
     type Output = Result<Value>;
 
     fn rem(self, other: Self) -> Self::Output {
-        let error_msg = format!("cannot rem {} and {}", self.get_type(), other.get_type());
+        self.apply_operation(other, |a, b| a % b, |a, b| a % b, "rem")
+    }
+}
+
+impl BitAnd for Value {
+    type Output = Result<Value>;
+
+    fn bitand(self, other: Self) -> Self::Output {
+        self.apply_operation(other, |a, b| a & b, |a, b| a & b, "bitand")
+    }
+}
+
+impl BitOr for Value {
+    type Output = Result<Value>;
+
+    fn bitor(self, other: Self) -> Self::Output {
+        self.apply_operation(other, |a, b| a | b, |a, b| a | b, "bitor")
+    }
+}
+
+impl BitXor for Value {
+    type Output = Result<Value>;
+
+    fn bitxor(self, other: Self) -> Self::Output {
+        self.apply_operation(other, |a, b| a ^ b, |a, b| a ^ b, "bitxor")
+    }
+}
+
+impl Shl for Value {
+    type Output = Result<Value>;
+
+    fn shl(self, other: Self) -> Self::Output {
         match (self, other) {
-            (Value::Int(a, s1), Value::Int(b, s2)) => Ok(Value::Int(a % b, s1.max(s2))),
-            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a % b, s1.max(s2))),
-            (Value::Int(a, s1), Value::Uint(b, s2)) => {
-                Ok(Value::Int(a % I256::from_raw(b), s1.max(s2)))
-            }
-            (Value::Uint(a, s1), Value::Int(b, s2)) => {
-                Ok(Value::Int(I256::from_raw(a) % b, s1.max(s2)))
-            }
-            _ => bail!(error_msg),
+            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a << b, s1.max(s2))),
+            (s, o) => bail!("cannot shl {} and {}", s.get_type(), o.get_type()),
         }
-        .and_then(Value::validate_int)
+    }
+}
+
+impl Shr for Value {
+    type Output = Result<Value>;
+
+    fn shr(self, other: Self) -> Self::Output {
+        match (self, other) {
+            (Value::Uint(a, s1), Value::Uint(b, s2)) => Ok(Value::Uint(a >> b, s1.max(s2))),
+            (s, o) => bail!("cannot shl {} and {}", s.get_type(), o.get_type()),
+        }
     }
 }
 

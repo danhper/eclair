@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub};
 use std::str::FromStr;
 
 use alloy::hex::FromHex;
@@ -302,6 +302,21 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::AssignModulo(_, left, right) => {
                 _eval_binop_assign(env, left, right, |a, b| a % b).await
             }
+            Expression::AssignAnd(_, left, right) => {
+                _eval_binop_assign(env, left, right, |a, b| a & b).await
+            }
+            Expression::AssignOr(_, left, right) => {
+                _eval_binop_assign(env, left, right, |a, b| a | b).await
+            }
+            Expression::AssignXor(_, left, right) => {
+                _eval_binop_assign(env, left, right, |a, b| a ^ b).await
+            }
+            Expression::AssignShiftLeft(_, left, right) => {
+                _eval_binop_assign(env, left, right, |a, b| a << b).await
+            }
+            Expression::AssignShiftRight(_, left, right) => {
+                _eval_binop_assign(env, left, right, |a, b| a >> b).await
+            }
 
             Expression::HexNumberLiteral(_, n, _) => Value::from_hex(n),
 
@@ -474,6 +489,12 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::Multiply(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::mul).await,
             Expression::Divide(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::div).await,
             Expression::Modulo(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::rem).await,
+            Expression::BitwiseAnd(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::bitand).await,
+            Expression::BitwiseOr(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::bitor).await,
+            Expression::BitwiseXor(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::bitxor).await,
+            Expression::ShiftLeft(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::shl).await,
+            Expression::ShiftRight(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::shr).await,
+
             Expression::Power(_, lhs, rhs) => {
                 let left = evaluate_expression(env, lhs).await?;
                 let right = evaluate_expression(env, rhs).await?;
