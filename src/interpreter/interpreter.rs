@@ -13,7 +13,7 @@ use crate::loaders::types::Project;
 
 use super::assignment::Lhs;
 use super::builtins;
-use super::functions::{FunctionDef, UserDefinedFunction};
+use super::functions::{AnonymousFunction, FunctionDef, UserDefinedFunction};
 use super::parsing::ParsedCode;
 use super::types::{HashableIndexMap, Type};
 use super::utils::parse_rational_literal;
@@ -493,7 +493,18 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::BitwiseOr(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::bitor).await,
             Expression::BitwiseXor(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::bitxor).await,
             Expression::ShiftLeft(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::shl).await,
-            Expression::ShiftRight(_, lhs, rhs) => _eval_binop(env, lhs, rhs, Value::shr).await,
+
+            // We overload shift right to also create anonymous functions
+            Expression::ShiftRight(_, lhs, rhs) => {
+                match AnonymousFunction::parse_lhs(lhs.as_ref()) {
+                    Result::Ok(params) => {
+                        let body = rhs.as_ref();
+                        let func = AnonymousFunction::new(params, body.clone());
+                        Ok(func.into())
+                    }
+                    Result::Err(_) => _eval_binop(env, lhs, rhs, Value::shr).await,
+                }
+            }
 
             Expression::Power(_, lhs, rhs) => {
                 let left = evaluate_expression(env, lhs).await?;

@@ -59,3 +59,25 @@ For example, the following is valid in Eclair:
 >> tu16.max
 65535
 ```
+
+## Anonymous functions
+
+Eclair supports anonymous functions, which are functions that are not bound to a name.
+These functions are quite limited in features since they need to be written as a valid Solidity expression.
+We adopted the following syntax:
+
+```javascript
+>> (x) >> x + 1
+function(any x)
+```
+
+This is particularly helpful when using higher-order functions like `map` and `filter`:
+
+```javascript
+>> [1, 2, 3].map((x) >> x + 1)
+[2, 3, 4]
+>> [1, 2, 3].filter((x) >> (x % 2 == 0))
+[2]
+```
+
+Note that because `>>` is parsed as the right shift operator, you need to wrap the anonymous function in parentheses if it contains an operator with a lower priority than `>>`, such as `==`.

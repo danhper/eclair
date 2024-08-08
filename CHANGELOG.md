@@ -8,6 +8,7 @@
 * Add support for array concatenation
 * Add `array.filter` function
 * Add support for bitwise operators
+* [EXPERIMENTAL] Add support for anonymous functions
 
 ### Bug fixes
 
