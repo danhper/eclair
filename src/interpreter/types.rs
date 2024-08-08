@@ -1,3 +1,4 @@
+use lazy_static::lazy_static;
 use std::fmt::Display;
 
 use alloy::{
@@ -91,6 +92,7 @@ pub enum NonParametricType {
     Repl,
     Block,
     Console,
+    Events,
     Abi,
     Type,
 }
@@ -118,6 +120,7 @@ pub enum Type {
     Repl,
     Block,
     Console,
+    Events,
     Abi,
     Type(Box<Type>),
 }
@@ -153,6 +156,7 @@ impl Display for Type {
 
             Type::Repl => write!(f, "repl"),
             Type::Block => write!(f, "block"),
+            Type::Events => write!(f, "events"),
             Type::Console => write!(f, "console"),
             Type::Abi => write!(f, "abi"),
             Type::Type(t) => write!(f, "type({})", t),
@@ -184,6 +188,7 @@ impl<T: AsRef<Type>> From<T> for NonParametricType {
             Type::Repl => NonParametricType::Repl,
             Type::Block => NonParametricType::Block,
             Type::Console => NonParametricType::Console,
+            Type::Events => NonParametricType::Events,
             Type::Abi => NonParametricType::Abi,
             Type::Type(_) => NonParametricType::Type,
         }
@@ -535,6 +540,18 @@ impl Type {
             _ => bail!("cannot get min value for type {}", self),
         }
     }
+}
+
+lazy_static! {
+    pub static ref LOG_TYPE: Type = Type::NamedTuple(
+        "Log".to_string(),
+        HashableIndexMap::from_iter([
+            ("address".to_string(), Type::Address),
+            ("topics".to_string(), Type::Array(Box::new(Type::Uint(256)))),
+            ("data".to_string(), Type::Bytes),
+            ("args".to_string(), Type::Any),
+        ]),
+    );
 }
 
 #[cfg(test)]

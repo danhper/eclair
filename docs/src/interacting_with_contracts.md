@@ -59,4 +59,32 @@ TransactionReceipt { tx_hash: 0x248ad948d1e4eefc6ccb271cac2001ebbdb2346beddc7656
 [Log { address: 0x6B175474E89094C44Da98b954EedeAC495271d0F, topics: [0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925, 0x000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266, 0x00000000000000000000000083f20f44975d03b1b09e64809b757c47f942beea], data: 0x0000000000000000000000000000000000000000000000000de0b6b3a7640000 }]
 ```
 
-Note: Event decoding is not implemented yet
+If the ABI of the contract emitting the log is loaded, the logs will automatically be decoded and the decoded arguments will be available in the `args` property of each log.
+
+## Events
+
+Eclair provides a way to fetch events emitted by a contract using the `events.fetch` method.
+
+```javascript
+>> events.fetch{fromBlock: 20490506, toBlock: 20490512}(0xe07F9D810a48ab5c3c914BA3cA53AF14E4491e8A)[0]
+Log { address: 0xe07F9D810a48ab5c3c914BA3cA53AF14E4491e8A, topics: [0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef, 0x000000000000000000000000ba12222222228d8ba445958a75a0704d566bf2c8, 0x000000000000000000000000f081470f5c6fbccf48cc4e5b82dd926409dcdd67], data: 0x00000000000000000000000000000000000000000000000e8bd6d724bc4c7886, args: Transfer { from: 0xBA12222222228d8Ba445958a75a0704d566BF2C8, to: 0xf081470f5C6FBCCF48cC4e5B82Dd926409DcdD67, value: 268330894800999708806 } }
+```
+
+The `events.fetch` accepts either a single address or a list of addresses as the first argument, as well as some options
+to filter the logs returned.
+It returns a list of logs that match the given criteria, and automatically decodes each log if the ABI is loaded.
+
+### Options
+
+The `events.fetch` method accepts the following options:
+
+* `fromBlock`: the block number to start fetching events from
+* `toBlock`: the block number to stop fetching events at
+* `topic0`: topic0 of the event
+* `topic1`: topic1 of the event
+* `topic2`: topic2 of the event
+* `topic3`: topic3 of the event
+
+By default, it will try to fetch from the first ever block to the latest block.
+In many cases, the RPC provider will reject the request because too much data would be returned, in which case
+options above will need to be added to restrict the size of the response.

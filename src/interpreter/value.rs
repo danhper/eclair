@@ -17,7 +17,7 @@ use std::{
 use super::{
     builtins::{INSTANCE_METHODS, STATIC_METHODS, TYPE_METHODS},
     functions::Function,
-    types::{ContractInfo, HashableIndexMap, Type},
+    types::{ContractInfo, HashableIndexMap, Type, LOG_TYPE},
 };
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -386,7 +386,9 @@ impl Value {
     pub fn is_builtin(&self) -> bool {
         matches!(
             self,
-            Value::TypeObject(Type::Console) | Value::TypeObject(Type::Repl)
+            Value::TypeObject(Type::Console)
+                | Value::TypeObject(Type::Repl)
+                | Value::TypeObject(Type::Events)
         )
     }
 
@@ -421,7 +423,13 @@ impl Value {
 
     pub fn as_usize(&self) -> Result<usize> {
         match self {
-            Value::Int(n, _) => Ok(n.as_usize()),
+            Value::Int(n, _) => {
+                if n.is_positive() {
+                    Ok(n.as_usize())
+                } else {
+                    bail!("negative number")
+                }
+            }
             Value::Uint(n, _) => Ok(n.to()),
             _ => bail!("cannot convert {} to usize", self.get_type()),
         }
@@ -446,6 +454,13 @@ impl Value {
         match self {
             Value::Uint(n, _) => Ok(n.to()),
             _ => bail!("cannot convert {} to u256", self.get_type()),
+        }
+    }
+
+    pub fn as_b256(&self) -> Result<B256> {
+        match self {
+            Value::FixBytes(n, 32) => Ok(*n),
+            _ => bail!("cannot convert {} to b256", self.get_type()),
         }
     }
 
@@ -551,15 +566,6 @@ impl Value {
     }
 
     pub fn from_receipt(receipt: TransactionReceipt, parsed_logs: Vec<Value>) -> Self {
-        let log_type = Type::NamedTuple(
-            "Log".to_string(),
-            HashableIndexMap::from_iter([
-                ("address".to_string(), Type::Address),
-                ("topics".to_string(), Type::Array(Box::new(Type::Uint(256)))),
-                ("data".to_string(), Type::Bytes),
-                ("args".to_string(), Type::Any),
-            ]),
-        );
         let fields = IndexMap::from([
             (
                 "txHash".to_string(),
@@ -578,7 +584,7 @@ impl Value {
             ("gasPrice".to_string(), receipt.effective_gas_price.into()),
             (
                 "logs".to_string(),
-                Value::Array(parsed_logs, Box::new(log_type)),
+                Value::Array(parsed_logs, Box::new(LOG_TYPE.clone())),
             ),
         ]);
 
