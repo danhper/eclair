@@ -134,7 +134,6 @@ pub enum NonParametricType {
     Contract,
     Event,
     Transaction,
-    TransactionReceipt,
     Function,
     Repl,
     Block,
@@ -163,7 +162,6 @@ pub enum Type {
     Contract(ContractInfo),
     Event(alloy::json_abi::Event),
     Transaction,
-    TransactionReceipt,
     Function,
     Repl,
     Block,
@@ -201,7 +199,6 @@ impl Display for Type {
             Type::Function => write!(f, "function"),
 
             Type::Transaction => write!(f, "Transaction"),
-            Type::TransactionReceipt => write!(f, "TransactionReceipt"),
 
             Type::Repl => write!(f, "repl"),
             Type::Block => write!(f, "block"),
@@ -234,7 +231,6 @@ impl<T: AsRef<Type>> From<T> for NonParametricType {
             Type::Event(..) => NonParametricType::Event,
             Type::Function => NonParametricType::Function,
             Type::Transaction => NonParametricType::Transaction,
-            Type::TransactionReceipt => NonParametricType::TransactionReceipt,
             Type::Repl => NonParametricType::Repl,
             Type::Block => NonParametricType::Block,
             Type::Console => NonParametricType::Console,
