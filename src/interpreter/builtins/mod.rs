@@ -9,6 +9,8 @@ mod address;
 mod block;
 mod concat;
 mod console;
+mod event;
+mod events;
 mod format;
 mod iterable;
 mod misc;
@@ -29,6 +31,7 @@ lazy_static! {
         m.insert("repl".to_string(), Value::TypeObject(Type::Repl));
         m.insert("console".to_string(), Value::TypeObject(Type::Console));
         m.insert("block".to_string(), Value::TypeObject(Type::Block));
+        m.insert("events".to_string(), Value::TypeObject(Type::Events));
         m.insert(
             "Transaction".to_string(),
             Value::TypeObject(Type::Transaction),
@@ -131,6 +134,14 @@ lazy_static! {
         let mut console_methods = HashMap::new();
         console_methods.insert("log".to_string(), console::CONSOLE_LOG.clone());
         m.insert(NonParametricType::Console, console_methods);
+
+        let mut event_methods = HashMap::new();
+        event_methods.insert("selector".to_string(), event::EVENT_SELECTOR.clone());
+        m.insert(NonParametricType::Event, event_methods);
+
+        let mut events_methods = HashMap::new();
+        events_methods.insert("fetch".to_string(), events::FETCH_EVENTS.clone());
+        m.insert(NonParametricType::Events, events_methods);
 
         let mut repl_methods = HashMap::new();
         repl_methods.insert("vars".to_string(), repl::REPL_LIST_VARS.clone());

@@ -1,3 +1,4 @@
+use lazy_static::lazy_static;
 use std::fmt::Display;
 
 use alloy::{
@@ -5,7 +6,7 @@ use alloy::{
     json_abi::JsonAbi,
     primitives::{Address, B256, I256, U160, U256},
 };
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use solang_parser::pt as parser;
@@ -60,11 +61,27 @@ impl ContractInfo {
         let _func = self
             .1
             .function(name)
-            .ok_or_else(|| anyhow::anyhow!("function {} not found in contract {}", name, self.0))?;
+            .ok_or_else(|| anyhow!("function {} not found in contract {}", name, self.0))?;
         Ok(Function::new(
             ContractFunction::arc(name),
             Some(&Value::Contract(self.clone(), addr)),
         ))
+    }
+
+    pub fn member_access(&self, name: &str) -> Result<Value> {
+        if let Some(event) = self.1.events.get(name).and_then(|v| v.first()) {
+            return Ok(Value::TypeObject(Type::Event(event.clone())));
+        }
+        let func = STATIC_METHODS
+            .get(&NonParametricType::Contract)
+            .unwrap()
+            .get(name)
+            .ok_or(anyhow!("{} not found in contract {}", name, self.0))?;
+        Ok(Function::method(
+            func.clone(),
+            &Value::TypeObject(Type::Contract(self.clone())),
+        )
+        .into())
     }
 }
 
@@ -85,12 +102,14 @@ pub enum NonParametricType {
     Tuple,
     Mapping,
     Contract,
+    Event,
     Transaction,
     TransactionReceipt,
     Function,
     Repl,
     Block,
     Console,
+    Events,
     Abi,
     Type,
 }
@@ -112,12 +131,14 @@ pub enum Type {
     Tuple(Vec<Type>),
     Mapping(Box<Type>, Box<Type>),
     Contract(ContractInfo),
+    Event(alloy::json_abi::Event),
     Transaction,
     TransactionReceipt,
     Function,
     Repl,
     Block,
     Console,
+    Events,
     Abi,
     Type(Box<Type>),
 }
@@ -146,6 +167,7 @@ impl Display for Type {
             }
             Type::Mapping(k, v) => write!(f, "mapping({} => {})", k, v),
             Type::Contract(ContractInfo(name, _)) => write!(f, "{}", name),
+            Type::Event(event) => write!(f, "{}", event.full_signature()),
             Type::Function => write!(f, "function"),
 
             Type::Transaction => write!(f, "Transaction"),
@@ -153,6 +175,7 @@ impl Display for Type {
 
             Type::Repl => write!(f, "repl"),
             Type::Block => write!(f, "block"),
+            Type::Events => write!(f, "events"),
             Type::Console => write!(f, "console"),
             Type::Abi => write!(f, "abi"),
             Type::Type(t) => write!(f, "type({})", t),
@@ -178,12 +201,14 @@ impl<T: AsRef<Type>> From<T> for NonParametricType {
             Type::Tuple(_) => NonParametricType::Tuple,
             Type::Mapping(..) => NonParametricType::Mapping,
             Type::Contract(..) => NonParametricType::Contract,
+            Type::Event(..) => NonParametricType::Event,
             Type::Function => NonParametricType::Function,
             Type::Transaction => NonParametricType::Transaction,
             Type::TransactionReceipt => NonParametricType::TransactionReceipt,
             Type::Repl => NonParametricType::Repl,
             Type::Block => NonParametricType::Block,
             Type::Console => NonParametricType::Console,
+            Type::Events => NonParametricType::Events,
             Type::Abi => NonParametricType::Abi,
             Type::Type(_) => NonParametricType::Type,
         }
@@ -489,9 +514,17 @@ impl Type {
                 abi.functions.keys().map(|s| s.to_string()).collect()
             }
             Type::NamedTuple(_, fields) => fields.0.keys().map(|s| s.to_string()).collect(),
-            Type::Type(type_) => STATIC_METHODS
-                .get(&type_.into())
-                .map_or(vec![], |m| m.keys().cloned().collect()),
+            Type::Type(type_) => {
+                let mut static_methods = STATIC_METHODS
+                    .get(&type_.into())
+                    .map_or(vec![], |m| m.keys().cloned().collect());
+
+                if let Type::Contract(ContractInfo(_, abi)) = type_.as_ref() {
+                    static_methods.extend(abi.events.keys().map(|s| s.to_string()));
+                }
+
+                static_methods
+            }
             _ => INSTANCE_METHODS
                 .get(&self.into())
                 .map_or(vec![], |m| m.keys().cloned().collect()),
@@ -535,6 +568,18 @@ impl Type {
             _ => bail!("cannot get min value for type {}", self),
         }
     }
+}
+
+lazy_static! {
+    pub static ref LOG_TYPE: Type = Type::NamedTuple(
+        "Log".to_string(),
+        HashableIndexMap::from_iter([
+            ("address".to_string(), Type::Address),
+            ("topics".to_string(), Type::Array(Box::new(Type::Uint(256)))),
+            ("data".to_string(), Type::Bytes),
+            ("args".to_string(), Type::Any),
+        ]),
+    );
 }
 
 #[cfg(test)]

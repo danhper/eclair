@@ -234,3 +234,10 @@ Returns the current block base fee.
 ### `block.chainid -> uint256`
 
 Returns the current chain ID.
+
+## `events` functions
+
+### `events.fetch{options}(address target) -> Log[] | events.fetch{options}(address[] targets) -> Log[]`
+
+Fetches the events emitted by the contract(s) at the given address(es).
+For more information, see [events](./interacting_with_contracts.md#events).
