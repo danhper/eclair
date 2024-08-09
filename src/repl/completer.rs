@@ -24,7 +24,9 @@ impl MyCompleter {
 }
 
 fn get_current_word(line: &str, pos: usize) -> (&str, usize) {
-    let start = line[..pos].rfind(&[' ', '(', ',']).map_or(0, |i| i + 1);
+    let start = line[..pos]
+        .rfind(&[' ', '(', ')', ',', '[', ']'])
+        .map_or(0, |i| i + 1);
     (&line[start..pos], start)
 }
 

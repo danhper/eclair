@@ -14,6 +14,7 @@
 ### Bug fixes
 
 * Fix `abi.decode` for nested types
+* Fix completion not triggering right after `[`
 
 ### Other changes
 
