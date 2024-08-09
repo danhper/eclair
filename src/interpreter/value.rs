@@ -521,6 +521,7 @@ impl Value {
             }
             Value::Contract(c, addr) => c.make_function(member, *addr).map(Into::into),
             Value::Func(f) => f.member_access(member),
+            Value::TypeObject(Type::Contract(c)) => c.member_access(member),
             _ => {
                 let (type_, methods) = match self {
                     Value::TypeObject(Type::Type(type_)) => {

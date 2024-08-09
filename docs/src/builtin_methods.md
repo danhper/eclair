@@ -158,6 +158,12 @@ The first element of the tuple is the function signature, and the second element
 ("transfer(address,uint256)", (0x789f8F7B547183Ab8E99A5e0E6D567E90e0EB03B, 100000000000000000000))
 ```
 
+## `Event` static methods
+
+### `Event.selector -> bytes32`
+
+Returns the selector (aka topic0) of the given event
+
 ## `num` (`uint*` and `int*`) static methods
 
 ### `type(num).max -> num`

@@ -88,3 +88,10 @@ The `events.fetch` method accepts the following options:
 By default, it will try to fetch from the first ever block to the latest block.
 In many cases, the RPC provider will reject the request because too much data would be returned, in which case
 options above will need to be added to restrict the size of the response.
+
+To only get one type of event, e.g. `Transfer`, you can filter using `topic0` and the selector of the desired event.
+
+```javascript
+>> events.fetch{fromBlock: 20490506, toBlock: 20490512, topic0: ERC20.Approval.selector}(0xe07F9D810a48ab5c3c914BA3cA53AF14E4491e8A)[0]
+Log { address: 0xe07F9D810a48ab5c3c914BA3cA53AF14E4491e8A, topics: [0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925, 0x0000000000000000000000008149dc18d39fdba137e43c871e7801e7cf566d41, 0x000000000000000000000000ea50f402653c41cadbafd1f788341db7b7f37816], data: 0x000000000000000000000000000000000000000000000025f273933db5700000, args: Approval { owner: 0x8149DC18D39FDBa137E43C871e7801E7CF566D41, spender: 0xeA50f402653c41cAdbaFD1f788341dB7B7F37816, value: 700000000000000000000 } }
+```

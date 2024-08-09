@@ -9,6 +9,7 @@ mod address;
 mod block;
 mod concat;
 mod console;
+mod event;
 mod events;
 mod format;
 mod iterable;
@@ -135,8 +136,12 @@ lazy_static! {
         m.insert(NonParametricType::Console, console_methods);
 
         let mut event_methods = HashMap::new();
-        event_methods.insert("fetch".to_string(), events::FETCH_EVENTS.clone());
-        m.insert(NonParametricType::Events, event_methods);
+        event_methods.insert("selector".to_string(), event::EVENT_SELECTOR.clone());
+        m.insert(NonParametricType::Event, event_methods);
+
+        let mut events_methods = HashMap::new();
+        events_methods.insert("fetch".to_string(), events::FETCH_EVENTS.clone());
+        m.insert(NonParametricType::Events, events_methods);
 
         let mut repl_methods = HashMap::new();
         repl_methods.insert("vars".to_string(), repl::REPL_LIST_VARS.clone());
