@@ -53,6 +53,36 @@ where
     }
 }
 
+pub struct ArrayIndex(pub i64);
+impl ArrayIndex {
+    pub fn get_index(&self, array_size: usize) -> Result<usize> {
+        let index = if self.0 < 0 {
+            array_size as i64 + self.0
+        } else {
+            self.0
+        };
+        if index < 0 || index as usize >= array_size {
+            bail!(
+                "index out of bounds: {} for array of size {}",
+                self.0,
+                array_size
+            )
+        }
+        Ok(index as usize)
+    }
+}
+impl TryFrom<Value> for ArrayIndex {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Value) -> Result<Self> {
+        match value {
+            Value::Int(i, _) => Ok(ArrayIndex(i.try_into()?)),
+            Value::Uint(i, _) => Ok(ArrayIndex(i.try_into()?)),
+            _ => bail!("cannot convert {} to array index", value),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ContractInfo(pub String, pub JsonAbi);
 
@@ -662,5 +692,14 @@ mod tests {
             Type::FixBytes(32).cast(&selector).unwrap(),
             Value::from_hex(padded_selector).unwrap()
         );
+    }
+
+    #[test]
+    fn array_index() {
+        let size = 10;
+        let cases = vec![(0, 0), (1, 1), (-1, 9), (5, 5), (-5, 5)];
+        for (index, expected) in cases {
+            assert_eq!(super::ArrayIndex(index).get_index(size).unwrap(), expected);
+        }
     }
 }

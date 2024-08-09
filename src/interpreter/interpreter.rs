@@ -15,7 +15,7 @@ use super::assignment::Lhs;
 use super::builtins;
 use super::functions::{AnonymousFunction, FunctionDef, UserDefinedFunction};
 use super::parsing::ParsedCode;
-use super::types::{HashableIndexMap, Type};
+use super::types::{ArrayIndex, HashableIndexMap, Type};
 use super::utils::parse_rational_literal;
 use super::{env::Env, parsing, value::Value};
 
@@ -444,10 +444,8 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                     Value::Tuple(values) | Value::Array(values, _) => {
                         let subscript = subscript_opt
                             .ok_or(anyhow!("tuples and arrays do not support empty subscript"))?;
-                        let index = evaluate_expression(env, subscript).await?.as_usize()?;
-                        if index >= values.len() {
-                            bail!("index out of bounds");
-                        }
+                        let value = evaluate_expression(env, subscript).await?;
+                        let index = ArrayIndex::try_from(value)?.get_index(values.len())?;
                         Ok(values[index].clone())
                     }
                     Value::Mapping(values, kt, _) => {
@@ -474,11 +472,11 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::ArraySlice(_, arr_expr, start_expr, end_expr) => {
                 let value = evaluate_expression(env, arr_expr).await?;
                 let start = match start_expr {
-                    Some(expr) => Some(evaluate_expression(env, expr).await?.as_usize()?),
+                    Some(expr) => Some(evaluate_expression(env, expr).await?.try_into()?),
                     None => None,
                 };
                 let end = match end_expr {
-                    Some(expr) => Some(evaluate_expression(env, expr).await?.as_usize()?),
+                    Some(expr) => Some(evaluate_expression(env, expr).await?.try_into()?),
                     None => None,
                 };
                 value.slice(start, end)

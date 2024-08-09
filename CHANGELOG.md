@@ -10,6 +10,7 @@
 * Add support for bitwise operators
 * [EXPERIMENTAL] Add support for anonymous functions
 * [EXPERIMENTAL] Add support for fetching events
+* Add support for negative indices in arrays and slices
 
 ### Bug fixes
 

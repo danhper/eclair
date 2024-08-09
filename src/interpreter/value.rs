@@ -17,7 +17,7 @@ use std::{
 use super::{
     builtins::{INSTANCE_METHODS, STATIC_METHODS, TYPE_METHODS},
     functions::Function,
-    types::{ContractInfo, HashableIndexMap, Type, LOG_TYPE},
+    types::{ArrayIndex, ContractInfo, HashableIndexMap, Type, LOG_TYPE},
 };
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -543,12 +543,14 @@ impl Value {
         }
     }
 
-    pub fn slice(&self, start: Option<usize>, end: Option<usize>) -> Result<Value> {
-        let start = start.unwrap_or(0);
-        let end = end.unwrap_or(self.len()?);
-        if end > self.len()? {
-            bail!("index out of bounds")
-        }
+    pub fn slice(&self, start: Option<ArrayIndex>, end: Option<ArrayIndex>) -> Result<Value> {
+        let length = self.len()?;
+        let start = start.unwrap_or(ArrayIndex(0)).get_index(length)?;
+        let end = match end {
+            Some(end) => end.get_index(length)?,
+            None => length,
+        };
+
         match self {
             Value::Array(items, t) => {
                 let items = items[start..end].to_vec();
@@ -758,22 +760,34 @@ mod tests {
             vec![Value::from(1u64), Value::from(2u64), Value::from(3u64)],
             Box::new(Type::Int(256)),
         );
-        let slice = array.slice(Some(1), Some(2)).unwrap();
+        let slice = array
+            .slice(Some(ArrayIndex(1)), Some(ArrayIndex(2)))
+            .unwrap();
+        assert_eq!(
+            slice,
+            Value::Array(vec![Value::from(2u64)], Box::new(Type::Int(256)))
+        );
+
+        let slice = array
+            .slice(Some(ArrayIndex(1)), Some(ArrayIndex(-1)))
+            .unwrap();
         assert_eq!(
             slice,
             Value::Array(vec![Value::from(2u64)], Box::new(Type::Int(256)))
         );
 
         let bytes = Value::Bytes(vec![1, 2, 3]);
-        let slice = bytes.slice(Some(1), Some(2)).unwrap();
+        let slice = bytes
+            .slice(Some(ArrayIndex(1)), Some(ArrayIndex(2)))
+            .unwrap();
         assert_eq!(slice, Value::Bytes(vec![2]));
 
         let bytes = Value::Bytes(vec![1, 2, 3]);
-        let slice = bytes.slice(Some(1), None).unwrap();
+        let slice = bytes.slice(Some(ArrayIndex(1)), None).unwrap();
         assert_eq!(slice, Value::Bytes(vec![2, 3]));
 
         let str = Value::Str("hello".to_string());
-        let slice = str.slice(Some(1), Some(3)).unwrap();
+        let slice = str.slice(Some(ArrayIndex(1)), Some(ArrayIndex(3))).unwrap();
         assert_eq!(slice, Value::Str("el".to_string()));
     }
 }
