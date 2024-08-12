@@ -458,9 +458,9 @@ impl Value {
     }
 
     pub fn as_b256(&self) -> Result<B256> {
-        match self {
-            Value::FixBytes(n, 32) => Ok(*n),
-            _ => bail!("cannot convert {} to b256", self.get_type()),
+        match Type::FixBytes(32).cast(self) {
+            Ok(Value::FixBytes(n, 32)) => Ok(n),
+            _ => bail!("cannot convert {} to bytes32", self.get_type()),
         }
     }
 
