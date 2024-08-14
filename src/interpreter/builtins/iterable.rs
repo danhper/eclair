@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
@@ -29,6 +29,30 @@ fn map<'a>(
             Type::Array(t) => Ok(Value::Array(values, t.clone())),
             ty => bail!("cannot map to type {}", ty),
         }
+    }
+    .boxed()
+}
+
+fn reduce<'a>(
+    env: &'a mut Env,
+    receiver: &'a Value,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        let items = receiver.get_items()?;
+        let mut result = match args.get(1) {
+            Some(v) => v,
+            None => items.first().ok_or(anyhow!("empty array for reduce"))?,
+        }
+        .clone();
+        for item in items {
+            match args.first() {
+                Some(Value::Func(func)) => result = func.execute(env, &[result, item]).await?,
+                _ => bail!("reduce function expects a function as first argument"),
+            };
+        }
+
+        Ok(result)
     }
     .boxed()
 }
@@ -72,6 +96,17 @@ lazy_static! {
         "filter",
         filter,
         vec![vec![FunctionParam::new("p", Type::Function)]]
+    );
+    pub static ref ITER_REDUCE: Arc<dyn FunctionDef> = AsyncMethod::arc(
+        "reduce",
+        reduce,
+        vec![
+            vec![FunctionParam::new("f", Type::Function)],
+            vec![
+                FunctionParam::new("f", Type::Function),
+                FunctionParam::new("init", Type::Any)
+            ]
+        ]
     );
     pub static ref ITER_LEN: Arc<dyn FunctionDef> = SyncProperty::arc("length", iter_len);
 }

@@ -7,6 +7,7 @@
 * Decode logs returned by `Transaction.getReceipt()` when available in ABI
 * Add support for array concatenation
 * Add `array.filter` function
+* Add `array.reduce` function
 * Add support for bitwise operators
 * [EXPERIMENTAL] Add support for anonymous functions
 * [EXPERIMENTAL] Add support for fetching events
