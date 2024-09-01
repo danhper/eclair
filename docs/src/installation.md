@@ -1,5 +1,21 @@
 # Installation
 
+## Requirements
+
+Eclair requires `libusb` to work, since it is used to communicate with the Ledger device.
+On macOS, you can install it using Homebrew:
+
+```bash
+brew install libusb
+```
+
+On Linux, you should be able to install it using your package manager, for example on Ubuntu:
+
+```bash
+sudo apt install libusb-1.0-0-dev
+```
+
+
 ## Using the installer
 
 You can install the latest version of Eclair (latest push on main branch) using the installer script:
