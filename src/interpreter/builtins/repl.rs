@@ -1,8 +1,7 @@
 use std::{process::Command, sync::Arc};
 
 use alloy::{
-    node_bindings::Anvil,
-    providers::Provider,
+    providers::{ext::AnvilApi, Provider},
     signers::local::{LocalSigner, PrivateKeySigner},
 };
 use anyhow::{anyhow, bail, Ok, Result};
@@ -56,13 +55,14 @@ fn rpc(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
     }
 }
 
-fn fork<'a>(env: &'a Env, _receiver: &'a Value, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let url = args[0].as_string()?;
-        let anvil = Anvil::new().fork(url).try_spawn()?;
-        Ok(Value::Null)
-    }
-    .boxed()
+fn fork(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    let url = match args {
+        [Value::Str(url)] => url.clone(),
+        [] => env.get_rpc_url(),
+        _ => bail!("fork: invalid arguments"),
+    };
+    env.fork(&url)?;
+    Ok(Value::Str(env.get_rpc_url()))
 }
 
 fn debug(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
@@ -193,6 +193,52 @@ fn list_ledgers<'a>(
     .boxed()
 }
 
+fn impersonate<'a>(
+    env: &'a mut Env,
+    _receiver: &'a Value,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        let address = match args {
+            [Value::Addr(address)] => *address,
+            _ => bail!("impersonate: invalid arguments"),
+        };
+        env.impersonate(address).await?;
+        Ok(Value::Addr(address))
+    }
+    .boxed()
+}
+
+fn stop_impersonate<'a>(
+    env: &'a mut Env,
+    _receiver: &'a Value,
+    _args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        env.stop_impersonate().await?;
+        Ok(Value::Null)
+    }
+    .boxed()
+}
+
+fn set_balance<'a>(
+    env: &'a mut Env,
+    _receiver: &'a Value,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        let (address, balance) = match args {
+            [Value::Addr(address), Value::Uint(b, 256)] => (*address, *b),
+            _ => bail!("setBalance: invalid arguments"),
+        };
+        env.get_provider()
+            .anvil_set_balance(address, balance)
+            .await?;
+        Ok(Value::Null)
+    }
+    .boxed()
+}
+
 fn load_ledger<'a>(
     env: &'a mut Env,
     _receiver: &'a Value,
@@ -218,6 +264,11 @@ lazy_static! {
     pub static ref REPL_RPC: Arc<dyn FunctionDef> = SyncMethod::arc(
         "rpc",
         rpc,
+        vec![vec![], vec![FunctionParam::new("url", Type::String)]]
+    );
+    pub static ref REPL_FORK: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "fork",
+        fork,
         vec![vec![], vec![FunctionParam::new("url", Type::String)]]
     );
     pub static ref REPL_DEBUG: Arc<dyn FunctionDef> = SyncMethod::arc(
@@ -289,5 +340,20 @@ lazy_static! {
         "loadLedger",
         load_ledger,
         vec![vec![], vec![FunctionParam::new("index", Type::Uint(256))]]
+    );
+    pub static ref REPL_START_PRANK: Arc<dyn FunctionDef> = AsyncMethod::arc(
+        "startPrank",
+        impersonate,
+        vec![vec![FunctionParam::new("adddress", Type::Address)]]
+    );
+    pub static ref REPL_STOP_PRANK: Arc<dyn FunctionDef> =
+        AsyncMethod::arc("stopPrank", stop_impersonate, vec![vec![]]);
+    pub static ref REPL_DEAL: Arc<dyn FunctionDef> = AsyncMethod::arc(
+        "deal",
+        set_balance,
+        vec![vec![
+            FunctionParam::new("adddress", Type::Address),
+            FunctionParam::new("balance", Type::Uint(256))
+        ]]
     );
 }

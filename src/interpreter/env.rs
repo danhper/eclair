@@ -10,8 +10,10 @@ use alloy::{
     eips::BlockId,
     json_abi::{Event, JsonAbi},
     network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet, TxSigner},
+    node_bindings::{Anvil, AnvilInstance},
     primitives::{Address, B256},
     providers::{
+        ext::AnvilApi,
         fillers::{FillProvider, JoinFill, RecommendedFiller, WalletFiller},
         Provider, ProviderBuilder, RootProvider, WalletProvider,
     },
@@ -37,6 +39,8 @@ pub struct Env {
     ledger: Option<Arc<Mutex<Ledger>>>,
     block_id: BlockId,
     events: HashMap<B256, Event>,
+    impersonating: Option<Address>,
+    anvil: Option<AnvilInstance>,
     pub config: Config,
 }
 
@@ -59,6 +63,8 @@ impl Env {
             ledger: None,
             block_id: BlockId::latest(),
             events: HashMap::new(),
+            impersonating: None,
+            anvil: None,
             config,
         }
     }
@@ -124,6 +130,36 @@ impl Env {
             .map_err(Into::into)
     }
 
+    pub fn fork(&mut self, url: &str) -> Result<()> {
+        let anvil = Anvil::new().fork(url).try_spawn()?;
+        let endpoint = anvil.endpoint();
+        self.set_provider_url(endpoint.as_str())?;
+        self.anvil = Some(anvil);
+        Ok(())
+    }
+
+    pub async fn impersonate(&mut self, address: Address) -> Result<()> {
+        if self.anvil.is_none() {
+            bail!("can only impersonate in forks");
+        }
+        if let Some(addr) = self.impersonating {
+            bail!("already impersonating {}", addr);
+        }
+        self.provider.anvil_impersonate_account(address).await?;
+        self.impersonating = Some(address);
+        Ok(())
+    }
+
+    pub async fn stop_impersonate(&mut self) -> Result<()> {
+        if self.anvil.is_none() {
+            bail!("can only impersonate in forks");
+        }
+        let address = self.impersonating.ok_or(anyhow!("not impersonating"))?;
+        self.provider.anvil_impersonate_account(address).await?;
+        self.impersonating = None;
+        Ok(())
+    }
+
     pub async fn load_ledger(&mut self, index: usize) -> Result<()> {
         self.init_ledger().await?;
         let chain_id = self.get_chain_id().await?;
@@ -157,7 +193,9 @@ impl Env {
     }
 
     pub fn get_default_sender(&self) -> Option<Address> {
-        if self.is_wallet_connected {
+        if let addr @ Some(_) = self.impersonating {
+            addr
+        } else if self.is_wallet_connected {
             Some(NetworkWallet::<AnyNetwork>::default_signer_address(
                 self.provider.wallet(),
             ))
