@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy::{eips::BlockId, rpc::types::BlockTransactionsKind};
+use alloy::{eips::BlockId, providers::Provider, rpc::types::BlockTransactionsKind};
 use anyhow::{anyhow, Ok, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy::providers::PendingTransactionBuilder;
+use alloy::providers::{PendingTransactionBuilder, Provider};
 use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;

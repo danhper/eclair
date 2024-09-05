@@ -11,8 +11,11 @@ use alloy::{
     json_abi::{Event, JsonAbi},
     network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet, TxSigner},
     primitives::{Address, B256},
-    providers::{Provider, ProviderBuilder},
-    signers::{ledger::HDPath, Signature},
+    providers::{
+        fillers::{FillProvider, JoinFill, RecommendedFiller, WalletFiller},
+        Provider, ProviderBuilder, RootProvider, WalletProvider,
+    },
+    signers::{ledger::HDPath, local::PrivateKeySigner, Signature},
     transports::http::{Client, Http},
 };
 use anyhow::{anyhow, bail, Result};
@@ -22,11 +25,15 @@ use crate::{interpreter::Config, vendor::ledger_signer::LedgerSigner};
 
 use super::{evaluate_expression, types::Type, ContractInfo, Value};
 
+type RecommendedFillerWithWallet = JoinFill<RecommendedFiller, WalletFiller<EthereumWallet>>;
+type EclairProvider =
+    FillProvider<RecommendedFillerWithWallet, RootProvider<Http<Client>>, Http<Client>, Ethereum>;
+
 pub struct Env {
     variables: Vec<HashMap<String, Value>>,
     types: HashMap<String, Type>,
-    provider: Arc<dyn Provider<Http<Client>, Ethereum>>,
-    wallet: Option<EthereumWallet>,
+    provider: EclairProvider,
+    is_wallet_connected: bool,
     ledger: Option<Arc<Mutex<Ledger>>>,
     block_id: BlockId,
     events: HashMap<B256, Event>,
@@ -38,12 +45,17 @@ unsafe impl std::marker::Send for Env {}
 impl Env {
     pub fn new(config: Config) -> Self {
         let rpc_url = config.rpc_url.parse().unwrap();
-        let provider = ProviderBuilder::new().on_http(rpc_url);
+        let random_signer = PrivateKeySigner::random();
+        let wallet = EthereumWallet::from(random_signer);
+        let provider = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .wallet(wallet)
+            .on_http(rpc_url);
         Env {
             variables: vec![HashMap::new()],
             types: HashMap::new(),
-            provider: Arc::new(provider),
-            wallet: None,
+            provider,
+            is_wallet_connected: false,
             ledger: None,
             block_id: BlockId::latest(),
             events: HashMap::new(),
@@ -96,12 +108,12 @@ impl Env {
         self.block_id
     }
 
-    pub fn get_provider(&self) -> Arc<dyn Provider<Http<Client>, Ethereum>> {
+    pub fn get_provider(&self) -> EclairProvider {
         self.provider.clone()
     }
 
     pub fn set_provider_url(&mut self, url: &str) -> Result<()> {
-        self.set_provider(self.wallet.clone(), url)
+        self.set_provider(None, url)
     }
 
     pub async fn get_chain_id(&self) -> Result<u64> {
@@ -145,9 +157,13 @@ impl Env {
     }
 
     pub fn get_default_sender(&self) -> Option<Address> {
-        self.wallet
-            .as_ref()
-            .map(NetworkWallet::<AnyNetwork>::default_signer_address)
+        if self.is_wallet_connected {
+            Some(NetworkWallet::<AnyNetwork>::default_signer_address(
+                self.provider.wallet(),
+            ))
+        } else {
+            None
+        }
     }
 
     pub fn set_signer<S>(&mut self, signer: S) -> Result<()>
@@ -236,7 +252,7 @@ impl Env {
         S: TxSigner<Signature> + Send + Sync + 'static,
     {
         let wallet = EthereumWallet::from(signer);
-        self.wallet = Some(wallet.clone());
+        self.is_wallet_connected = true;
         self.set_provider(Some(wallet), &self.get_rpc_url())
     }
 
@@ -252,13 +268,11 @@ impl Env {
         };
         self.config.rpc_url = rpc_url.to_string();
 
-        let builder = ProviderBuilder::new().with_recommended_fillers();
-        let provider = if let Some(wallet) = wallet {
-            Arc::new(builder.wallet(wallet.clone()).on_http(rpc_url))
-                as Arc<dyn Provider<Http<Client>, Ethereum>>
-        } else {
-            Arc::new(builder.on_http(rpc_url))
-        };
+        let wallet = wallet.unwrap_or_else(|| self.provider.wallet().clone());
+        let provider = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .wallet(wallet)
+            .on_http(rpc_url);
         self.provider = provider;
         Ok(())
     }
