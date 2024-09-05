@@ -1,6 +1,7 @@
 use std::{process::Command, sync::Arc};
 
 use alloy::{
+    node_bindings::Anvil,
     providers::Provider,
     signers::local::{LocalSigner, PrivateKeySigner},
 };
@@ -53,6 +54,15 @@ fn rpc(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
         }
         _ => bail!("rpc: invalid arguments"),
     }
+}
+
+fn fork<'a>(env: &'a Env, _receiver: &'a Value, args: &'a [Value]) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        let url = args[0].as_string()?;
+        let anvil = Anvil::new().fork(url).try_spawn()?;
+        Ok(Value::Null)
+    }
+    .boxed()
 }
 
 fn debug(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
