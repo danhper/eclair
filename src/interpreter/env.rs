@@ -14,20 +14,24 @@ use alloy::{
     primitives::{Address, B256},
     providers::{
         ext::AnvilApi,
-        fillers::{FillProvider, JoinFill, RecommendedFiller, WalletFiller},
+        fillers::{FillProvider, JoinFill, RecommendedFiller},
         Provider, ProviderBuilder, RootProvider, WalletProvider,
     },
-    signers::{ledger::HDPath, local::PrivateKeySigner, Signature},
+    signers::{ledger::HDPath, Signature},
     transports::http::{Client, Http},
 };
 use anyhow::{anyhow, bail, Result};
 use coins_ledger::{transports::LedgerAsync, Ledger};
 
-use crate::{interpreter::Config, vendor::ledger_signer::LedgerSigner};
+use crate::{
+    interpreter::Config,
+    vendor::{ledger_signer::LedgerSigner, optional_wallet_filler::OptionalWalletFiller},
+};
 
 use super::{evaluate_expression, types::Type, ContractInfo, Value};
 
-type RecommendedFillerWithWallet = JoinFill<RecommendedFiller, WalletFiller<EthereumWallet>>;
+type RecommendedFillerWithWallet =
+    JoinFill<RecommendedFiller, OptionalWalletFiller<EthereumWallet>>;
 type EclairProvider =
     FillProvider<RecommendedFillerWithWallet, RootProvider<Http<Client>>, Http<Client>, Ethereum>;
 
@@ -49,11 +53,9 @@ unsafe impl std::marker::Send for Env {}
 impl Env {
     pub fn new(config: Config) -> Self {
         let rpc_url = config.rpc_url.parse().unwrap();
-        let random_signer = PrivateKeySigner::random();
-        let wallet = EthereumWallet::from(random_signer);
         let provider = ProviderBuilder::new()
             .with_recommended_fillers()
-            .wallet(wallet)
+            .filler(OptionalWalletFiller::<EthereumWallet>::new())
             .on_http(rpc_url);
         Env {
             variables: vec![HashMap::new()],
@@ -306,10 +308,15 @@ impl Env {
         };
         self.config.rpc_url = rpc_url.to_string();
 
-        let wallet = wallet.unwrap_or_else(|| self.provider.wallet().clone());
+        let mut wallet_filler = OptionalWalletFiller::new();
+        if let Some(w) = wallet {
+            wallet_filler.set_wallet(w);
+        } else if self.is_wallet_connected {
+            wallet_filler.set_wallet(self.provider.wallet().clone());
+        }
         let provider = ProviderBuilder::new()
             .with_recommended_fillers()
-            .wallet(wallet)
+            .filler(wallet_filler)
             .on_http(rpc_url);
         self.provider = provider;
         Ok(())
