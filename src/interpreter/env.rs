@@ -141,9 +141,6 @@ impl Env {
     }
 
     pub async fn impersonate(&mut self, address: Address) -> Result<()> {
-        if self.anvil.is_none() {
-            bail!("can only impersonate in forks");
-        }
         if let Some(addr) = self.impersonating {
             bail!("already impersonating {}", addr);
         }

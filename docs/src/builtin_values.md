@@ -87,6 +87,44 @@ If the [RPC URL](./configuration.md#rpc-url) is set in the configuration file, t
 >> repl.rpc("optimism")
 ```
 
+### `repl.fork() | repl.fork(string url) -> string`
+
+This creates a fork using Anvil.
+If a URL is provided, it will fork that network, otherwise it will use the current RPC (`repl.rpc()`).
+This returns the endpoint of the Anvil instance.
+
+```javascript
+>> repl.fork()
+"http://localhost:54383/"
+```
+
+### `repl.startPrank(address account) -> address`
+
+Starts a prank on the given account.
+This only works if connected to an RPC that supports `anvil_impersonateAccount` (which is the case after calling `repl.fork()`).
+
+```javascript
+>> repl.startPrank(0xCdaa941eB36344c54139CB9d6337Bd2154BBeEfA)
+0xCdaa941eB36344c54139CB9d6337Bd2154BBeEfA
+```
+
+### `repl.stopPrank()`
+
+Stops the current prank.
+
+```javascript
+>> repl.stopPrank()
+```
+
+### `repl.deal(address account, uint256 balance)`
+
+Sets the ETH balance of `account` to `balance`.
+This only works if connected to an RPC that supports `anvil_setBalance` (which is the case after calling `repl.fork()`).
+
+```javascript
+>> repl.deal(0xCdaa941eB36344c54139CB9d6337Bd2154BBeEfA, 1e18)
+```
+
 ### `repl.block() -> uint256 | string`
 
 Returns the current block in use for contract calls.
@@ -96,8 +134,9 @@ Returns the current block in use for contract calls.
 "latest"
 ```
 
-### `repl.block(uint256 number) | repl.block(string tag) | repl.block(bytes32 hash)`
+NOTE: this is different from `block.number` which returns the current block number of the chain.
 
+### `repl.block(uint256 number) | repl.block(string tag) | repl.block(bytes32 hash)`
 
 Sets the block to use for contract calls.
 Can be a number, a tag (e.g. "latest" or "safe"), or a block hash.
