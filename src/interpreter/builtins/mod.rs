@@ -149,6 +149,7 @@ lazy_static! {
         repl_methods.insert("types".to_string(), repl::REPL_LIST_TYPES.clone());
         repl_methods.insert("connected".to_string(), repl::REPL_IS_CONNECTED.clone());
         repl_methods.insert("rpc".to_string(), repl::REPL_RPC.clone());
+        repl_methods.insert("fork".to_string(), repl::REPL_FORK.clone());
         repl_methods.insert("debug".to_string(), repl::REPL_DEBUG.clone());
         repl_methods.insert("block".to_string(), repl::REPL_BLOCK.clone());
         repl_methods.insert("exec".to_string(), repl::REPL_EXEC.clone());
@@ -165,6 +166,9 @@ lazy_static! {
             repl::REPL_LIST_LEDGER_WALLETS.clone(),
         );
         repl_methods.insert("loadLedger".to_string(), repl::REPL_LOAD_LEDGER.clone());
+        repl_methods.insert("startPrank".to_string(), repl::REPL_START_PRANK.clone());
+        repl_methods.insert("stopPrank".to_string(), repl::REPL_STOP_PRANK.clone());
+        repl_methods.insert("deal".to_string(), repl::REPL_DEAL.clone());
         m.insert(NonParametricType::Repl, repl_methods);
 
         m

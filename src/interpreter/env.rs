@@ -10,26 +10,41 @@ use alloy::{
     eips::BlockId,
     json_abi::{Event, JsonAbi},
     network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet, TxSigner},
+    node_bindings::{Anvil, AnvilInstance},
     primitives::{Address, B256},
-    providers::{Provider, ProviderBuilder},
+    providers::{
+        ext::AnvilApi,
+        fillers::{FillProvider, JoinFill, RecommendedFiller},
+        Provider, ProviderBuilder, RootProvider, WalletProvider,
+    },
     signers::{ledger::HDPath, Signature},
     transports::http::{Client, Http},
 };
 use anyhow::{anyhow, bail, Result};
 use coins_ledger::{transports::LedgerAsync, Ledger};
 
-use crate::{interpreter::Config, vendor::ledger_signer::LedgerSigner};
+use crate::{
+    interpreter::Config,
+    vendor::{ledger_signer::LedgerSigner, optional_wallet_filler::OptionalWalletFiller},
+};
 
 use super::{evaluate_expression, types::Type, ContractInfo, Value};
+
+type RecommendedFillerWithWallet =
+    JoinFill<RecommendedFiller, OptionalWalletFiller<EthereumWallet>>;
+type EclairProvider =
+    FillProvider<RecommendedFillerWithWallet, RootProvider<Http<Client>>, Http<Client>, Ethereum>;
 
 pub struct Env {
     variables: Vec<HashMap<String, Value>>,
     types: HashMap<String, Type>,
-    provider: Arc<dyn Provider<Http<Client>, Ethereum>>,
-    wallet: Option<EthereumWallet>,
+    provider: EclairProvider,
+    is_wallet_connected: bool,
     ledger: Option<Arc<Mutex<Ledger>>>,
     block_id: BlockId,
     events: HashMap<B256, Event>,
+    impersonating: Option<Address>,
+    anvil: Option<AnvilInstance>,
     pub config: Config,
 }
 
@@ -38,15 +53,20 @@ unsafe impl std::marker::Send for Env {}
 impl Env {
     pub fn new(config: Config) -> Self {
         let rpc_url = config.rpc_url.parse().unwrap();
-        let provider = ProviderBuilder::new().on_http(rpc_url);
+        let provider = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .filler(OptionalWalletFiller::<EthereumWallet>::new())
+            .on_http(rpc_url);
         Env {
             variables: vec![HashMap::new()],
             types: HashMap::new(),
-            provider: Arc::new(provider),
-            wallet: None,
+            provider,
+            is_wallet_connected: false,
             ledger: None,
             block_id: BlockId::latest(),
             events: HashMap::new(),
+            impersonating: None,
+            anvil: None,
             config,
         }
     }
@@ -96,12 +116,12 @@ impl Env {
         self.block_id
     }
 
-    pub fn get_provider(&self) -> Arc<dyn Provider<Http<Client>, Ethereum>> {
+    pub fn get_provider(&self) -> EclairProvider {
         self.provider.clone()
     }
 
     pub fn set_provider_url(&mut self, url: &str) -> Result<()> {
-        self.set_provider(self.wallet.clone(), url)
+        self.set_provider(None, url)
     }
 
     pub async fn get_chain_id(&self) -> Result<u64> {
@@ -110,6 +130,33 @@ impl Env {
             .get_chain_id()
             .await
             .map_err(Into::into)
+    }
+
+    pub fn fork(&mut self, url: &str) -> Result<()> {
+        let anvil = Anvil::new().fork(url).try_spawn()?;
+        let endpoint = anvil.endpoint();
+        self.set_provider_url(endpoint.as_str())?;
+        self.anvil = Some(anvil);
+        Ok(())
+    }
+
+    pub async fn impersonate(&mut self, address: Address) -> Result<()> {
+        if let Some(addr) = self.impersonating {
+            bail!("already impersonating {}", addr);
+        }
+        self.provider.anvil_impersonate_account(address).await?;
+        self.impersonating = Some(address);
+        Ok(())
+    }
+
+    pub async fn stop_impersonate(&mut self) -> Result<()> {
+        if self.anvil.is_none() {
+            bail!("can only impersonate in forks");
+        }
+        let address = self.impersonating.ok_or(anyhow!("not impersonating"))?;
+        self.provider.anvil_impersonate_account(address).await?;
+        self.impersonating = None;
+        Ok(())
     }
 
     pub async fn load_ledger(&mut self, index: usize) -> Result<()> {
@@ -145,9 +192,15 @@ impl Env {
     }
 
     pub fn get_default_sender(&self) -> Option<Address> {
-        self.wallet
-            .as_ref()
-            .map(NetworkWallet::<AnyNetwork>::default_signer_address)
+        if let addr @ Some(_) = self.impersonating {
+            addr
+        } else if self.is_wallet_connected {
+            Some(NetworkWallet::<AnyNetwork>::default_signer_address(
+                self.provider.wallet(),
+            ))
+        } else {
+            None
+        }
     }
 
     pub fn set_signer<S>(&mut self, signer: S) -> Result<()>
@@ -236,7 +289,7 @@ impl Env {
         S: TxSigner<Signature> + Send + Sync + 'static,
     {
         let wallet = EthereumWallet::from(signer);
-        self.wallet = Some(wallet.clone());
+        self.is_wallet_connected = true;
         self.set_provider(Some(wallet), &self.get_rpc_url())
     }
 
@@ -252,13 +305,16 @@ impl Env {
         };
         self.config.rpc_url = rpc_url.to_string();
 
-        let builder = ProviderBuilder::new().with_recommended_fillers();
-        let provider = if let Some(wallet) = wallet {
-            Arc::new(builder.wallet(wallet.clone()).on_http(rpc_url))
-                as Arc<dyn Provider<Http<Client>, Ethereum>>
-        } else {
-            Arc::new(builder.on_http(rpc_url))
-        };
+        let mut wallet_filler = OptionalWalletFiller::new();
+        if let Some(w) = wallet {
+            wallet_filler.set_wallet(w);
+        } else if self.is_wallet_connected {
+            wallet_filler.set_wallet(self.provider.wallet().clone());
+        }
+        let provider = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .filler(wallet_filler)
+            .on_http(rpc_url);
         self.provider = provider;
         Ok(())
     }

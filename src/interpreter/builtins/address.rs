@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy::transports::BoxFuture;
+use alloy::{providers::Provider, transports::BoxFuture};
 use anyhow::Result;
 use futures::FutureExt;
 use lazy_static::lazy_static;

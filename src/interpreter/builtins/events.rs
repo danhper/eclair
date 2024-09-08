@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy::{primitives::B256, rpc::types::Filter};
+use alloy::{primitives::B256, providers::Provider, rpc::types::Filter};
 use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
