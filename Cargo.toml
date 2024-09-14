@@ -27,6 +27,7 @@ alloy = { version = "0.2.0", features = [
     "signer-keystore",
     "node-bindings",
     "provider-anvil-api",
+    "provider-debug-api",
 ] }
 itertools = "0.13.0"
 rpassword = "7.3.1"

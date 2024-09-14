@@ -2,12 +2,15 @@ use std::{hash::Hash, sync::Arc};
 
 use alloy::{
     contract::{CallBuilder, ContractInstance, Interface},
-    eips::BlockId,
+    eips::{BlockId, BlockNumberOrTag},
     json_abi::StateMutability,
     network::{Network, TransactionBuilder},
     primitives::{keccak256, Address, FixedBytes, U256},
-    providers::Provider,
-    rpc::types::{TransactionInput, TransactionRequest},
+    providers::{ext::DebugApi, Provider},
+    rpc::types::{
+        trace::geth::GethDebugTracingCallOptions, BlockTransactionsKind, TransactionInput,
+        TransactionRequest,
+    },
     transports::Transport,
 };
 use anyhow::{anyhow, bail, Result};
@@ -23,6 +26,7 @@ pub enum ContractCallMode {
     Default,
     Encode,
     Call,
+    TraceCall,
     Send,
 }
 
@@ -32,6 +36,7 @@ impl std::fmt::Display for ContractCallMode {
             ContractCallMode::Default => write!(f, "default"),
             ContractCallMode::Encode => write!(f, "encode"),
             ContractCallMode::Call => write!(f, "call"),
+            ContractCallMode::TraceCall => write!(f, "trace_call"),
             ContractCallMode::Send => write!(f, "send"),
         }
     }
@@ -44,6 +49,7 @@ impl TryFrom<&str> for ContractCallMode {
         match s {
             "encode" => Ok(ContractCallMode::Encode),
             "call" => Ok(ContractCallMode::Call),
+            "trace_call" => Ok(ContractCallMode::TraceCall),
             "send" => Ok(ContractCallMode::Send),
             _ => bail!("{} does not exist for contract call", s),
         }
@@ -229,6 +235,8 @@ impl FunctionDef for ContractFunction {
             if self.mode == ContractCallMode::Encode {
                 let encoded = func.calldata();
                 Ok(Value::Bytes(encoded[..].to_vec()))
+            } else if self.mode == ContractCallMode::TraceCall {
+                _execute_contract_trace_call(&addr, func, env).await
             } else if self.mode == ContractCallMode::Call
                 || (self.mode == ContractCallMode::Default && is_view)
             {
@@ -326,4 +334,48 @@ where
     } else {
         Ok(Value::Tuple(return_values))
     }
+}
+
+async fn _execute_contract_trace_call<T, P, N>(
+    addr: &Address,
+    func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    env: &mut Env,
+) -> Result<Value>
+where
+    T: Transport + Clone,
+    P: Provider<T, N>,
+    N: Network,
+{
+    let data = func.calldata();
+    let input = TransactionInput::new(data.clone());
+    let mut tx_req = TransactionRequest::default().with_to(*addr).input(input);
+    if let Some(acc) = env.get_default_sender() {
+        tx_req = tx_req.with_from(acc);
+    }
+
+    let (provider, previous_url) = if env.is_fork() {
+        (env.get_provider(), None)
+    } else {
+        let url = env.get_rpc_url();
+        env.fork(url.as_str())?;
+        (env.get_provider(), Some(url))
+    };
+
+    let options = GethDebugTracingCallOptions::default();
+    let block_tag = env.block();
+    let block = provider
+        .get_block(block_tag, BlockTransactionsKind::Hashes)
+        .await?
+        .ok_or(anyhow!("could not get block {:?}", block_tag))?;
+    let block_num =
+        BlockNumberOrTag::Number(block.header.number.ok_or(anyhow!("no block number"))?);
+
+    let maybe_tx = provider.debug_trace_call(tx_req, block_num, options).await;
+    if let Some(url) = previous_url {
+        env.set_provider_url(url.as_str())?;
+    }
+    let traces = maybe_tx?;
+
+    println!("{:?}", traces);
+    Ok(Value::Null)
 }

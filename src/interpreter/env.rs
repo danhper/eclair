@@ -125,19 +125,19 @@ impl Env {
     }
 
     pub async fn get_chain_id(&self) -> Result<u64> {
-        self.provider
-            .root()
-            .get_chain_id()
-            .await
-            .map_err(Into::into)
+        self.provider.get_chain_id().await.map_err(Into::into)
     }
 
     pub fn fork(&mut self, url: &str) -> Result<()> {
-        let anvil = Anvil::new().fork(url).try_spawn()?;
+        let anvil = Anvil::new().arg("--steps-tracing").fork(url).try_spawn()?;
         let endpoint = anvil.endpoint();
         self.set_provider_url(endpoint.as_str())?;
         self.anvil = Some(anvil);
         Ok(())
+    }
+
+    pub fn is_fork(&self) -> bool {
+        self.anvil.is_some()
     }
 
     pub async fn impersonate(&mut self, address: Address) -> Result<()> {

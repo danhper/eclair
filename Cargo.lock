@@ -398,7 +398,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rpc-client 0.1.0",
  "alloy-rpc-types 0.1.0",
- "alloy-rpc-types-trace",
+ "alloy-rpc-types-trace 0.1.0",
  "alloy-transport 0.1.0",
  "async-stream",
  "async-trait",
@@ -432,6 +432,7 @@ dependencies = [
  "alloy-rpc-client 0.2.1",
  "alloy-rpc-types-anvil",
  "alloy-rpc-types-eth",
+ "alloy-rpc-types-trace 0.2.1",
  "alloy-signer-local",
  "alloy-transport 0.2.1",
  "alloy-transport-http 0.2.1",
@@ -582,6 +583,7 @@ dependencies = [
  "alloy-rpc-types-anvil",
  "alloy-rpc-types-engine 0.2.1",
  "alloy-rpc-types-eth",
+ "alloy-rpc-types-trace 0.2.1",
  "alloy-serde 0.2.1",
  "serde",
 ]
@@ -661,6 +663,20 @@ dependencies = [
  "alloy-serde 0.1.0",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "alloy-rpc-types-trace"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a86eeb49ea0cc79f249faa1d35c20541bb1c317a59b5962cb07b1890355b0064"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rpc-types-eth",
+ "alloy-serde 0.2.1",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -5192,7 +5208,7 @@ source = "git+https://github.com/paradigmxyz/revm-inspectors?rev=0d3f1f4#0d3f1f4
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-types 0.1.0",
- "alloy-rpc-types-trace",
+ "alloy-rpc-types-trace 0.1.0",
  "alloy-sol-types",
  "anstyle",
  "colorchoice",
