@@ -1,5 +1,11 @@
 # Changelog
 
+## Not released
+
+### Other changes
+
+* Encode `FixedBytes` as with zero padding on the left instead of the right
+
 ## v0.1.3 (2024-08-15)
 
 ### Features
