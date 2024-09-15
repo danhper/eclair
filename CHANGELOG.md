@@ -2,6 +2,11 @@
 
 ## Not released
 
+### Features
+
+* Add `repl.fork` to start run and use an Anvil instance as a fork of the current URL
+* Add `repl.startPrank` / `repl.stopPrank` to start/stop impersonating an address
+
 ### Other changes
 
 * Encode `FixedBytes` as with zero padding on the left instead of the right
