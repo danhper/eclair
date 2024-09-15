@@ -5,7 +5,7 @@ use alloy::{
     eips::{BlockId, BlockNumberOrTag},
     json_abi::StateMutability,
     network::{Network, TransactionBuilder},
-    primitives::{keccak256, Address, FixedBytes, U256},
+    primitives::{keccak256, Address, Bytes, FixedBytes, U256},
     providers::{ext::DebugApi, Provider},
     rpc::types::{
         trace::geth::GethDebugTracingCallOptions, BlockTransactionsKind, TransactionInput,
@@ -17,7 +17,9 @@ use anyhow::{anyhow, bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use itertools::Itertools;
 
-use crate::interpreter::{types::HashableIndexMap, ContractInfo, Env, Type, Value};
+use crate::interpreter::{
+    types::HashableIndexMap, utils::decode_error, ContractInfo, Env, Type, Value,
+};
 
 use super::{Function, FunctionDef, FunctionParam};
 
@@ -236,7 +238,7 @@ impl FunctionDef for ContractFunction {
                 let encoded = func.calldata();
                 Ok(Value::Bytes(encoded[..].to_vec()))
             } else if self.mode == ContractCallMode::TraceCall {
-                _execute_contract_trace_call(&addr, func, env).await
+                _execute_contract_trace_call(&addr, func, &call_options, env).await
             } else if self.mode == ContractCallMode::Call
                 || (self.mode == ContractCallMode::Default && is_view)
             {
@@ -305,6 +307,27 @@ where
     Ok(Value::Transaction(*tx.tx_hash()))
 }
 
+fn _decode_output<T, P, N>(
+    return_bytes: Bytes,
+    func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+) -> Result<Value>
+where
+    T: Transport + Clone,
+    P: Provider<T, N>,
+    N: Network,
+{
+    let result = func.decode_output(return_bytes, true)?;
+    let return_values = result
+        .into_iter()
+        .map(Value::try_from)
+        .collect::<Result<Vec<_>>>()?;
+    if return_values.len() == 1 {
+        Ok(return_values.into_iter().next().unwrap())
+    } else {
+        Ok(Value::Tuple(return_values))
+    }
+}
+
 async fn _execute_contract_call<T, P, N>(
     addr: &Address,
     func: CallBuilder<T, P, alloy::json_abi::Function, N>,
@@ -324,21 +347,13 @@ where
     let block = opts.block.unwrap_or(env.block());
     let provider = env.get_provider();
     let return_bytes = provider.call(&tx_req).block(block).await?;
-    let result = func.decode_output(return_bytes, true)?;
-    let return_values = result
-        .into_iter()
-        .map(Value::try_from)
-        .collect::<Result<Vec<_>>>()?;
-    if return_values.len() == 1 {
-        Ok(return_values.into_iter().next().unwrap())
-    } else {
-        Ok(Value::Tuple(return_values))
-    }
+    _decode_output(return_bytes, func)
 }
 
 async fn _execute_contract_trace_call<T, P, N>(
     addr: &Address,
     func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    opts: &CallOptions,
     env: &mut Env,
 ) -> Result<Value>
 where
@@ -349,7 +364,10 @@ where
     let data = func.calldata();
     let input = TransactionInput::new(data.clone());
     let mut tx_req = TransactionRequest::default().with_to(*addr).input(input);
-    if let Some(acc) = env.get_default_sender() {
+
+    if let Some(from_) = opts.from {
+        tx_req = tx_req.with_from(from_);
+    } else if let Some(acc) = env.get_default_sender() {
         tx_req = tx_req.with_from(acc);
     }
 
@@ -374,8 +392,16 @@ where
     if let Some(url) = previous_url {
         env.set_provider_url(url.as_str())?;
     }
-    let traces = maybe_tx?;
+    let traces = maybe_tx?.try_into_default_frame()?;
 
-    println!("{:?}", traces);
-    Ok(Value::Null)
+    if traces.failed {
+        let err = traces.return_value;
+        if let Ok(err_val) = decode_error(env, &err) {
+            bail!("revert: {}", err_val);
+        } else {
+            bail!("revert: {:?}", err);
+        }
+    } else {
+        _decode_output(traces.return_value, func)
+    }
 }
