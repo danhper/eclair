@@ -467,11 +467,11 @@ impl Type {
             (Type::Int(size), Value::Uint(v, _)) => {
                 Value::Int((*v).try_into()?, *size).validate_int()
             }
-            (Type::FixBytes(bytes_num), Value::Uint(v, bits_num))
+            (t @ Type::FixBytes(bytes_num), Value::Uint(v, bits_num))
                 if *bytes_num * 8 == *bits_num =>
             {
                 let bytes = B256::from_slice(&v.to_be_bytes_vec());
-                Ok(Value::FixBytes(bytes, *bytes_num))
+                t.cast(&Value::FixBytes(bytes, 32))
             }
             (Type::Uint(bits_num), Value::FixBytes(v, bytes_num))
                 if *bytes_num * 8 == *bits_num =>
@@ -480,9 +480,13 @@ impl Type {
                 Ok(Value::Uint(num, *bits_num))
             }
             (Type::FixBytes(target_bytes_num), Value::FixBytes(bytes, _)) => {
-                let mut new_bytes = bytes.0.to_vec();
-                new_bytes.resize(*target_bytes_num, 0); // "erase" all bytes after target_bytes_num
-                new_bytes.resize(32, 0); // pad with zero to be able to create a B256
+                let mut new_bytes = bytes.to_vec();
+                if *target_bytes_num < 32 {
+                    let to_fill = 32 - *target_bytes_num;
+                    let filler = vec![0; to_fill];
+                    new_bytes[..to_fill].copy_from_slice(&filler);
+                }
+                new_bytes[..bytes.0.len()].copy_from_slice(&bytes.0);
                 Ok(Value::FixBytes(
                     B256::from_slice(&new_bytes),
                     *target_bytes_num,
@@ -491,10 +495,14 @@ impl Type {
             (Type::Transaction, Value::FixBytes(v, 32)) => Ok(Value::Transaction(*v)),
             (Type::Bytes, Value::Str(v)) => Ok(Value::Bytes(v.as_bytes().to_vec())),
             (type_ @ Type::FixBytes(_), Value::Str(_)) => type_.cast(&Type::Bytes.cast(value)?),
+            (Type::Bytes, Value::FixBytes(v, _)) => Ok(Value::Bytes(v.0.to_vec())),
             (Type::FixBytes(size), Value::Bytes(v)) => {
-                let mut new_vector = v.clone();
-                new_vector.resize(*size, 0);
-                Ok(Value::FixBytes(B256::from_slice(&new_vector), *size))
+                let mut new_bytes = v.clone();
+                if new_bytes.len() > *size {
+                    new_bytes = new_bytes[new_bytes.len() - *size..].to_vec();
+                }
+                new_bytes.resize(32, 0);
+                Ok(Value::FixBytes(B256::from_slice(&new_bytes), *size))
             }
             (Type::NamedTuple(name, types_), Value::Tuple(values)) => {
                 let mut new_values = IndexMap::new();
@@ -678,16 +686,13 @@ mod tests {
 
     #[test]
     fn cast_bytes() {
-        let signature =
-            Value::from_hex("0x70a08231b98ef4ca268c9cc3f6b4590e4bfec28280db06bb5d45e689f2a360be")
+        let b256_value =
+            Value::from_hex("0x00000000000000000000000000000000000000000000000000000000281dd5af")
                 .unwrap();
-        let selector = Value::from_hex("0x70a08231").unwrap();
-        assert_eq!(Type::FixBytes(4).cast(&signature).unwrap(), selector);
-        let padded_selector = "0x70a0823100000000000000000000000000000000000000000000000000000000";
-        assert_eq!(
-            Type::FixBytes(32).cast(&selector).unwrap(),
-            Value::from_hex(padded_selector).unwrap()
-        );
+        println!("{:?}", b256_value);
+        let b4_value = Value::from_hex("0x281dd5af").unwrap();
+        assert_eq!(Type::FixBytes(4).cast(&b256_value).unwrap(), b4_value);
+        assert_eq!(Type::FixBytes(32).cast(&b4_value).unwrap(), b256_value);
     }
 
     #[test]
