@@ -38,6 +38,7 @@ semver = "1.0.23"
 shellexpand = { version = "3.1.0", features = ["path"] }
 indexmap = "2.2.6"
 lazy_static = "1.5.0"
+textwrap = { version = "0.16.1", features = ["terminal_size"] }
 
 [build-dependencies]
 git2-rs = { version = "0.19.0", package = "git2", default-features = false }

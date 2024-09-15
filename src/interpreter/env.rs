@@ -42,6 +42,7 @@ pub struct Env {
     is_wallet_connected: bool,
     ledger: Option<Arc<Mutex<Ledger>>>,
     block_id: BlockId,
+    contract_names: HashMap<Address, String>,
     events: HashMap<B256, json_abi::Event>,
     errors: HashMap<FixedBytes<4>, json_abi::Error>,
     functions: HashMap<FixedBytes<4>, json_abi::Function>,
@@ -66,6 +67,7 @@ impl Env {
             is_wallet_connected: false,
             ledger: None,
             block_id: BlockId::latest(),
+            contract_names: HashMap::new(),
             events: HashMap::new(),
             errors: HashMap::new(),
             functions: HashMap::new(),
@@ -258,6 +260,10 @@ impl Env {
         Vec::from_iter(vars)
     }
 
+    pub fn get_contract_name(&self, addr: &Address) -> Option<&String> {
+        self.contract_names.get(addr)
+    }
+
     pub fn get_var(&self, name: &str) -> Option<&Value> {
         for scope in self.variables.iter().rev() {
             if let Some(value) = scope.get(name) {
@@ -286,7 +292,13 @@ impl Env {
     }
 
     pub fn set_var(&mut self, name: &str, value: Value) {
+        let is_top_level = self.variables.len() == 1;
         let scope = self.variables.last_mut().unwrap();
+        if is_top_level {
+            if let Value::Contract(ContractInfo(name, _), addr) = &value {
+                self.contract_names.insert(*addr, name.clone());
+            }
+        }
         scope.insert(name.to_string(), value);
     }
 

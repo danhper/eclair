@@ -8,8 +8,8 @@ use alloy::{
     primitives::{keccak256, Address, Bytes, FixedBytes, U256},
     providers::{ext::DebugApi, Provider},
     rpc::types::{
-        trace::geth::GethDebugTracingCallOptions, BlockTransactionsKind, TransactionInput,
-        TransactionRequest,
+        trace::geth::{self, GethDebugTracingCallOptions},
+        BlockTransactionsKind, TransactionInput, TransactionRequest,
     },
     transports::Transport,
 };
@@ -18,7 +18,8 @@ use futures::{future::BoxFuture, FutureExt};
 use itertools::Itertools;
 
 use crate::interpreter::{
-    types::HashableIndexMap, utils::decode_error, ContractInfo, Env, Type, Value,
+    tracing::format_call_frame, types::HashableIndexMap, utils::decode_error, ContractInfo, Env,
+    Type, Value,
 };
 
 use super::{Function, FunctionDef, FunctionParam};
@@ -379,7 +380,13 @@ where
         (env.get_provider(), Some(url))
     };
 
-    let options = GethDebugTracingCallOptions::default();
+    let mut options = GethDebugTracingCallOptions::default();
+    let mut tracing_options = options.tracing_options.clone();
+    tracing_options = tracing_options.with_tracer(geth::GethDebugTracerType::BuiltInTracer(
+        geth::GethDebugBuiltInTracerType::CallTracer,
+    ));
+    options = options.with_tracing_options(tracing_options);
+    // options.with_tracing_options(options)
     let block_tag = env.block();
     let block = provider
         .get_block(block_tag, BlockTransactionsKind::Hashes)
@@ -392,16 +399,22 @@ where
     if let Some(url) = previous_url {
         env.set_provider_url(url.as_str())?;
     }
-    let traces = maybe_tx?.try_into_default_frame()?;
+    let call_frame = maybe_tx?.try_into_call_frame()?;
 
-    if traces.failed {
-        let err = traces.return_value;
-        if let Ok(err_val) = decode_error(env, &err) {
-            bail!("revert: {}", err_val);
-        } else {
-            bail!("revert: {:?}", err);
+    println!("{}", format_call_frame(env, &call_frame));
+
+    if let Some(err) = call_frame.error {
+        if let Some(output) = call_frame.output {
+            if let Ok(err_val) = decode_error(env, &output) {
+                bail!("revert: {}", err_val);
+            } else {
+                bail!("revert: {}", output);
+            }
         }
+        bail!("revert: {}", err);
+    } else if let Some(output) = call_frame.output {
+        _decode_output(output, func)
     } else {
-        _decode_output(traces.return_value, func)
+        Ok(Value::Null)
     }
 }
