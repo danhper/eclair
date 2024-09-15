@@ -104,6 +104,12 @@ main() {
     fi
   fi
 
+  if [ "$ECLAIR_PLATFORM" = "macos" ]; then
+    if which brew &>/dev/null; then
+      brew list libusb &>/dev/null || echo "libusb required but not found, run 'brew install libusb' after the installation to install it"
+    fi
+  fi
+
   case $ECLAIR_VERSION in
     ""|latest)
       BASE_URL="$NIGHTLY_BASE_URL"
