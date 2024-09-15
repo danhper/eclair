@@ -6,6 +6,7 @@
 
 * Add `repl.fork` to start run and use an Anvil instance as a fork of the current URL
 * Add `repl.startPrank` / `repl.stopPrank` to start/stop impersonating an address
+* Add `FUNC.trace_call` method to contract functions
 
 ### Other changes
 
