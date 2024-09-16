@@ -189,6 +189,18 @@ impl TryFrom<alloy::dyn_abi::DynSolValue> for Value {
     }
 }
 
+impl TryFrom<Vec<alloy::dyn_abi::DynSolValue>> for Value {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Vec<alloy::dyn_abi::DynSolValue>) -> std::result::Result<Self, Self::Error> {
+        let values = value
+            .into_iter()
+            .map(Value::try_from)
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Value::Tuple(values))
+    }
+}
+
 impl From<i32> for Value {
     fn from(n: i32) -> Self {
         Value::Int(n.try_into().unwrap(), 256)

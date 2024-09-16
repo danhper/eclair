@@ -117,6 +117,7 @@ lazy_static! {
 
         let mut contract_methods = HashMap::new();
         contract_methods.insert("decode".to_string(), abi::ABI_DECODE_CALLDATA.clone());
+        contract_methods.insert("decode_error".to_string(), abi::ABI_DECODE_ERROR.clone());
         m.insert(NonParametricType::Contract, contract_methods);
 
         let mut abi_methods = HashMap::new();

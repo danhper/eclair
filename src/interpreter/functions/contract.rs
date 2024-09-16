@@ -2,19 +2,25 @@ use std::{hash::Hash, sync::Arc};
 
 use alloy::{
     contract::{CallBuilder, ContractInstance, Interface},
-    eips::BlockId,
+    eips::{BlockId, BlockNumberOrTag},
     json_abi::StateMutability,
     network::{Network, TransactionBuilder},
-    primitives::{keccak256, Address, FixedBytes, U256},
-    providers::Provider,
-    rpc::types::{TransactionInput, TransactionRequest},
+    primitives::{keccak256, Address, Bytes, FixedBytes, U256},
+    providers::{ext::DebugApi, Provider},
+    rpc::types::{
+        trace::geth::{self, GethDebugTracingCallOptions},
+        BlockTransactionsKind, TransactionInput, TransactionRequest,
+    },
     transports::Transport,
 };
 use anyhow::{anyhow, bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use itertools::Itertools;
 
-use crate::interpreter::{types::HashableIndexMap, ContractInfo, Env, Type, Value};
+use crate::interpreter::{
+    tracing::format_call_frame, types::HashableIndexMap, utils::decode_error, ContractInfo, Env,
+    Type, Value,
+};
 
 use super::{Function, FunctionDef, FunctionParam};
 
@@ -23,6 +29,7 @@ pub enum ContractCallMode {
     Default,
     Encode,
     Call,
+    TraceCall,
     Send,
 }
 
@@ -32,6 +39,7 @@ impl std::fmt::Display for ContractCallMode {
             ContractCallMode::Default => write!(f, "default"),
             ContractCallMode::Encode => write!(f, "encode"),
             ContractCallMode::Call => write!(f, "call"),
+            ContractCallMode::TraceCall => write!(f, "trace_call"),
             ContractCallMode::Send => write!(f, "send"),
         }
     }
@@ -44,6 +52,7 @@ impl TryFrom<&str> for ContractCallMode {
         match s {
             "encode" => Ok(ContractCallMode::Encode),
             "call" => Ok(ContractCallMode::Call),
+            "trace_call" => Ok(ContractCallMode::TraceCall),
             "send" => Ok(ContractCallMode::Send),
             _ => bail!("{} does not exist for contract call", s),
         }
@@ -229,6 +238,8 @@ impl FunctionDef for ContractFunction {
             if self.mode == ContractCallMode::Encode {
                 let encoded = func.calldata();
                 Ok(Value::Bytes(encoded[..].to_vec()))
+            } else if self.mode == ContractCallMode::TraceCall {
+                _execute_contract_trace_call(&addr, func, &call_options, env).await
             } else if self.mode == ContractCallMode::Call
                 || (self.mode == ContractCallMode::Default && is_view)
             {
@@ -297,6 +308,27 @@ where
     Ok(Value::Transaction(*tx.tx_hash()))
 }
 
+fn _decode_output<T, P, N>(
+    return_bytes: Bytes,
+    func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+) -> Result<Value>
+where
+    T: Transport + Clone,
+    P: Provider<T, N>,
+    N: Network,
+{
+    let result = func.decode_output(return_bytes, true)?;
+    let return_values = result
+        .into_iter()
+        .map(Value::try_from)
+        .collect::<Result<Vec<_>>>()?;
+    if return_values.len() == 1 {
+        Ok(return_values.into_iter().next().unwrap())
+    } else {
+        Ok(Value::Tuple(return_values))
+    }
+}
+
 async fn _execute_contract_call<T, P, N>(
     addr: &Address,
     func: CallBuilder<T, P, alloy::json_abi::Function, N>,
@@ -316,14 +348,73 @@ where
     let block = opts.block.unwrap_or(env.block());
     let provider = env.get_provider();
     let return_bytes = provider.call(&tx_req).block(block).await?;
-    let result = func.decode_output(return_bytes, true)?;
-    let return_values = result
-        .into_iter()
-        .map(Value::try_from)
-        .collect::<Result<Vec<_>>>()?;
-    if return_values.len() == 1 {
-        Ok(return_values.into_iter().next().unwrap())
+    _decode_output(return_bytes, func)
+}
+
+async fn _execute_contract_trace_call<T, P, N>(
+    addr: &Address,
+    func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    opts: &CallOptions,
+    env: &mut Env,
+) -> Result<Value>
+where
+    T: Transport + Clone,
+    P: Provider<T, N>,
+    N: Network,
+{
+    let data = func.calldata();
+    let input = TransactionInput::new(data.clone());
+    let mut tx_req = TransactionRequest::default().with_to(*addr).input(input);
+
+    if let Some(from_) = opts.from {
+        tx_req = tx_req.with_from(from_);
+    } else if let Some(acc) = env.get_default_sender() {
+        tx_req = tx_req.with_from(acc);
+    }
+
+    let (provider, previous_url) = if env.is_fork() {
+        (env.get_provider(), None)
     } else {
-        Ok(Value::Tuple(return_values))
+        let url = env.get_rpc_url();
+        env.fork(url.as_str())?;
+        (env.get_provider(), Some(url))
+    };
+
+    let mut options = GethDebugTracingCallOptions::default();
+    let mut tracing_options = options.tracing_options.clone();
+    tracing_options = tracing_options.with_tracer(geth::GethDebugTracerType::BuiltInTracer(
+        geth::GethDebugBuiltInTracerType::CallTracer,
+    ));
+    options = options.with_tracing_options(tracing_options);
+    // options.with_tracing_options(options)
+    let block_tag = env.block();
+    let block = provider
+        .get_block(block_tag, BlockTransactionsKind::Hashes)
+        .await?
+        .ok_or(anyhow!("could not get block {:?}", block_tag))?;
+    let block_num =
+        BlockNumberOrTag::Number(block.header.number.ok_or(anyhow!("no block number"))?);
+
+    let maybe_tx = provider.debug_trace_call(tx_req, block_num, options).await;
+    if let Some(url) = previous_url {
+        env.set_provider_url(url.as_str())?;
+    }
+    let call_frame = maybe_tx?.try_into_call_frame()?;
+
+    println!("{}", format_call_frame(env, &call_frame));
+
+    if let Some(err) = call_frame.error {
+        if let Some(output) = call_frame.output {
+            if let Ok(err_val) = decode_error(env, &output) {
+                bail!("revert: {}", err_val);
+            } else {
+                bail!("revert: {}", output);
+            }
+        }
+        bail!("revert: {}", err);
+    } else if let Some(output) = call_frame.output {
+        _decode_output(output, func)
+    } else {
+        Ok(Value::Null)
     }
 }

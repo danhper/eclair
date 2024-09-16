@@ -1,12 +1,12 @@
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use indexmap::IndexMap;
 use itertools::{Either, Itertools};
 use std::str::FromStr;
 
 use alloy::{
-    dyn_abi::EventExt,
+    dyn_abi::{EventExt, JsonAbiExt},
     json_abi::Event,
-    primitives::U256,
+    primitives::{FixedBytes, U256},
     rpc::types::{Log, TransactionReceipt},
 };
 
@@ -80,6 +80,25 @@ pub fn decode_log_args(log: &Log, event: &Event) -> Result<Value> {
         event.name.clone(),
         HashableIndexMap(fully_decoded),
     ))
+}
+
+pub fn decode_error(env: &Env, data: &[u8]) -> Result<Value> {
+    if data.len() < 4 {
+        bail!("error data is too short");
+    }
+    let selector = FixedBytes::from_slice(&data[..4]);
+    let error = env
+        .get_error(&selector)
+        .ok_or(anyhow!("error with selector {} not found", selector))?;
+    let decoded = error.abi_decode_input(&data[4..], true)?;
+    let values = decoded
+        .into_iter()
+        .map(Value::try_from)
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Value::Tuple(vec![
+        Value::Str(error.signature()),
+        Value::Tuple(values),
+    ]))
 }
 
 pub fn log_to_value(env: &Env, log: Log) -> Result<Value> {

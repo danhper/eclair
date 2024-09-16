@@ -4,37 +4,83 @@ use crate::interpreter::{
     functions::{FunctionDef, FunctionParam, SyncMethod},
     ContractInfo, Env, Type, Value,
 };
-use alloy::dyn_abi::{DynSolType, DynSolValue, JsonAbiExt};
-use anyhow::{bail, Result};
+use alloy::{
+    dyn_abi::{DynSolType, DynSolValue, JsonAbiExt},
+    json_abi::{self, JsonAbi},
+    primitives::FixedBytes,
+};
+use anyhow::{anyhow, bail, Result};
 use lazy_static::lazy_static;
 
-fn abi_decode_calldata(_env: &mut Env, receiver: &Value, args: &[Value]) -> Result<Value> {
+trait Decodable: JsonAbiExt {
+    fn signature(&self) -> String;
+    fn selector(&self) -> FixedBytes<4>;
+}
+
+impl Decodable for json_abi::Function {
+    fn signature(&self) -> String {
+        json_abi::Function::signature(self)
+    }
+
+    fn selector(&self) -> FixedBytes<4> {
+        json_abi::Function::selector(self)
+    }
+}
+impl Decodable for json_abi::Error {
+    fn signature(&self) -> String {
+        json_abi::Error::signature(self)
+    }
+
+    fn selector(&self) -> FixedBytes<4> {
+        json_abi::Error::selector(self)
+    }
+}
+
+fn _generic_abi_decode<D: Decodable, F>(
+    receiver: &Value,
+    args: &[Value],
+    type_: &str,
+    get_options: F,
+) -> Result<Value>
+where
+    F: Fn(&JsonAbi) -> Vec<&D>,
+{
     let (name, abi) = match receiver {
         Value::TypeObject(Type::Contract(ContractInfo(name, abi))) => (name, abi),
-        _ => bail!("decode function expects contract type as first argument"),
+        _ => bail!("decode {} expects contract type as first argument", type_),
     };
     let data = match args.first() {
         Some(Value::Bytes(bytes)) => bytes,
-        _ => bail!("decode function expects bytes as argument"),
+        _ => bail!("decode {} expects bytes as argument", type_),
     };
     let selector = alloy::primitives::FixedBytes::<4>::from_slice(&data[..4]);
-    let function = abi
-        .functions()
+    let options = get_options(abi);
+    let error = options
+        .iter()
         .find(|f| f.selector() == selector)
-        .ok_or(anyhow::anyhow!(
-            "function with selector {} not found for {}",
+        .ok_or(anyhow!(
+            "{} with selector {} not found for {}",
+            type_,
             selector,
             name
         ))?;
-    let decoded = function.abi_decode_input(&data[4..], true)?;
+    let decoded = error.abi_decode_input(&data[4..], true)?;
     let values = decoded
         .into_iter()
         .map(Value::try_from)
         .collect::<Result<Vec<_>>>()?;
     Ok(Value::Tuple(vec![
-        Value::Str(function.signature()),
+        Value::Str(error.signature()),
         Value::Tuple(values),
     ]))
+}
+
+fn abi_decode_calldata(_env: &mut Env, receiver: &Value, args: &[Value]) -> Result<Value> {
+    _generic_abi_decode(receiver, args, "function", |abi| abi.functions().collect())
+}
+
+fn abi_decode_error(_env: &mut Env, receiver: &Value, args: &[Value]) -> Result<Value> {
+    _generic_abi_decode(receiver, args, "error", |abi| abi.errors().collect())
 }
 
 fn value_to_soltype(value: &Value) -> Result<DynSolType> {
@@ -100,6 +146,11 @@ lazy_static! {
         "decode",
         abi_decode_calldata,
         vec![vec![FunctionParam::new("calldata", Type::Bytes)]]
+    );
+    pub static ref ABI_DECODE_ERROR: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "decode_error",
+        abi_decode_error,
+        vec![vec![FunctionParam::new("data", Type::Bytes)]]
     );
 }
 

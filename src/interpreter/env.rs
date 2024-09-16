@@ -8,10 +8,10 @@ use url::Url;
 
 use alloy::{
     eips::BlockId,
-    json_abi::{Event, JsonAbi},
+    json_abi,
     network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet, TxSigner},
     node_bindings::{Anvil, AnvilInstance},
-    primitives::{Address, B256},
+    primitives::{Address, FixedBytes, B256},
     providers::{
         ext::AnvilApi,
         fillers::{FillProvider, JoinFill, RecommendedFiller},
@@ -42,7 +42,10 @@ pub struct Env {
     is_wallet_connected: bool,
     ledger: Option<Arc<Mutex<Ledger>>>,
     block_id: BlockId,
-    events: HashMap<B256, Event>,
+    contract_names: HashMap<Address, String>,
+    events: HashMap<B256, json_abi::Event>,
+    errors: HashMap<FixedBytes<4>, json_abi::Error>,
+    functions: HashMap<FixedBytes<4>, json_abi::Function>,
     impersonating: Option<Address>,
     anvil: Option<AnvilInstance>,
     pub config: Config,
@@ -64,7 +67,10 @@ impl Env {
             is_wallet_connected: false,
             ledger: None,
             block_id: BlockId::latest(),
+            contract_names: HashMap::new(),
             events: HashMap::new(),
+            errors: HashMap::new(),
+            functions: HashMap::new(),
             impersonating: None,
             anvil: None,
             config,
@@ -87,25 +93,47 @@ impl Env {
         self.config.debug
     }
 
-    pub fn get_event(&self, selector: &B256) -> Option<&Event> {
+    pub fn get_event(&self, selector: &B256) -> Option<&json_abi::Event> {
         self.events.get(selector)
     }
 
-    pub fn add_contract(&mut self, name: &str, abi: JsonAbi) -> ContractInfo {
+    pub fn get_error(&self, selector: &FixedBytes<4>) -> Option<&json_abi::Error> {
+        self.errors.get(selector)
+    }
+
+    pub fn get_function(&self, selector: &FixedBytes<4>) -> Option<&json_abi::Function> {
+        self.functions.get(selector)
+    }
+
+    pub fn add_contract(&mut self, name: &str, abi: json_abi::JsonAbi) -> ContractInfo {
         for event in abi.events() {
             self.register_event(event.clone());
+        }
+        for error in abi.errors() {
+            self.register_error(error.clone());
+        }
+        for function in abi.functions() {
+            self.register_function(function.clone());
         }
         let contract_info = ContractInfo(name.to_string(), abi);
         self.set_type(name, Type::Contract(contract_info.clone()));
         contract_info
     }
 
-    pub fn list_events(&mut self) -> Vec<&Event> {
+    pub fn list_events(&mut self) -> Vec<&json_abi::Event> {
         self.events.values().collect()
     }
 
-    pub fn register_event(&mut self, event: Event) {
+    pub fn register_event(&mut self, event: json_abi::Event) {
         self.events.insert(event.selector(), event);
+    }
+
+    pub fn register_error(&mut self, error: json_abi::Error) {
+        self.errors.insert(error.selector(), error);
+    }
+
+    pub fn register_function(&mut self, function: json_abi::Function) {
+        self.functions.insert(function.selector(), function);
     }
 
     pub fn set_block(&mut self, block: BlockId) {
@@ -125,19 +153,19 @@ impl Env {
     }
 
     pub async fn get_chain_id(&self) -> Result<u64> {
-        self.provider
-            .root()
-            .get_chain_id()
-            .await
-            .map_err(Into::into)
+        self.provider.get_chain_id().await.map_err(Into::into)
     }
 
     pub fn fork(&mut self, url: &str) -> Result<()> {
-        let anvil = Anvil::new().fork(url).try_spawn()?;
+        let anvil = Anvil::new().arg("--steps-tracing").fork(url).try_spawn()?;
         let endpoint = anvil.endpoint();
         self.set_provider_url(endpoint.as_str())?;
         self.anvil = Some(anvil);
         Ok(())
+    }
+
+    pub fn is_fork(&self) -> bool {
+        self.anvil.is_some()
     }
 
     pub async fn impersonate(&mut self, address: Address) -> Result<()> {
@@ -232,6 +260,10 @@ impl Env {
         Vec::from_iter(vars)
     }
 
+    pub fn get_contract_name(&self, addr: &Address) -> Option<&String> {
+        self.contract_names.get(addr)
+    }
+
     pub fn get_var(&self, name: &str) -> Option<&Value> {
         for scope in self.variables.iter().rev() {
             if let Some(value) = scope.get(name) {
@@ -260,7 +292,13 @@ impl Env {
     }
 
     pub fn set_var(&mut self, name: &str, value: Value) {
+        let is_top_level = self.variables.len() == 1;
         let scope = self.variables.last_mut().unwrap();
+        if is_top_level {
+            if let Value::Contract(ContractInfo(name, _), addr) = &value {
+                self.contract_names.insert(*addr, name.clone());
+            }
+        }
         scope.insert(name.to_string(), value);
     }
 
@@ -316,6 +354,7 @@ impl Env {
             .filler(wallet_filler)
             .on_http(rpc_url);
         self.provider = provider;
+        self.anvil = None;
         Ok(())
     }
 

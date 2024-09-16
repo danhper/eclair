@@ -6,6 +6,7 @@ mod functions;
 #[allow(clippy::module_inception)]
 mod interpreter;
 mod parsing;
+pub mod tracing;
 mod types;
 mod utils;
 mod value;
