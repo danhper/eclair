@@ -124,6 +124,7 @@ lazy_static! {
         abi_methods.insert("encode".to_string(), abi::ABI_ENCODE.clone());
         abi_methods.insert("encodePacked".to_string(), abi::ABI_ENCODE_PACKED.clone());
         abi_methods.insert("decode".to_string(), abi::ABI_DECODE.clone());
+        abi_methods.insert("decodeData".to_string(), abi::ABI_DECODE_DATA.clone());
         m.insert(NonParametricType::Abi, abi_methods);
 
         let mut block_methods = HashMap::new();

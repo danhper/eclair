@@ -256,6 +256,15 @@ Behaves like the regular Solidity `abi.decode` function.
 (1, 0x789f8F7B547183Ab8E99A5e0E6D567E90e0EB03B)
 ```
 
+### `abi.decodeData(bytes data) -> any`
+
+Decodes the data (either function calldata or error data) using any registered ABI.
+
+```javascript
+>> abi.decodeData(0xa9059cbb000000000000000000000000789f8f7b547183ab8e99a5e0e6d567e90e0eb03b0000000000000000000000000000000000000000000000000de0b6b3a7640000)
+("transfer(address,uint256)", (0x789f8F7B547183Ab8E99A5e0E6D567E90e0EB03B, 1000000000000000000))
+```
+
 ## `block` functions
 
 ### `block.number -> uint256`
