@@ -12,7 +12,7 @@ Sending a transaction requires an [account to be loaded](./account_management.md
 The behavior can be changed by using one of the following method on the returned function object:
 
 * `call`: Call the function and return the result
-* `trace_call`: Same as call but also prints the trace of the call (also potentially shows better error messages)
+* `traceCall`: Same as call but also prints the trace of the call (also potentially shows better error messages)
 * `send`: Sends a transaction to the function and return the result
 * `encode`: ABI-encodes the function call
 

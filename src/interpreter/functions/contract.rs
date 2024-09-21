@@ -39,7 +39,7 @@ impl std::fmt::Display for ContractCallMode {
             ContractCallMode::Default => write!(f, "default"),
             ContractCallMode::Encode => write!(f, "encode"),
             ContractCallMode::Call => write!(f, "call"),
-            ContractCallMode::TraceCall => write!(f, "trace_call"),
+            ContractCallMode::TraceCall => write!(f, "traceCall"),
             ContractCallMode::Send => write!(f, "send"),
         }
     }
@@ -52,7 +52,7 @@ impl TryFrom<&str> for ContractCallMode {
         match s {
             "encode" => Ok(ContractCallMode::Encode),
             "call" => Ok(ContractCallMode::Call),
-            "trace_call" => Ok(ContractCallMode::TraceCall),
+            "traceCall" => Ok(ContractCallMode::TraceCall),
             "send" => Ok(ContractCallMode::Send),
             _ => bail!("{} does not exist for contract call", s),
         }
@@ -386,7 +386,6 @@ where
         geth::GethDebugBuiltInTracerType::CallTracer,
     ));
     options = options.with_tracing_options(tracing_options);
-    // options.with_tracing_options(options)
     let block_tag = env.block();
     let block = provider
         .get_block(block_tag, BlockTransactionsKind::Hashes)
