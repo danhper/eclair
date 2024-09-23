@@ -14,6 +14,7 @@ use solang_parser::pt as parser;
 use super::{
     builtins::{INSTANCE_METHODS, STATIC_METHODS},
     functions::{ContractFunction, Function},
+    utils::to_fixed_bytes,
     Value,
 };
 
@@ -479,30 +480,17 @@ impl Type {
                 let num = U256::from_be_slice(v.as_slice());
                 Ok(Value::Uint(num, *bits_num))
             }
-            (Type::FixBytes(target_bytes_num), Value::FixBytes(bytes, _)) => {
-                let mut new_bytes = bytes.to_vec();
-                if *target_bytes_num < 32 {
-                    let to_fill = 32 - *target_bytes_num;
-                    let filler = vec![0; to_fill];
-                    new_bytes[..to_fill].copy_from_slice(&filler);
-                }
-                new_bytes[..bytes.0.len()].copy_from_slice(&bytes.0);
-                Ok(Value::FixBytes(
-                    B256::from_slice(&new_bytes),
-                    *target_bytes_num,
-                ))
+            (Type::FixBytes(size), Value::FixBytes(bytes, _)) => {
+                Ok(Value::FixBytes(to_fixed_bytes(&bytes.0, *size)?, *size))
             }
             (Type::Transaction, Value::FixBytes(v, 32)) => Ok(Value::Transaction(*v)),
             (Type::Bytes, Value::Str(v)) => Ok(Value::Bytes(v.as_bytes().to_vec())),
             (type_ @ Type::FixBytes(_), Value::Str(_)) => type_.cast(&Type::Bytes.cast(value)?),
-            (Type::Bytes, Value::FixBytes(v, _)) => Ok(Value::Bytes(v.0.to_vec())),
-            (Type::FixBytes(size), Value::Bytes(v)) => {
-                let mut new_bytes = v.clone();
-                if new_bytes.len() > *size {
-                    new_bytes = new_bytes[new_bytes.len() - *size..].to_vec();
-                }
-                new_bytes.resize(32, 0);
-                Ok(Value::FixBytes(B256::from_slice(&new_bytes), *size))
+            (Type::Bytes, Value::FixBytes(v, s)) => {
+                Ok(Value::Bytes(v.0[v.0.len() - *s..].to_vec()))
+            }
+            (Type::FixBytes(size), Value::Bytes(bytes)) => {
+                Ok(Value::FixBytes(to_fixed_bytes(bytes, *size)?, *size))
             }
             (Type::NamedTuple(name, types_), Value::Tuple(values)) => {
                 let mut new_values = IndexMap::new();
@@ -689,7 +677,6 @@ mod tests {
         let b256_value =
             Value::from_hex("0x00000000000000000000000000000000000000000000000000000000281dd5af")
                 .unwrap();
-        println!("{:?}", b256_value);
         let b4_value = Value::from_hex("0x281dd5af").unwrap();
         assert_eq!(Type::FixBytes(4).cast(&b256_value).unwrap(), b4_value);
         assert_eq!(Type::FixBytes(32).cast(&b4_value).unwrap(), b256_value);
