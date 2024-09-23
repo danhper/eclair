@@ -6,7 +6,7 @@ use std::str::FromStr;
 use alloy::{
     dyn_abi::{EventExt, JsonAbiExt},
     json_abi::Event,
-    primitives::{FixedBytes, U256},
+    primitives::{FixedBytes, B256, U256},
     rpc::types::{Log, TransactionReceipt},
 };
 
@@ -138,6 +138,13 @@ pub fn receipt_to_value(env: &Env, receipt: TransactionReceipt) -> Result<Value>
     Ok(Value::from_receipt(receipt, transformed_logs))
 }
 
+pub fn to_fixed_bytes(bytes: &[u8], size: usize) -> Result<B256> {
+    let mut new_bytes = vec![0; 32];
+    let new_size = bytes.len().min(size);
+    new_bytes[32 - new_size..].copy_from_slice(&bytes[bytes.len() - new_size..]);
+    Ok(B256::from_slice(&new_bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use alloy::{
@@ -205,6 +212,22 @@ mod tests {
         assert_eq!(
             parse_rational_literal("", "1", "3").unwrap(),
             U256::from(100)
+        );
+    }
+
+    #[test]
+    fn test_to_fixed_bytes() {
+        assert_eq!(
+            to_fixed_bytes(&[18, 52], 2).unwrap(),
+            B256::from(U256::from(4660).to_be_bytes())
+        );
+        assert_eq!(
+            to_fixed_bytes(&[18, 52], 4).unwrap(),
+            B256::from(U256::from(4660).to_be_bytes())
+        );
+        assert_eq!(
+            to_fixed_bytes(&[18, 52], 1).unwrap(),
+            B256::from(U256::from(52).to_be_bytes())
         );
     }
 
