@@ -454,6 +454,9 @@ impl Type {
             (Type::Address, Value::Int(_, _)) => {
                 bail!("cannot only cast cast zero address from int")
             }
+            (Type::Address, Value::FixBytes(v, _)) => {
+                Ok(Value::Addr(Address::from_slice(&v.0[12..])))
+            }
             (Type::String, Value::Bytes(v)) => {
                 Ok(Value::Str(String::from_utf8_lossy(v).to_string()))
             }
@@ -471,8 +474,8 @@ impl Type {
             (t @ Type::FixBytes(bytes_num), Value::Uint(v, bits_num))
                 if *bytes_num * 8 == *bits_num =>
             {
-                let bytes = B256::from_slice(&v.to_be_bytes_vec());
-                t.cast(&Value::FixBytes(bytes, 32))
+                let bytes = to_fixed_bytes(&v.to_be_bytes_vec(), *bytes_num, true)?;
+                t.cast(&Value::FixBytes(bytes, *bytes_num))
             }
             (Type::Uint(bits_num), Value::FixBytes(v, bytes_num))
                 if *bytes_num * 8 == *bits_num =>
@@ -480,8 +483,13 @@ impl Type {
                 let num = U256::from_be_slice(v.as_slice());
                 Ok(Value::Uint(num, *bits_num))
             }
-            (Type::FixBytes(size), Value::FixBytes(bytes, _)) => {
-                Ok(Value::FixBytes(to_fixed_bytes(&bytes.0, *size)?, *size))
+            (Type::FixBytes(size), Value::FixBytes(bytes, previous_size)) => Ok(Value::FixBytes(
+                to_fixed_bytes(&bytes.0[32 - *previous_size..], *size, false)?,
+                *size,
+            )),
+            (Type::FixBytes(size), Value::Addr(addr)) if *size == 20 => {
+                let bytes = to_fixed_bytes(&addr.0 .0, 20, false)?;
+                Ok(Value::FixBytes(bytes, 20))
             }
             (Type::Transaction, Value::FixBytes(v, 32)) => Ok(Value::Transaction(*v)),
             (Type::Bytes, Value::Str(v)) => Ok(Value::Bytes(v.as_bytes().to_vec())),
@@ -490,7 +498,7 @@ impl Type {
                 Ok(Value::Bytes(v.0[v.0.len() - *s..].to_vec()))
             }
             (Type::FixBytes(size), Value::Bytes(bytes)) => {
-                Ok(Value::FixBytes(to_fixed_bytes(bytes, *size)?, *size))
+                Ok(Value::FixBytes(to_fixed_bytes(bytes, *size, false)?, *size))
             }
             (Type::NamedTuple(name, types_), Value::Tuple(values)) => {
                 let mut new_values = IndexMap::new();
@@ -609,7 +617,7 @@ mod tests {
     use crate::interpreter::Value;
     use alloy::{
         hex::FromHex,
-        primitives::{I128, I256, I32, I64, I8, U128, U256, U32, U64, U8},
+        primitives::{B256, I128, I256, I32, I64, I8, U128, U256, U32, U64, U8},
     };
 
     use super::Type;
@@ -677,9 +685,23 @@ mod tests {
         let b256_value =
             Value::from_hex("0x00000000000000000000000000000000000000000000000000000000281dd5af")
                 .unwrap();
-        let b4_value = Value::from_hex("0x281dd5af").unwrap();
-        assert_eq!(Type::FixBytes(4).cast(&b256_value).unwrap(), b4_value);
-        assert_eq!(Type::FixBytes(32).cast(&b4_value).unwrap(), b256_value);
+
+        assert_eq!(
+            Type::FixBytes(4).cast(&b256_value).unwrap(),
+            Value::from_hex("0x00000000").unwrap()
+        );
+        let b4 =
+            B256::from_hex("0x00000000000000000000000000000000000000000000000000000000281dd5af")
+                .unwrap();
+        let b4_value = Value::FixBytes(b4, 4);
+
+        let padded_b256_value =
+            Value::from_hex("0x281dd5af00000000000000000000000000000000000000000000000000000000")
+                .unwrap();
+        assert_eq!(
+            Type::FixBytes(32).cast(&b4_value).unwrap(),
+            padded_b256_value
+        );
     }
 
     #[test]

@@ -138,10 +138,16 @@ pub fn receipt_to_value(env: &Env, receipt: TransactionReceipt) -> Result<Value>
     Ok(Value::from_receipt(receipt, transformed_logs))
 }
 
-pub fn to_fixed_bytes(bytes: &[u8], size: usize) -> Result<B256> {
+pub fn to_fixed_bytes(bytes: &[u8], size: usize, pad_left: bool) -> Result<B256> {
     let mut new_bytes = vec![0; 32];
     let new_size = bytes.len().min(size);
-    new_bytes[32 - new_size..].copy_from_slice(&bytes[bytes.len() - new_size..]);
+    if pad_left {
+        let to_copy = &bytes[bytes.len() - new_size..];
+        new_bytes[32 - new_size..].copy_from_slice(to_copy);
+    } else {
+        let to_copy = &bytes[..new_size];
+        new_bytes[32 - size..32 - size + new_size].copy_from_slice(to_copy);
+    }
     Ok(B256::from_slice(&new_bytes))
 }
 
@@ -218,16 +224,20 @@ mod tests {
     #[test]
     fn test_to_fixed_bytes() {
         assert_eq!(
-            to_fixed_bytes(&[18, 52], 2).unwrap(),
+            to_fixed_bytes(&[18, 52], 2, true).unwrap(),
             B256::from(U256::from(4660).to_be_bytes())
         );
         assert_eq!(
-            to_fixed_bytes(&[18, 52], 4).unwrap(),
+            to_fixed_bytes(&[18, 52], 4, true).unwrap(),
             B256::from(U256::from(4660).to_be_bytes())
         );
         assert_eq!(
-            to_fixed_bytes(&[18, 52], 1).unwrap(),
+            to_fixed_bytes(&[18, 52], 1, true).unwrap(),
             B256::from(U256::from(52).to_be_bytes())
+        );
+        assert_eq!(
+            to_fixed_bytes(&[102, 111, 111], 8, false).unwrap(),
+            B256::from(U256::from(7381240360074215424u64).to_be_bytes()) // 0x666f6f0000000000
         );
     }
 
