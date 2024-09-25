@@ -6,7 +6,7 @@ mod param;
 mod user_defined;
 
 pub use anonymous::AnonymousFunction;
-pub use contract::ContractFunction;
+pub use contract::{ContractCallMode, ContractFunction};
 pub use definition::{
     AsyncMethod, AsyncProperty, FunctionDef, SyncFunction, SyncMethod, SyncProperty,
 };

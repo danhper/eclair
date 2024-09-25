@@ -33,6 +33,15 @@ pub enum ContractCallMode {
     Send,
 }
 
+impl ContractCallMode {
+    pub fn completions() -> Vec<String> {
+        ["encode", "call", "traceCall", "send"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+}
+
 impl std::fmt::Display for ContractCallMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -356,7 +356,10 @@ impl Value {
             Value::Contract(c, _) => Type::Contract(c.clone()),
             Value::Null => Type::Null,
             Value::Func(_) => Type::Function,
-            Value::TypeObject(type_ @ Type::Type(_)) => type_.clone(),
+            Value::TypeObject(type_ @ Type::Type(t)) => match t.as_ref() {
+                Type::Type(_) => type_.clone(),
+                _ => Type::Type(Box::new(type_.clone())),
+            },
             Value::TypeObject(type_) => Type::Type(Box::new(type_.clone())),
             Value::Transaction(_) => Type::Transaction,
         }

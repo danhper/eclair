@@ -13,7 +13,7 @@ use solang_parser::pt as parser;
 
 use super::{
     builtins::{INSTANCE_METHODS, STATIC_METHODS},
-    functions::{ContractFunction, Function},
+    functions::{ContractCallMode, ContractFunction, Function},
     utils::to_fixed_bytes,
     Value,
 };
@@ -544,6 +544,7 @@ impl Type {
                 abi.functions.keys().map(|s| s.to_string()).collect()
             }
             Type::NamedTuple(_, fields) => fields.0.keys().map(|s| s.to_string()).collect(),
+            Type::Function => ContractCallMode::completions(),
             Type::Type(type_) => {
                 let mut static_methods = STATIC_METHODS
                     .get(&type_.into())

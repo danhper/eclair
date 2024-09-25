@@ -5,9 +5,9 @@ use rustyline::{
     completion::{FilenameCompleter, Pair},
     Context,
 };
-use tokio::sync::Mutex;
+use tokio::{runtime::Handle, sync::Mutex, task::block_in_place};
 
-use crate::interpreter::{Env, Type};
+use crate::interpreter::{evaluate_code, Env, Type};
 
 pub(crate) struct MyCompleter {
     filename_completer: FilenameCompleter,
@@ -52,28 +52,40 @@ fn pair_from_string(s: &str) -> Pair {
 fn get_function_completion(
     current_word: &str,
     pos: usize,
-    env: &Env,
+    env: &mut Env,
 ) -> rustyline::Result<(usize, Vec<Pair>)> {
     let (func_name, receiver) = current_word
         .rsplitn(2, '.')
         .map(|s| s.trim())
         .collect_tuple()
         .unwrap_or_default();
+    // println!("\nreceiver: {}\n", receiver);
 
-    let names = env
-        .get_var(receiver)
-        .map(|value| value.get_type())
-        .or(env
-            .get_type(receiver)
-            .cloned()
-            .map(|t| Type::Type(Box::new(t))))
-        .map_or(vec![], |t| t.functions());
+    let completions = block_in_place(move || {
+        Handle::current().block_on(async move {
+            let result = evaluate_code(env, receiver).await;
+            let names = match result {
+                Ok(Some(value)) => {
+                    // println!("type: {:?}", value.get_type());
+                    value.get_type().functions()
+                }
+                _ => env
+                    .get_var(receiver)
+                    .map(|value| value.get_type())
+                    .or(env
+                        .get_type(receiver)
+                        .cloned()
+                        .map(|t| Type::Type(Box::new(t))))
+                    .map_or(vec![], |t| t.functions()),
+            };
 
-    let completions = names
-        .iter()
-        .filter(|name| name.starts_with(func_name))
-        .map(|name| pair_from_string(name))
-        .collect();
+            names
+                .iter()
+                .filter(|name| name.starts_with(func_name))
+                .map(|name| pair_from_string(name))
+                .collect()
+        })
+    });
 
     Ok((pos - func_name.len(), completions))
 }
@@ -96,14 +108,15 @@ impl rustyline::completion::Completer for MyCompleter {
             return Ok((pos + current_word_start, pairs));
         }
 
-        let env = self
+        let mut env = self
             .env
             .clone()
             .try_lock_owned()
             .map_err(|_e| rustyline::error::ReadlineError::Interrupted)?;
 
         if is_completing_func_name(line, pos) {
-            return get_function_completion(current_word, pos, &env);
+            let current_token = line[..pos].rsplit(' ').next().unwrap();
+            return get_function_completion(current_token, pos, &mut env);
         }
 
         let mut types = env.list_types();
