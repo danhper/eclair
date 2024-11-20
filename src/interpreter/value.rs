@@ -426,6 +426,13 @@ impl Value {
         }
     }
 
+    pub fn as_type(&self) -> Result<Type> {
+        match self {
+            Value::TypeObject(type_) => Ok(type_.clone()),
+            _ => bail!("cannot convert {} to type", self.get_type()),
+        }
+    }
+
     pub fn as_i32(&self) -> Result<i32> {
         match self {
             Value::Int(n, _) => Ok(n.as_i32()),

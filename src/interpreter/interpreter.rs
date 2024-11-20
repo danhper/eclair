@@ -441,9 +441,34 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
             Expression::ArraySubscript(_, expr, subscript_opt) => {
                 let lhs = evaluate_expression(env, expr).await?;
                 match lhs {
-                    Value::Tuple(values) | Value::Array(values, _) => {
+                    Value::Tuple(values) => {
+                        let is_type_tuple =
+                            values.iter().all(|v| matches!(v, Value::TypeObject(_)));
+
+                        if !is_type_tuple {
+                            let subscript = subscript_opt
+                                .ok_or(anyhow!("arrays do not support empty subscript"))?;
+                            let value = evaluate_expression(env, subscript).await?;
+                            let index = ArrayIndex::try_from(value)?.get_index(values.len())?;
+                            return Ok(values[index].clone());
+                        }
+
+                        let type_ =
+                            Type::Tuple(values.iter().map(|v| v.as_type()).collect::<Result<_>>()?);
+                        match subscript_opt {
+                            Some(subscript) => {
+                                let value = evaluate_expression(env, subscript).await?;
+                                Ok(Value::TypeObject(Type::FixedArray(
+                                    Box::new(type_),
+                                    value.as_usize()?,
+                                )))
+                            }
+                            None => Ok(Value::TypeObject(Type::Array(Box::new(type_)))),
+                        }
+                    }
+                    Value::Array(values, _) => {
                         let subscript = subscript_opt
-                            .ok_or(anyhow!("tuples and arrays do not support empty subscript"))?;
+                            .ok_or(anyhow!("arrays do not support empty subscript"))?;
                         let value = evaluate_expression(env, subscript).await?;
                         let index = ArrayIndex::try_from(value)?.get_index(values.len())?;
                         Ok(values[index].clone())
