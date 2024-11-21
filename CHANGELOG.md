@@ -8,10 +8,12 @@
 * Add `repl.startPrank` / `repl.stopPrank` to start/stop impersonating an address
 * Add `FUNC.traceCall` method to contract functions
 * Add `abi.decodeData` to decode function calldata and errors from any known ABI
+* Add `address.transfer` to send ETH to an address
 
 ### Other changes
 
 * Encode `FixedBytes` as with zero padding on the left instead of the right
+* Allow to load a private key from `bytes32`
 
 ## v0.1.3 (2024-08-15)
 

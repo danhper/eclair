@@ -98,6 +98,7 @@ lazy_static! {
         let mut addr_methods = HashMap::new();
         addr_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
         addr_methods.insert("balance".to_string(), address::ADDRESS_BALANCE.clone());
+        addr_methods.insert("transfer".to_string(), address::ADDRESS_TRANSFER.clone());
         m.insert(NonParametricType::Address, addr_methods);
 
         let mut transaction_methods = HashMap::new();

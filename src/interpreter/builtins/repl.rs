@@ -146,12 +146,12 @@ fn get_default_sender(env: &Env) -> Value {
 }
 
 fn load_private_key(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
-    let key = match args {
-        [Value::Str(key)] => key.clone(),
-        [] => rpassword::prompt_password("Enter private key: ")?,
+    let signer: PrivateKeySigner = match args {
+        [Value::Str(key)] => key.parse()?,
+        [Value::FixBytes(bytes, 32)] => PrivateKeySigner::from_bytes(bytes)?,
+        [] => rpassword::prompt_password("Enter private key: ")?.parse()?,
         _ => bail!("loadPrivateKey: invalid arguments"),
     };
-    let signer: PrivateKeySigner = key.parse()?;
     env.set_signer(signer)?;
     Ok(get_default_sender(env))
 }
@@ -318,7 +318,11 @@ lazy_static! {
     pub static ref REPL_LOAD_PRIVATE_KEY: Arc<dyn FunctionDef> = SyncMethod::arc(
         "loadPrivateKey",
         load_private_key,
-        vec![vec![], vec![FunctionParam::new("privateKey", Type::String)]]
+        vec![
+            vec![],
+            vec![FunctionParam::new("privateKey", Type::String)],
+            vec![FunctionParam::new("privateKey", Type::FixBytes(32))]
+        ]
     );
     pub static ref REPL_LOAD_KEYSTORE: Arc<dyn FunctionDef> = SyncMethod::arc(
         "loadKeystore",
