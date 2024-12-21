@@ -297,4 +297,24 @@ mod tests {
         .unwrap();
         assert_eq!(Value::Tuple(args), decoded);
     }
+
+    #[test]
+    fn test_abi_decode_fixed_bytes() {
+        let bytes = hex::decode("0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000003000000000000000000000000e07f9d810a48ab5c3c914ba3ca53af14e4491e8a40c10f1900000000000000000000000000000000000000000000000000000000000000000000000000000000ea8106503a136eaad94bf9fcf1de485459fd538e000000000000000000000000a1886c8d748deb3774225593a70c79454b1da8a6e182dd8700000000000000000000000000000000000000000000000000000000000000000000000000000000fe41992176ad0fa41c4a2ed70f3c36273027c27c000000000000000000000000a1886c8d748deb3774225593a70c79454b1da8a6401030ce00000000000000000000000000000000000000000000000000000000000000000000000000000000fe41992176ad0fa41c4a2ed70f3c36273027c27c").unwrap();
+        let decoded = abi_decode(&[
+            Value::Bytes(bytes.clone()),
+            Value::Tuple(vec![Value::TypeObject(Type::Array(Box::new(Type::Tuple(
+                vec![Type::Address, Type::FixBytes(4), Type::Address],
+            ))))]),
+        ])
+        .unwrap();
+
+        let first_elem = decoded.at(&0.into()).unwrap().at(&0.into()).unwrap();
+        let expected_address = "0xe07F9D810a48ab5c3c914BA3cA53AF14E4491e8A";
+        let actual_address = first_elem.at(&0.into()).unwrap().to_string();
+        assert_eq!(expected_address, actual_address);
+        let expected_selector = "0x40c10f19";
+        let actual_selector = first_elem.at(&1.into()).unwrap().to_string();
+        assert_eq!(expected_selector, actual_selector);
+    }
 }

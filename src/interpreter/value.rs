@@ -71,7 +71,7 @@ impl Display for Value {
             Value::Addr(a) => write!(f, "{}", a.to_checksum(None)),
             Value::Str(s) => write!(f, "\"{}\"", s),
             Value::FixBytes(w, s) => {
-                let bytes = w[32 - *s..].to_vec();
+                let bytes = w[0..*s].to_vec();
                 write!(f, "0x{}", hex::encode(bytes))
             }
             Value::Bytes(bytes) => write!(f, "0x{}", hex::encode(bytes)),
@@ -392,6 +392,31 @@ impl Value {
         }
     }
 
+    pub fn at(&self, index: &Value) -> Result<Value> {
+        match self {
+            Value::Array(items, _t) => {
+                let int_index = index.as_usize()?;
+                if int_index >= items.len() {
+                    bail!("index out of bounds")
+                }
+                Ok(items[int_index].clone())
+            }
+            Value::Tuple(items) => {
+                let int_index = index.as_usize()?;
+                if int_index >= items.len() {
+                    bail!("index out of bounds")
+                }
+                Ok(items[int_index].clone())
+            }
+            Value::Mapping(v, kt, _vt) => {
+                v.0.get(&kt.cast(index)?)
+                    .cloned()
+                    .ok_or(anyhow!("key not found: {}", index))
+            }
+            _ => bail!("{} is not an array", self.get_type()),
+        }
+    }
+
     pub fn is_number(&self) -> bool {
         matches!(self, Value::Uint(..) | Value::Int(..))
     }
@@ -444,10 +469,10 @@ impl Value {
     pub fn as_usize(&self) -> Result<usize> {
         match self {
             Value::Int(n, _) => {
-                if n.is_positive() {
-                    Ok(n.as_usize())
-                } else {
+                if n.is_negative() {
                     bail!("negative number")
+                } else {
+                    Ok(n.as_usize())
                 }
             }
             Value::Uint(n, _) => Ok(n.to()),
