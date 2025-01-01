@@ -119,13 +119,16 @@ fn value_to_soltype(value: &Value) -> Result<DynSolType> {
 }
 
 fn abi_decode(args: &[Value]) -> Result<Value> {
-    let decoded = match args {
-        [Value::Bytes(data_), value] => {
-            let ty = value_to_soltype(value)?;
-            ty.abi_decode_params(data_)?
-        }
-        _ => bail!("abi.decode expects bytes and tuple of types as argument"),
+    let data = match args.first().map(|a| Type::Bytes.cast(a)) {
+        Some(Ok(Value::Bytes(bytes))) => bytes,
+        _ => bail!("abi.decode expects bytes as first argument"),
     };
+    let type_ = args
+        .get(1)
+        .ok_or(anyhow!("abi.decode expects type as second argument"))?;
+
+    let ty = value_to_soltype(type_)?;
+    let decoded = ty.abi_decode_params(&data)?;
     decoded.try_into()
 }
 
