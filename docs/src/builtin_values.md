@@ -224,6 +224,27 @@ Logs the values to the console.
 0x6B175474E89094C44Da98b954EedeAC495271d0F
 ```
 
+## `json` functions
+
+### `json.stringify(any value) -> string`
+
+Converts the value to a JSON string.
+
+```javascript
+>> json.stringify((1, ["a", "b"]))
+"[1,["a","b"]]"
+```
+
+## `fs` functions
+
+### `fs.write(string path, string value) -> void`
+
+Writes the value to the file at the given path.
+
+```javascript
+>> fs.write("./file.txt", "hello")
+```
+
 ## `abi` functions
 
 ### `abi.encode(any... args) -> bytes`
