@@ -10,6 +10,7 @@
 * Add `abi.decodeData` to decode function calldata and errors from any known ABI
 * Add `address.transfer` to send ETH to an address
 * Add `json.stringify` to convert a value to a JSON string
+* Add `fs.write` to write a string to a file
 
 ### Other changes
 
