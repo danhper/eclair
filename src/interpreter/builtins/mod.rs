@@ -13,6 +13,7 @@ mod event;
 mod events;
 mod format;
 mod iterable;
+mod json;
 mod misc;
 mod numeric;
 mod receipt;
@@ -30,6 +31,7 @@ lazy_static! {
 
         m.insert("repl".to_string(), Value::TypeObject(Type::Repl));
         m.insert("console".to_string(), Value::TypeObject(Type::Console));
+        m.insert("json".to_string(), Value::TypeObject(Type::Json));
         m.insert("block".to_string(), Value::TypeObject(Type::Block));
         m.insert("events".to_string(), Value::TypeObject(Type::Events));
         m.insert(
@@ -138,6 +140,10 @@ lazy_static! {
         let mut console_methods = HashMap::new();
         console_methods.insert("log".to_string(), console::CONSOLE_LOG.clone());
         m.insert(NonParametricType::Console, console_methods);
+
+        let mut json_methods = HashMap::new();
+        json_methods.insert("stringify".to_string(), json::JSON_STRINGIFY.clone());
+        m.insert(NonParametricType::Json, json_methods);
 
         let mut event_methods = HashMap::new();
         event_methods.insert("selector".to_string(), event::EVENT_SELECTOR.clone());

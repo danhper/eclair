@@ -8,10 +8,12 @@ use alloy::{
 use anyhow::{anyhow, bail, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
+use serde::{ser::SerializeStruct, Serialize};
 use std::{
     fmt::{self, Display, Formatter},
     ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub},
     str::FromStr,
+    u64,
 };
 
 use super::{
@@ -129,6 +131,57 @@ impl TryFrom<&Value> for alloy::dyn_abi::DynSolValue {
             Value::Func(_) => bail!("cannot convert function to Solidity type"),
         };
         Ok(v)
+    }
+}
+
+impl Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Value::Null => serializer.serialize_unit(),
+            Value::Bool(b) => serializer.serialize_bool(*b),
+            Value::Int(n, _) => {
+                if n.ge(&I256::try_from(i64::MIN).unwrap())
+                    && n.le(&I256::try_from(i64::MAX).unwrap())
+                {
+                    serializer.serialize_i64(n.as_i64())
+                } else {
+                    serializer.serialize_str(&n.to_string())
+                }
+            }
+            Value::Uint(n, _) => {
+                if n.le(&U256::from(u64::MAX)) {
+                    serializer.serialize_u64(n.to())
+                } else {
+                    serializer.serialize_str(&n.to_string())
+                }
+            }
+            Value::Str(s) => serializer.serialize_str(s),
+            Value::FixBytes(w, s) => {
+                let bytes = w[0..*s].to_vec();
+                serializer.serialize_str(&hex::encode(bytes))
+            }
+            Value::Bytes(bytes) => serializer.serialize_str(&hex::encode(bytes)),
+            Value::Addr(a) => serializer.serialize_str(&a.to_checksum(None)),
+            Value::Contract(ContractInfo(_name, _), addr) => {
+                serializer.serialize_str(&addr.to_checksum(None))
+            }
+            Value::Tuple(v) => v.serialize(serializer),
+            Value::NamedTuple(name, v) => {
+                let mut state = serializer.serialize_struct(name.clone().leak(), v.0.len())?;
+                for (k, v) in v.0.iter() {
+                    state.serialize_field(k.clone().leak(), v)?;
+                }
+                state.end()
+            }
+            Value::Array(v, _) => v.serialize(serializer),
+            Value::Mapping(v, _, _) => v.0.serialize(serializer),
+            Value::TypeObject(t) => serializer.serialize_str(&format!("{}", t)),
+            Value::Transaction(t) => serializer.serialize_str(&hex::encode(t)),
+            Value::Func(func) => serializer.serialize_str(&format!("{}", func)),
+        }
     }
 }
 
