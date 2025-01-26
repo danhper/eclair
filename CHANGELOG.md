@@ -1,5 +1,7 @@
 # Changelog
 
+## Not released
+
 ## v0.1.4 (2025-01-26)
 
 ### Features
