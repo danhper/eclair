@@ -64,90 +64,6 @@ Displays a list of the types (excluding builtins).
 
 Returns `true` if the REPL is connected to a node.
 
-### `repl.rpc() -> string`
-
-Returns the URL of the RPC the REPL is connected to.
-
-```javascript
->> repl.rpc()
-"https://mainnet.optimism.io/"
-```
-
-### `repl.rpc(string url) -> null`
-
-Sets the URL of the RPC to use.
-
-```javascript
->> repl.rpc("https://mainnet.optimism.io/")
-```
-
-If the [RPC URL](./configuration.md#rpc-url) is set in the configuration file, the argument can be the name of the alias instead of the full URL:
-
-```javascript
->> repl.rpc("optimism")
-```
-
-### `repl.fork() | repl.fork(string url) -> string`
-
-This creates a fork using Anvil.
-If a URL is provided, it will fork that network, otherwise it will use the current RPC (`repl.rpc()`).
-This returns the endpoint of the Anvil instance.
-
-```javascript
->> repl.fork()
-"http://localhost:54383/"
-```
-
-### `repl.startPrank(address account) -> address`
-
-Starts a prank on the given account.
-This only works if connected to an RPC that supports `anvil_impersonateAccount` (which is the case after calling `repl.fork()`).
-
-```javascript
->> repl.startPrank(0xCdaa941eB36344c54139CB9d6337Bd2154BBeEfA)
-0xCdaa941eB36344c54139CB9d6337Bd2154BBeEfA
-```
-
-### `repl.stopPrank()`
-
-Stops the current prank.
-
-```javascript
->> repl.stopPrank()
-```
-
-### `repl.deal(address account, uint256 balance)`
-
-Sets the ETH balance of `account` to `balance`.
-This only works if connected to an RPC that supports `anvil_setBalance` (which is the case after calling `repl.fork()`).
-
-```javascript
->> repl.deal(0xCdaa941eB36344c54139CB9d6337Bd2154BBeEfA, 1e18)
-```
-
-### `repl.block() -> uint256 | string`
-
-Returns the current block in use for contract calls.
-
-```javascript
->> repl.block()
-"latest"
-```
-
-NOTE: this is different from `block.number` which returns the current block number of the chain.
-
-### `repl.block(uint256 number) | repl.block(string tag) | repl.block(bytes32 hash)`
-
-Sets the block to use for contract calls.
-Can be a number, a tag (e.g. "latest" or "safe"), or a block hash.
-
-```javascript
->> repl.block(123436578)
->> repl.block()
-123436578
-```
-
-
 ### `repl.exec(string command) -> uint256`
 
 Executes a command in the shell, displays the output and returns the exit code.
@@ -210,6 +126,111 @@ Returns a list of `count` wallets in the ledger.
 Sets the current account to the one at the given ledger index and returns the loaded address.
 The index should match the order of the wallets returned by `repl.listLedgerWallets`, starting at 0.
 Only the ledger live derivation path is supported.
+
+## `vm` functions
+
+### `vm.rpc() -> string`
+
+Returns the URL of the RPC the REPL is connected to.
+
+```javascript
+>> vm.rpc()
+"https://mainnet.optimism.io/"
+```
+
+### `vm.rpc(string url) -> null`
+
+Sets the URL of the RPC to use.
+
+```javascript
+>> vm.rpc("https://mainnet.optimism.io/")
+```
+
+If the [RPC URL](./configuration.md#rpc-url) is set in the configuration file, the argument can be the name of the alias instead of the full URL:
+
+```javascript
+>> vm.rpc("optimism")
+```
+
+### `vm.fork() | vm.fork(string url) -> string`
+
+This creates a fork using Anvil.
+If a URL is provided, it will fork that network, otherwise it will use the current RPC (`vm.rpc()`).
+This returns the endpoint of the Anvil instance.
+
+```javascript
+>> vm.fork()
+"http://localhost:54383/"
+```
+
+### `vm.startPrank(address account) -> address`
+
+Starts a prank on the given account.
+This only works if connected to an RPC that supports `anvil_impersonateAccount` (which is the case after calling `vm.fork()`).
+
+```javascript
+>> vm.startPrank(0xCdaa941eB36344c54139CB9d6337Bd2154BBeEfA)
+0xCdaa941eB36344c54139CB9d6337Bd2154BBeEfA
+```
+
+### `vm.stopPrank()`
+
+Stops the current prank.
+
+```javascript
+>> vm.stopPrank()
+```
+
+### `vm.deal(address account, uint256 balance)`
+
+Sets the ETH balance of `account` to `balance`.
+This only works if connected to an RPC that supports `anvil_setBalance` (which is the case after calling `vm.fork()`).
+
+```javascript
+>> vm.deal(0xCdaa941eB36344c54139CB9d6337Bd2154BBeEfA, 1e18)
+```
+
+### `vm.block() -> uint256 | string`
+
+Returns the current block in use for contract calls.
+
+```javascript
+>> vm.block()
+"latest"
+```
+
+NOTE: this is different from `block.number` which returns the current block number of the chain.
+
+### `vm.block(uint256 number) | vm.block(string tag) | vm.block(bytes32 hash)`
+
+Sets the block to use for contract calls.
+Can be a number, a tag (e.g. "latest" or "safe"), or a block hash.
+
+```javascript
+>> vm.block(123436578)
+>> vm.block()
+123436578
+```
+
+### `vm.mine() | vm.mine(uint256 blocks)`
+
+Mines 1 block with no arguments or otherwise `blocks` blocks.
+NOTE: This only works for Anvil RPC endpoints.
+
+
+```javascript
+>> vm.mine(3)
+```
+
+### `vm.skip(uint256 seconds)`
+
+Skips `seconds` seconds in the blockchain.
+NOTE: This only works for Anvil RPC endpoints. `block.timestamp` will be updated next time a block is mined.
+
+```javascript
+>> vm.skip(3600)
+```
+
 
 ## `console` functions
 

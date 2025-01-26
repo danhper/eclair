@@ -11,11 +11,13 @@
 * Add `address.transfer` to send ETH to an address
 * Add `json.stringify` to convert a value to a JSON string
 * Add `fs.write` to write a string to a file
+* Add `vm.skip` and `vm.mine` to skip time and mine blocks
 
 ### Other changes
 
 * Encode `FixedBytes` as with zero padding on the left instead of the right
 * Allow to load a private key from `bytes32`
+* Move `repl.block`, `repl.startPrank`, `repl.stopPrank`, `repl.rpc`, `repl.fork`, and `repl.deal` to `vm` namespace
 
 ## v0.1.3 (2024-08-15)
 

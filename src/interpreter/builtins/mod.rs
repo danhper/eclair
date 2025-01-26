@@ -19,6 +19,7 @@ mod misc;
 mod numeric;
 mod receipt;
 mod repl;
+mod vm;
 
 use crate::interpreter::functions::Function;
 use crate::interpreter::functions::FunctionDef;
@@ -31,6 +32,7 @@ lazy_static! {
         let mut m = HashMap::new();
 
         m.insert("repl".to_string(), Value::TypeObject(Type::Repl));
+        m.insert("vm".to_string(), Value::TypeObject(Type::Vm));
         m.insert("console".to_string(), Value::TypeObject(Type::Console));
         m.insert("json".to_string(), Value::TypeObject(Type::Json));
         m.insert("fs".to_string(), Value::TypeObject(Type::Fs));
@@ -159,14 +161,22 @@ lazy_static! {
         events_methods.insert("fetch".to_string(), events::FETCH_EVENTS.clone());
         m.insert(NonParametricType::Events, events_methods);
 
+        let mut vm_methods = HashMap::new();
+        vm_methods.insert("startPrank".to_string(), vm::VM_START_PRANK.clone());
+        vm_methods.insert("stopPrank".to_string(), vm::VM_STOP_PRANK.clone());
+        vm_methods.insert("deal".to_string(), vm::VM_DEAL.clone());
+        vm_methods.insert("skip".to_string(), vm::VM_SKIP.clone());
+        vm_methods.insert("mine".to_string(), vm::VM_MINE.clone());
+        vm_methods.insert("fork".to_string(), vm::VM_FORK.clone());
+        vm_methods.insert("rpc".to_string(), vm::VM_RPC.clone());
+        vm_methods.insert("block".to_string(), vm::VM_BLOCK.clone());
+        m.insert(NonParametricType::Vm, vm_methods);
+
         let mut repl_methods = HashMap::new();
         repl_methods.insert("vars".to_string(), repl::REPL_LIST_VARS.clone());
         repl_methods.insert("types".to_string(), repl::REPL_LIST_TYPES.clone());
         repl_methods.insert("connected".to_string(), repl::REPL_IS_CONNECTED.clone());
-        repl_methods.insert("rpc".to_string(), repl::REPL_RPC.clone());
-        repl_methods.insert("fork".to_string(), repl::REPL_FORK.clone());
         repl_methods.insert("debug".to_string(), repl::REPL_DEBUG.clone());
-        repl_methods.insert("block".to_string(), repl::REPL_BLOCK.clone());
         repl_methods.insert("exec".to_string(), repl::REPL_EXEC.clone());
         repl_methods.insert("loadAbi".to_string(), repl::REPL_LOAD_ABI.clone());
         repl_methods.insert("fetchAbi".to_string(), repl::REPL_FETCH_ABI.clone());
@@ -181,9 +191,6 @@ lazy_static! {
             repl::REPL_LIST_LEDGER_WALLETS.clone(),
         );
         repl_methods.insert("loadLedger".to_string(), repl::REPL_LOAD_LEDGER.clone());
-        repl_methods.insert("startPrank".to_string(), repl::REPL_START_PRANK.clone());
-        repl_methods.insert("stopPrank".to_string(), repl::REPL_STOP_PRANK.clone());
-        repl_methods.insert("deal".to_string(), repl::REPL_DEAL.clone());
         m.insert(NonParametricType::Repl, repl_methods);
 
         m

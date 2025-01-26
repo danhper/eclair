@@ -1,7 +1,7 @@
 use std::{process::Command, sync::Arc};
 
 use alloy::{
-    providers::{ext::AnvilApi, Provider},
+    providers::Provider,
     signers::local::{LocalSigner, PrivateKeySigner},
 };
 use anyhow::{anyhow, bail, Ok, Result};
@@ -44,27 +44,6 @@ fn is_connected<'a>(env: &'a Env, _receiver: &'a Value) -> BoxFuture<'a, Result<
     .boxed()
 }
 
-fn rpc(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
-    match args {
-        [] => Ok(Value::Str(env.get_rpc_url())),
-        [url] => {
-            env.set_provider_url(&url.as_string()?)?;
-            Ok(Value::Null)
-        }
-        _ => bail!("rpc: invalid arguments"),
-    }
-}
-
-fn fork(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
-    let url = match args {
-        [Value::Str(url)] => url.clone(),
-        [] => env.get_rpc_url(),
-        _ => bail!("fork: invalid arguments"),
-    };
-    env.fork(&url)?;
-    Ok(Value::Str(env.get_rpc_url()))
-}
-
 fn debug(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
     match args {
         [] => Ok(Value::Bool(env.is_debug())),
@@ -73,17 +52,6 @@ fn debug(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
             Ok(Value::Null)
         }
         _ => bail!("debug: invalid arguments"),
-    }
-}
-
-fn block(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
-    match args {
-        [] => Ok(env.block().into()),
-        [value] => {
-            env.set_block(value.as_block_id()?);
-            Ok(Value::Null)
-        }
-        _ => bail!("block: invalid arguments"),
     }
 }
 
@@ -193,52 +161,6 @@ fn list_ledgers<'a>(
     .boxed()
 }
 
-fn impersonate<'a>(
-    env: &'a mut Env,
-    _receiver: &'a Value,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let address = match args {
-            [Value::Addr(address)] => *address,
-            _ => bail!("impersonate: invalid arguments"),
-        };
-        env.impersonate(address).await?;
-        Ok(Value::Addr(address))
-    }
-    .boxed()
-}
-
-fn stop_impersonate<'a>(
-    env: &'a mut Env,
-    _receiver: &'a Value,
-    _args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        env.stop_impersonate().await?;
-        Ok(Value::Null)
-    }
-    .boxed()
-}
-
-fn set_balance<'a>(
-    env: &'a mut Env,
-    _receiver: &'a Value,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let (address, balance) = match args {
-            [Value::Addr(address), Value::Uint(b, 256)] => (*address, *b),
-            _ => bail!("setBalance: invalid arguments"),
-        };
-        env.get_provider()
-            .anvil_set_balance(address, balance)
-            .await?;
-        Ok(Value::Null)
-    }
-    .boxed()
-}
-
 fn load_ledger<'a>(
     env: &'a mut Env,
     _receiver: &'a Value,
@@ -261,30 +183,10 @@ lazy_static! {
     pub static ref REPL_LIST_TYPES: Arc<dyn FunctionDef> = SyncProperty::arc("types", list_types);
     pub static ref REPL_IS_CONNECTED: Arc<dyn FunctionDef> =
         AsyncProperty::arc("connected", is_connected);
-    pub static ref REPL_RPC: Arc<dyn FunctionDef> = SyncMethod::arc(
-        "rpc",
-        rpc,
-        vec![vec![], vec![FunctionParam::new("url", Type::String)]]
-    );
-    pub static ref REPL_FORK: Arc<dyn FunctionDef> = SyncMethod::arc(
-        "fork",
-        fork,
-        vec![vec![], vec![FunctionParam::new("url", Type::String)]]
-    );
     pub static ref REPL_DEBUG: Arc<dyn FunctionDef> = SyncMethod::arc(
         "debug",
         debug,
         vec![vec![], vec![FunctionParam::new("debug", Type::Bool)]]
-    );
-    pub static ref REPL_BLOCK: Arc<dyn FunctionDef> = SyncMethod::arc(
-        "block",
-        block,
-        vec![
-            vec![],
-            vec![FunctionParam::new("block", Type::Uint(256))],
-            vec![FunctionParam::new("block", Type::String)],
-            vec![FunctionParam::new("block", Type::FixBytes(32))],
-        ]
     );
     pub static ref REPL_EXEC: Arc<dyn FunctionDef> = SyncMethod::arc(
         "exec",
@@ -344,20 +246,5 @@ lazy_static! {
         "loadLedger",
         load_ledger,
         vec![vec![], vec![FunctionParam::new("index", Type::Uint(256))]]
-    );
-    pub static ref REPL_START_PRANK: Arc<dyn FunctionDef> = AsyncMethod::arc(
-        "startPrank",
-        impersonate,
-        vec![vec![FunctionParam::new("adddress", Type::Address)]]
-    );
-    pub static ref REPL_STOP_PRANK: Arc<dyn FunctionDef> =
-        AsyncMethod::arc("stopPrank", stop_impersonate, vec![vec![]]);
-    pub static ref REPL_DEAL: Arc<dyn FunctionDef> = AsyncMethod::arc(
-        "deal",
-        set_balance,
-        vec![vec![
-            FunctionParam::new("adddress", Type::Address),
-            FunctionParam::new("balance", Type::Uint(256))
-        ]]
     );
 }
