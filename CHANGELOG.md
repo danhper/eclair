@@ -4,7 +4,7 @@
 
 ### Bug fixes
 
-* Fix fixed bytes parsing
+* Fix fixed bytes parsing/casting
 
 ## v0.1.4 (2025-01-26)
 

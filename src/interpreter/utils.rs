@@ -138,15 +138,15 @@ pub fn receipt_to_value(env: &Env, receipt: TransactionReceipt) -> Result<Value>
     Ok(Value::from_receipt(receipt, transformed_logs))
 }
 
-pub fn to_fixed_bytes(bytes: &[u8], size: usize, pad_left: bool) -> Result<B256> {
+pub fn to_fixed_bytes(bytes: &[u8], size: usize, use_trailing_bytes: bool) -> Result<B256> {
     let mut new_bytes = vec![0; 32];
     let new_size = bytes.len().min(size);
-    if pad_left {
+    if use_trailing_bytes {
         let to_copy = &bytes[bytes.len() - new_size..];
-        new_bytes[32 - new_size..].copy_from_slice(to_copy);
+        new_bytes[..new_size].copy_from_slice(to_copy);
     } else {
         let to_copy = &bytes[..new_size];
-        new_bytes[32 - size..32 - size + new_size].copy_from_slice(to_copy);
+        new_bytes[..new_size].copy_from_slice(to_copy);
     }
     Ok(B256::from_slice(&new_bytes))
 }
@@ -225,19 +225,24 @@ mod tests {
     fn test_to_fixed_bytes() {
         assert_eq!(
             to_fixed_bytes(&[18, 52], 2, true).unwrap(),
-            B256::from(U256::from(4660).to_be_bytes())
+            B256::from(U256::from(4660).checked_shl(240).unwrap().to_be_bytes())
         );
         assert_eq!(
             to_fixed_bytes(&[18, 52], 4, true).unwrap(),
-            B256::from(U256::from(4660).to_be_bytes())
+            B256::from(U256::from(4660).checked_shl(240).unwrap().to_be_bytes())
         );
         assert_eq!(
             to_fixed_bytes(&[18, 52], 1, true).unwrap(),
-            B256::from(U256::from(52).to_be_bytes())
+            B256::from(U256::from(52).checked_shl(248).unwrap().to_be_bytes())
         );
         assert_eq!(
             to_fixed_bytes(&[102, 111, 111], 8, false).unwrap(),
-            B256::from(U256::from(7381240360074215424u64).to_be_bytes()) // 0x666f6f0000000000
+            B256::from(
+                U256::from(7381240360074215424u64)
+                    .checked_shl(192)
+                    .unwrap()
+                    .to_be_bytes()
+            ) // 0x666f6f0000000000
         );
     }
 

@@ -496,7 +496,7 @@ impl Type {
                 Ok(Value::Uint(num, *bits_num))
             }
             (Type::FixBytes(size), Value::FixBytes(bytes, previous_size)) => Ok(Value::FixBytes(
-                to_fixed_bytes(&bytes.0[32 - *previous_size..], *size, false)?,
+                to_fixed_bytes(&bytes.0[..*previous_size], *size, false)?,
                 *size,
             )),
             (Type::FixBytes(size), Value::Addr(addr)) if *size == 20 => {
@@ -703,7 +703,7 @@ mod tests {
             Value::from_hex("0x00000000").unwrap()
         );
         let b4 =
-            B256::from_hex("0x00000000000000000000000000000000000000000000000000000000281dd5af")
+            B256::from_hex("0x281dd5af00000000000000000000000000000000000000000000000000000000")
                 .unwrap();
         let b4_value = Value::FixBytes(b4, 4);
 
@@ -713,6 +713,16 @@ mod tests {
         assert_eq!(
             Type::FixBytes(32).cast(&b4_value).unwrap(),
             padded_b256_value
+        );
+        assert_eq!(
+            Type::FixBytes(4).cast(&padded_b256_value).unwrap(),
+            b4_value
+        );
+
+        let n = Value::Uint(U256::from(1), 8);
+        assert_eq!(
+            Type::FixBytes(1).cast(&n).unwrap(),
+            Value::from_hex("0x01").unwrap()
         );
     }
 
