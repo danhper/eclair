@@ -359,7 +359,7 @@ impl FromHex for Value {
         } else if hex.as_ref().len() <= 66 {
             let data = Vec::from_hex(&hex.as_ref()[2..])?;
             let mut bytes = vec![0; 32];
-            bytes[32 - data.len()..].copy_from_slice(&data);
+            bytes[..data.len()].copy_from_slice(&data);
             Value::FixBytes(B256::from_slice(&bytes), (hex.as_ref().len() - 2) / 2)
         } else {
             Value::Bytes(Vec::from_hex(&hex.as_ref()[2..])?)
@@ -846,11 +846,7 @@ mod tests {
         assert_eq!(value, Value::Addr(addr));
 
         let value = Value::from_hex("0xdeadbeef").unwrap();
-        let bytes =
-            Vec::from_hex("00000000000000000000000000000000000000000000000000000000deadbeef")
-                .unwrap();
-        let fix_bytes = B256::from_slice(&bytes);
-        assert_eq!(value, Value::FixBytes(fix_bytes, 4));
+        assert_eq!(value.to_string(), "0xdeadbeef");
     }
 
     #[test]

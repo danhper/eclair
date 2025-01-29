@@ -2,6 +2,10 @@
 
 ## Not released
 
+### Bug fixes
+
+* Fix fixed bytes parsing
+
 ## v0.1.4 (2025-01-26)
 
 ### Features
