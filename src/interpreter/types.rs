@@ -492,7 +492,7 @@ impl Type {
             (Type::Uint(bits_num), Value::FixBytes(v, bytes_num))
                 if *bytes_num * 8 == *bits_num =>
             {
-                let num = U256::from_be_slice(v.as_slice());
+                let num = U256::from_be_slice(&v[..*bytes_num]);
                 Ok(Value::Uint(num, *bits_num))
             }
             (Type::FixBytes(size), Value::FixBytes(bytes, previous_size)) => Ok(Value::FixBytes(
@@ -720,10 +720,9 @@ mod tests {
         );
 
         let n = Value::Uint(U256::from(1), 8);
-        assert_eq!(
-            Type::FixBytes(1).cast(&n).unwrap(),
-            Value::from_hex("0x01").unwrap()
-        );
+        let bytes1 = Type::FixBytes(1).cast(&n).unwrap();
+        assert_eq!(bytes1, Value::from_hex("0x01").unwrap());
+        assert_eq!(Type::Uint(8).cast(&bytes1).unwrap(), n);
     }
 
     #[test]
