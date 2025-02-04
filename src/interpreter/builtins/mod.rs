@@ -5,6 +5,7 @@ use std::sync::Arc;
 use lazy_static::lazy_static;
 
 mod abi;
+mod accounts;
 mod address;
 mod block;
 mod concat;
@@ -32,6 +33,7 @@ lazy_static! {
         let mut m = HashMap::new();
 
         m.insert("repl".to_string(), Value::TypeObject(Type::Repl));
+        m.insert("accounts".to_string(), Value::TypeObject(Type::Accounts));
         m.insert("vm".to_string(), Value::TypeObject(Type::Vm));
         m.insert("console".to_string(), Value::TypeObject(Type::Console));
         m.insert("json".to_string(), Value::TypeObject(Type::Json));
@@ -180,18 +182,27 @@ lazy_static! {
         repl_methods.insert("exec".to_string(), repl::REPL_EXEC.clone());
         repl_methods.insert("loadAbi".to_string(), repl::REPL_LOAD_ABI.clone());
         repl_methods.insert("fetchAbi".to_string(), repl::REPL_FETCH_ABI.clone());
-        repl_methods.insert("account".to_string(), repl::REPL_ACCOUNT.clone());
-        repl_methods.insert(
-            "loadPrivateKey".to_string(),
-            repl::REPL_LOAD_PRIVATE_KEY.clone(),
-        );
-        repl_methods.insert("loadKeystore".to_string(), repl::REPL_LOAD_KEYSTORE.clone());
-        repl_methods.insert(
-            "listLedgerWallets".to_string(),
-            repl::REPL_LIST_LEDGER_WALLETS.clone(),
-        );
-        repl_methods.insert("loadLedger".to_string(), repl::REPL_LOAD_LEDGER.clone());
         m.insert(NonParametricType::Repl, repl_methods);
+
+        let mut account_methods = HashMap::new();
+        account_methods.insert("current".to_string(), accounts::ACCOUNT_CURRENT.clone());
+        account_methods.insert(
+            "loadPrivateKey".to_string(),
+            accounts::ACCOUNT_LOAD_PRIVATE_KEY.clone(),
+        );
+        account_methods.insert(
+            "loadKeystore".to_string(),
+            accounts::ACCOUNT_LOAD_KEYSTORE.clone(),
+        );
+        account_methods.insert(
+            "listLedgerWallets".to_string(),
+            accounts::ACCOUNT_LIST_LEDGER_WALLETS.clone(),
+        );
+        account_methods.insert(
+            "loadLedger".to_string(),
+            accounts::ACCOUNT_LOAD_LEDGER.clone(),
+        );
+        m.insert(NonParametricType::Accounts, account_methods);
 
         m
     };
