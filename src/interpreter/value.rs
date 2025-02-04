@@ -161,9 +161,9 @@ impl Serialize for Value {
             Value::Str(s) => serializer.serialize_str(s),
             Value::FixBytes(w, s) => {
                 let bytes = w[0..*s].to_vec();
-                serializer.serialize_str(&hex::encode(bytes))
+                serializer.serialize_str(&format!("0x{}", hex::encode(bytes)))
             }
-            Value::Bytes(bytes) => serializer.serialize_str(&hex::encode(bytes)),
+            Value::Bytes(bytes) => serializer.serialize_str(&format!("0x{}", hex::encode(bytes))),
             Value::Addr(a) => serializer.serialize_str(&a.to_checksum(None)),
             Value::Contract(ContractInfo(_name, _), addr) => {
                 serializer.serialize_str(&addr.to_checksum(None))
@@ -179,7 +179,7 @@ impl Serialize for Value {
             Value::Array(v, _) => v.serialize(serializer),
             Value::Mapping(v, _, _) => v.0.serialize(serializer),
             Value::TypeObject(t) => serializer.serialize_str(&format!("{}", t)),
-            Value::Transaction(t) => serializer.serialize_str(&hex::encode(t)),
+            Value::Transaction(t) => serializer.serialize_str(&format!("0x{}", hex::encode(t))),
             Value::Func(func) => serializer.serialize_str(&format!("{}", func)),
         }
     }

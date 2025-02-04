@@ -6,6 +6,10 @@
 
 * Fix fixed bytes parsing/casting
 
+### Other changes
+
+* Add 0x prefix to JSON serialized bytes
+
 ## v0.1.4 (2025-01-26)
 
 ### Features
