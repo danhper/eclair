@@ -115,6 +115,27 @@ pub fn log_to_value(env: &Env, log: Log) -> Result<Value> {
         ),
     );
     fields.insert("data".to_string(), Value::Bytes(log.data().data.to_vec()));
+    if let Some(h) = log.transaction_hash {
+        fields.insert("txHash".to_string(), Value::FixBytes(h, 32));
+    }
+    if let Some(h) = log.block_hash {
+        fields.insert("blockHash".to_string(), Value::FixBytes(h, 32));
+    }
+    if let Some(n) = log.block_number {
+        fields.insert("blockNumber".to_string(), Value::Uint(U256::from(n), 256));
+    }
+    if let Some(t) = log.block_timestamp {
+        fields.insert("timestamp".to_string(), Value::Uint(U256::from(t), 256));
+    }
+    if let Some(i) = log.log_index {
+        fields.insert("logIndex".to_string(), Value::Uint(U256::from(i), 256));
+    }
+    if let Some(i) = log.transaction_index {
+        fields.insert(
+            "transactionIndex".to_string(),
+            Value::Uint(U256::from(i), 256),
+        );
+    }
 
     if let Some(evt) = log.topic0().and_then(|t| env.get_event(t)) {
         let decoded_args = decode_log_args(&log, evt)?;
