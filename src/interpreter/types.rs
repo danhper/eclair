@@ -626,6 +626,13 @@ lazy_static! {
             ("args".to_string(), Type::Any),
         ]),
     );
+    pub static ref WALLET_TYPE: Type = Type::NamedTuple(
+        "Wallet".to_string(),
+        HashableIndexMap::from_iter([
+            ("address".to_string(), Type::Address),
+            ("alias".to_string(), Type::String),
+        ]),
+    );
 }
 
 #[cfg(test)]

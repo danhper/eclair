@@ -41,6 +41,7 @@ pub struct Env {
     provider: EclairProvider,
     is_wallet_connected: bool,
     ledger: Option<Arc<Mutex<Ledger>>>,
+    loaded_wallets: HashMap<Address, EthereumWallet>,
     block_id: BlockId,
     contract_names: HashMap<Address, String>,
     events: HashMap<B256, json_abi::Event>,
@@ -49,6 +50,7 @@ pub struct Env {
     impersonating: Option<Address>,
     anvil: Option<AnvilInstance>,
     pub config: Config,
+    account_aliases: HashMap<String, Address>,
 }
 
 unsafe impl std::marker::Send for Env {}
@@ -66,6 +68,7 @@ impl Env {
             provider,
             is_wallet_connected: false,
             ledger: None,
+            loaded_wallets: HashMap::new(),
             block_id: BlockId::latest(),
             contract_names: HashMap::new(),
             events: HashMap::new(),
@@ -74,6 +77,7 @@ impl Env {
             impersonating: None,
             anvil: None,
             config,
+            account_aliases: HashMap::new(),
         }
     }
 
@@ -322,12 +326,39 @@ impl Env {
         Ok(())
     }
 
+    pub fn select_wallet(&mut self, address: Address) -> Result<()> {
+        let wallet = self
+            .loaded_wallets
+            .get(&address)
+            .ok_or_else(|| anyhow!("no wallet loaded for address {}", address))?
+            .clone();
+        self._select_wallet(wallet)
+    }
+
+    pub fn select_wallet_by_alias(&mut self, alias: &str) -> Result<()> {
+        let address = self
+            .account_aliases
+            .get(alias)
+            .ok_or_else(|| anyhow!("no alias found for {}", alias))?;
+        self.select_wallet(*address)
+    }
+
     fn set_wallet<S>(&mut self, signer: S) -> Result<()>
     where
         S: TxSigner<Signature> + Send + Sync + 'static,
     {
         let wallet = EthereumWallet::from(signer);
+        let address = NetworkWallet::<AnyNetwork>::default_signer_address(&wallet);
+        self.loaded_wallets.insert(address, wallet.clone());
         self.is_wallet_connected = true;
+        self._select_wallet(wallet)
+    }
+
+    pub fn get_loaded_wallets(&self) -> Vec<Address> {
+        self.loaded_wallets.keys().cloned().collect()
+    }
+
+    fn _select_wallet(&mut self, wallet: EthereumWallet) -> Result<()> {
         self.set_provider(Some(wallet), &self.get_rpc_url())
     }
 
@@ -364,5 +395,13 @@ impl Env {
             self.ledger = Some(Arc::new(Mutex::new(ledger)));
         }
         Ok(())
+    }
+
+    pub fn set_account_alias(&mut self, alias: &str, address: Address) {
+        self.account_aliases.insert(alias.to_string(), address);
+    }
+
+    pub fn list_account_aliases(&self) -> HashMap<String, Address> {
+        self.account_aliases.clone()
     }
 }

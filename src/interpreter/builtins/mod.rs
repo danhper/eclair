@@ -186,9 +186,15 @@ lazy_static! {
 
         let mut account_methods = HashMap::new();
         account_methods.insert("current".to_string(), accounts::ACCOUNT_CURRENT.clone());
+        account_methods.insert("loaded".to_string(), accounts::ACCOUNT_GET_LOADED.clone());
+        account_methods.insert("select".to_string(), accounts::ACCOUNT_SELECT.clone());
         account_methods.insert(
             "loadPrivateKey".to_string(),
             accounts::ACCOUNT_LOAD_PRIVATE_KEY.clone(),
+        );
+        account_methods.insert(
+            "listKeystores".to_string(),
+            accounts::ACCOUNT_LIST_KEYSTORES.clone(),
         );
         account_methods.insert(
             "loadKeystore".to_string(),
@@ -202,6 +208,7 @@ lazy_static! {
             "loadLedger".to_string(),
             accounts::ACCOUNT_LOAD_LEDGER.clone(),
         );
+        account_methods.insert("alias".to_string(), accounts::ACCOUNT_ALIAS.clone());
         m.insert(NonParametricType::Accounts, account_methods);
 
         m
