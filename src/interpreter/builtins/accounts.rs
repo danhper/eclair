@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs::DirEntry, sync::Arc};
 
 use crate::interpreter::{
     functions::{AsyncMethod, FunctionDef, FunctionParam, SyncMethod, SyncProperty},
-    types::{HashableIndexMap, WALLET_TYPE},
+    types::{HashableIndexMap, ACCOUNT_TYPE},
     Env, Type, Value,
 };
 use alloy::{
@@ -32,6 +32,10 @@ fn load_private_key(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<
         [Value::FixBytes(bytes, 32), Value::Str(alias)] => {
             (PrivateKeySigner::from_bytes(bytes)?, Some(alias.clone()))
         }
+        [Value::Null, Value::Str(alias)] => {
+            let signer = rpassword::prompt_password("Enter private key: ")?.parse()?;
+            (signer, Some(alias.clone()))
+        }
         [] => {
             let signer = rpassword::prompt_password("Enter private key: ")?.parse()?;
             (signer, None)
@@ -58,14 +62,14 @@ fn get_loaded_wallets(env: &Env, _receiver: &Value) -> Result<Value> {
         let alias = reversed_aliases.get(&wallet);
         let alias_value = alias.cloned().map(Value::Str).unwrap_or(Value::Null);
         wallets.push(Value::NamedTuple(
-            "Wallet".to_string(),
+            "Account".to_string(),
             HashableIndexMap::from_iter([
                 ("address".to_string(), Value::Addr(wallet)),
                 ("alias".to_string(), alias_value),
             ]),
         ));
     }
-    Ok(Value::Array(wallets, Box::new(WALLET_TYPE.clone())))
+    Ok(Value::Array(wallets, Box::new(ACCOUNT_TYPE.clone())))
 }
 
 fn select_wallet(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
@@ -185,6 +189,10 @@ lazy_static! {
         vec![
             vec![],
             vec![FunctionParam::new("privateKey", Type::String)],
+            vec![
+                FunctionParam::new("privateKey", Type::Null),
+                FunctionParam::new("alias", Type::String)
+            ],
             vec![
                 FunctionParam::new("privateKey", Type::String),
                 FunctionParam::new("alias", Type::String)
