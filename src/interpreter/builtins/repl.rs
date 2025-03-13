@@ -5,14 +5,9 @@ use anyhow::{anyhow, bail, Ok, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
-use crate::{
-    interpreter::{
-        functions::{
-            AsyncMethod, AsyncProperty, FunctionDef, FunctionParam, SyncMethod, SyncProperty,
-        },
-        Env, Type, Value,
-    },
-    loaders,
+use crate::interpreter::{
+    functions::{AsyncProperty, FunctionDef, FunctionParam, SyncMethod, SyncProperty},
+    Env, Type, Value,
 };
 
 fn list_vars(env: &Env, _receiver: &Value) -> Result<Value> {
@@ -65,40 +60,6 @@ fn exec(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
     Ok(code.into())
 }
 
-fn load_abi(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
-    let (name, filepath, key) = match args {
-        [Value::Str(name), Value::Str(filepath)] => (name, filepath, None),
-        [Value::Str(name), Value::Str(filepath), Value::Str(key)] => {
-            (name, filepath, Some(key.as_str()))
-        }
-        _ => bail!("loadAbi: invalid arguments"),
-    };
-    let abi = loaders::file::load_abi(filepath, key)?;
-    env.add_contract(name, abi);
-    Ok(Value::Null)
-}
-
-fn fetch_abi<'a>(
-    env: &'a mut Env,
-    _receiver: &'a Value,
-    args: &'a [Value],
-) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        match args {
-            [Value::Str(name), Value::Addr(address)] => {
-                let chain_id = env.get_chain_id().await?;
-                let etherscan_config = env.config.get_etherscan_config(chain_id)?;
-                let abi =
-                    loaders::etherscan::load_abi(etherscan_config, &address.to_string()).await?;
-                let contract_info = env.add_contract(name, abi);
-                Ok(Value::Contract(contract_info, *address))
-            }
-            _ => bail!("fetchAbi: invalid arguments"),
-        }
-    }
-    .boxed()
-}
-
 lazy_static! {
     pub static ref REPL_LIST_VARS: Arc<dyn FunctionDef> = SyncProperty::arc("vars", list_vars);
     pub static ref REPL_LIST_TYPES: Arc<dyn FunctionDef> = SyncProperty::arc("types", list_types);
@@ -113,28 +74,5 @@ lazy_static! {
         "exec",
         exec,
         vec![vec![FunctionParam::new("command", Type::String)]]
-    );
-    pub static ref REPL_LOAD_ABI: Arc<dyn FunctionDef> = SyncMethod::arc(
-        "loadAbi",
-        load_abi,
-        vec![
-            vec![
-                FunctionParam::new("name", Type::String),
-                FunctionParam::new("filepath", Type::String)
-            ],
-            vec![
-                FunctionParam::new("name", Type::String),
-                FunctionParam::new("filepath", Type::String),
-                FunctionParam::new("jsonKey", Type::String)
-            ]
-        ]
-    );
-    pub static ref REPL_FETCH_ABI: Arc<dyn FunctionDef> = AsyncMethod::arc(
-        "fetchAbi",
-        fetch_abi,
-        vec![vec![
-            FunctionParam::new("name", Type::String),
-            FunctionParam::new("address", Type::Address)
-        ]]
     );
 }

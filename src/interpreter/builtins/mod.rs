@@ -134,6 +134,8 @@ lazy_static! {
         abi_methods.insert("encodePacked".to_string(), abi::ABI_ENCODE_PACKED.clone());
         abi_methods.insert("decode".to_string(), abi::ABI_DECODE.clone());
         abi_methods.insert("decodeData".to_string(), abi::ABI_DECODE_DATA.clone());
+        abi_methods.insert("load".to_string(), abi::ABI_LOAD.clone());
+        abi_methods.insert("fetch".to_string(), abi::ABI_FETCH.clone());
         m.insert(NonParametricType::Abi, abi_methods);
 
         let mut block_methods = HashMap::new();
@@ -180,8 +182,6 @@ lazy_static! {
         repl_methods.insert("connected".to_string(), repl::REPL_IS_CONNECTED.clone());
         repl_methods.insert("debug".to_string(), repl::REPL_DEBUG.clone());
         repl_methods.insert("exec".to_string(), repl::REPL_EXEC.clone());
-        repl_methods.insert("loadAbi".to_string(), repl::REPL_LOAD_ABI.clone());
-        repl_methods.insert("fetchAbi".to_string(), repl::REPL_FETCH_ABI.clone());
         m.insert(NonParametricType::Repl, repl_methods);
 
         let mut account_methods = HashMap::new();

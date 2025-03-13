@@ -77,29 +77,6 @@ libs = ["lib"]
 0
 ```
 
-### `repl.loadAbi(string name, string path, string? key) -> null`
-
-Loads an ABI from a file. The `name` parameter is used to reference the ABI in the REPL, the `path` parameter is the path to the file containing the ABI, and the `key` parameter is used to specify the key in the JSON file if it is nested.
-
-```javascript
-repl.loadAbi("ERC20", "./ERC20.json");
-dai = ERC20(0x6b175474e89094c44da98b954eedeac495271d0f);
-
-repl.loadAbi("ERC20", "./CompiledERC20.json", "abi");
-```
-
-### `repl.fetchAbi(string name, address implementationAddress) -> string`
-
-Fetches the ABI of a contract from Etherscan using the Etherscan API key.
-The `name` parameter is used to reference the ABI in the REPL, and the `implementationAddress` parameter is the address of the contract.
-In the case of a proxy contract, the address of the implementation contract should be provided.
-See [contract management](./contracts_management.md#fetching-abis-from-etherscan) for more information about proxy handling.
-See [Etherscan API Key configuration](./configuration.md#etherscan-api-key) for more information on how to set the API key.
-
-```javascript
->> dai = repl.fetchAbi("DAI", 0x6B175474E89094C44Da98b954EedeAC495271d0F)
-```
-
 ## `accounts` functions
 
 ### `accounts.current -> address | null`
@@ -320,6 +297,29 @@ Decodes the data (either function calldata or error data) using any registered A
 ```javascript
 >> abi.decodeData(0xa9059cbb000000000000000000000000789f8f7b547183ab8e99a5e0e6d567e90e0eb03b0000000000000000000000000000000000000000000000000de0b6b3a7640000)
 ("transfer(address,uint256)", (0x789f8F7B547183Ab8E99A5e0E6D567E90e0EB03B, 1000000000000000000))
+```
+
+### `abi.load(string name, string path, string? key) -> null`
+
+Loads an ABI from a file. The `name` parameter is used to reference the ABI in the REPL, the `path` parameter is the path to the file containing the ABI, and the `key` parameter is used to specify the key in the JSON file if it is nested.
+
+```javascript
+abi.load("ERC20", "./ERC20.json");
+dai = ERC20(0x6b175474e89094c44da98b954eedeac495271d0f);
+
+abi.load("ERC20", "./CompiledERC20.json", "abi");
+```
+
+### `abi.fetch(string name, address implementationAddress) -> string`
+
+Fetches the ABI of a contract from Etherscan using the Etherscan API key.
+The `name` parameter is used to reference the ABI in the REPL, and the `implementationAddress` parameter is the address of the contract.
+In the case of a proxy contract, the address of the implementation contract should be provided.
+See [contract management](./contracts_management.md#fetching-abis-from-etherscan) for more information about proxy handling.
+See [Etherscan API Key configuration](./configuration.md#etherscan-api-key) for more information on how to set the API key.
+
+```javascript
+>> dai = abi.fetch("DAI", 0x6B175474E89094C44Da98b954EedeAC495271d0F)
 ```
 
 ## `block` functions

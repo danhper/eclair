@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
-use crate::interpreter::{
-    functions::{FunctionDef, FunctionParam, SyncMethod},
-    ContractInfo, Env, Type, Value,
+use crate::{
+    interpreter::{
+        functions::{AsyncMethod, FunctionDef, FunctionParam, SyncMethod},
+        ContractInfo, Env, Type, Value,
+    },
+    loaders,
 };
 use alloy::{
     dyn_abi::{DynSolType, DynSolValue, JsonAbiExt},
@@ -10,6 +13,7 @@ use alloy::{
     primitives::FixedBytes,
 };
 use anyhow::{anyhow, bail, Result};
+use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
 
 trait Decodable: JsonAbiExt {
@@ -161,6 +165,40 @@ fn abi_encode_packed_(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Resu
     abi_encode_packed(args)
 }
 
+fn fetch_abi<'a>(
+    env: &'a mut Env,
+    _receiver: &'a Value,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        match args {
+            [Value::Str(name), Value::Addr(address)] => {
+                let chain_id = env.get_chain_id().await?;
+                let etherscan_config = env.config.get_etherscan_config(chain_id)?;
+                let abi =
+                    loaders::etherscan::load_abi(etherscan_config, &address.to_string()).await?;
+                let contract_info = env.add_contract(name, abi);
+                Ok(Value::Contract(contract_info, *address))
+            }
+            _ => bail!("fetchAbi: invalid arguments"),
+        }
+    }
+    .boxed()
+}
+
+fn load_abi(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    let (name, filepath, key) = match args {
+        [Value::Str(name), Value::Str(filepath)] => (name, filepath, None),
+        [Value::Str(name), Value::Str(filepath), Value::Str(key)] => {
+            (name, filepath, Some(key.as_str()))
+        }
+        _ => bail!("loadAbi: invalid arguments"),
+    };
+    let abi = loaders::file::load_abi(filepath, key)?;
+    env.add_contract(name, abi);
+    Ok(Value::Null)
+}
+
 lazy_static! {
     pub static ref ABI_ENCODE: Arc<dyn FunctionDef> =
         SyncMethod::arc("encode", abi_encode_, vec![]);
@@ -182,6 +220,29 @@ lazy_static! {
         "decode_error",
         abi_decode_error,
         vec![vec![FunctionParam::new("data", Type::Bytes)]]
+    );
+    pub static ref ABI_FETCH: Arc<dyn FunctionDef> = AsyncMethod::arc(
+        "fetch",
+        fetch_abi,
+        vec![vec![
+            FunctionParam::new("name", Type::String),
+            FunctionParam::new("address", Type::Address)
+        ]]
+    );
+    pub static ref ABI_LOAD: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "load",
+        load_abi,
+        vec![
+            vec![
+                FunctionParam::new("name", Type::String),
+                FunctionParam::new("filepath", Type::String)
+            ],
+            vec![
+                FunctionParam::new("name", Type::String),
+                FunctionParam::new("filepath", Type::String),
+                FunctionParam::new("jsonKey", Type::String)
+            ]
+        ]
     );
 }
 
