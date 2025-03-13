@@ -59,10 +59,6 @@ Displays a list of the variables defined in the current session.
 
 Displays a list of the types (excluding builtins).
 
-### `repl.connected -> bool`
-
-Returns `true` if the REPL is connected to a node.
-
 ### `repl.exec(string command) -> uint256`
 
 Executes a command in the shell, displays the output and returns the exit code.
@@ -122,6 +118,10 @@ Returns a list of all loaded accounts.
 Sets the current account to the one at the given address or alias and returns the loaded address.
 
 ## `vm` functions
+
+### `vm.connected -> bool`
+
+Returns `true` if the session is connected to a valid RPC.
 
 ### `vm.rpc() -> string`
 

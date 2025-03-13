@@ -174,12 +174,12 @@ lazy_static! {
         vm_methods.insert("fork".to_string(), vm::VM_FORK.clone());
         vm_methods.insert("rpc".to_string(), vm::VM_RPC.clone());
         vm_methods.insert("block".to_string(), vm::VM_BLOCK.clone());
+        vm_methods.insert("connected".to_string(), vm::VM_IS_CONNECTED.clone());
         m.insert(NonParametricType::Vm, vm_methods);
 
         let mut repl_methods = HashMap::new();
         repl_methods.insert("vars".to_string(), repl::REPL_LIST_VARS.clone());
         repl_methods.insert("types".to_string(), repl::REPL_LIST_TYPES.clone());
-        repl_methods.insert("connected".to_string(), repl::REPL_IS_CONNECTED.clone());
         repl_methods.insert("debug".to_string(), repl::REPL_DEBUG.clone());
         repl_methods.insert("exec".to_string(), repl::REPL_EXEC.clone());
         m.insert(NonParametricType::Repl, repl_methods);

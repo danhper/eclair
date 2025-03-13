@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use crate::interpreter::{
-    functions::{AsyncMethod, FunctionDef, FunctionParam, SyncMethod},
+    functions::{AsyncMethod, AsyncProperty, FunctionDef, FunctionParam, SyncMethod},
     Env, Type, Value,
 };
-use alloy::providers::ext::AnvilApi;
+use alloy::providers::{ext::AnvilApi, Provider};
 use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
@@ -72,6 +72,14 @@ fn set_balance<'a>(
             .anvil_set_balance(address, balance)
             .await?;
         Ok(Value::Null)
+    }
+    .boxed()
+}
+
+fn is_connected<'a>(env: &'a Env, _receiver: &'a Value) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        let res = env.get_provider().root().get_chain_id().await.is_ok();
+        Ok(Value::Bool(res))
     }
     .boxed()
 }
@@ -166,4 +174,6 @@ lazy_static! {
             vec![FunctionParam::new("block", Type::FixBytes(32))],
         ]
     );
+    pub static ref VM_IS_CONNECTED: Arc<dyn FunctionDef> =
+        AsyncProperty::arc("connected", is_connected);
 }

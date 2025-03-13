@@ -22,6 +22,7 @@
 
 - Add 0x prefix to JSON serialized bytes
 - Rename `repl.loadAbi` to `abi.load` and `repl.fetchAbi` to `abi.fetch`
+- Rename `repl.connected` to `vm.connected`
 
 ## v0.1.4 (2025-01-26)
 

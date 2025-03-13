@@ -1,12 +1,10 @@
 use std::{process::Command, sync::Arc};
 
-use alloy::providers::Provider;
-use anyhow::{anyhow, bail, Ok, Result};
-use futures::{future::BoxFuture, FutureExt};
+use anyhow::{anyhow, bail, Result};
 use lazy_static::lazy_static;
 
 use crate::interpreter::{
-    functions::{AsyncProperty, FunctionDef, FunctionParam, SyncMethod, SyncProperty},
+    functions::{FunctionDef, FunctionParam, SyncMethod, SyncProperty},
     Env, Type, Value,
 };
 
@@ -26,14 +24,6 @@ fn list_types(env: &Env, _receiver: &Value) -> Result<Value> {
         println!("{}", k);
     }
     Ok(Value::Null)
-}
-
-fn is_connected<'a>(env: &'a Env, _receiver: &'a Value) -> BoxFuture<'a, Result<Value>> {
-    async move {
-        let res = env.get_provider().root().get_chain_id().await.is_ok();
-        Ok(Value::Bool(res))
-    }
-    .boxed()
 }
 
 fn debug(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
@@ -63,8 +53,6 @@ fn exec(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
 lazy_static! {
     pub static ref REPL_LIST_VARS: Arc<dyn FunctionDef> = SyncProperty::arc("vars", list_vars);
     pub static ref REPL_LIST_TYPES: Arc<dyn FunctionDef> = SyncProperty::arc("types", list_types);
-    pub static ref REPL_IS_CONNECTED: Arc<dyn FunctionDef> =
-        AsyncProperty::arc("connected", is_connected);
     pub static ref REPL_DEBUG: Arc<dyn FunctionDef> = SyncMethod::arc(
         "debug",
         debug,
