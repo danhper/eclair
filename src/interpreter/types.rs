@@ -137,6 +137,7 @@ pub enum NonParametricType {
     Transaction,
     Function,
     Repl,
+    Accounts,
     Vm,
     Block,
     Console,
@@ -167,6 +168,7 @@ pub enum Type {
     Event(alloy::json_abi::Event),
     Transaction,
     Function,
+    Accounts,
     Repl,
     Vm,
     Block,
@@ -207,6 +209,7 @@ impl Display for Type {
 
             Type::Transaction => write!(f, "Transaction"),
 
+            Type::Accounts => write!(f, "accounts"),
             Type::Repl => write!(f, "repl"),
             Type::Vm => write!(f, "vm"),
             Type::Block => write!(f, "block"),
@@ -240,6 +243,7 @@ impl<T: AsRef<Type>> From<T> for NonParametricType {
             Type::Contract(..) => NonParametricType::Contract,
             Type::Event(..) => NonParametricType::Event,
             Type::Function => NonParametricType::Function,
+            Type::Accounts => NonParametricType::Accounts,
             Type::Transaction => NonParametricType::Transaction,
             Type::Repl => NonParametricType::Repl,
             Type::Vm => NonParametricType::Vm,
@@ -620,6 +624,13 @@ lazy_static! {
             ("topics".to_string(), Type::Array(Box::new(Type::Uint(256)))),
             ("data".to_string(), Type::Bytes),
             ("args".to_string(), Type::Any),
+        ]),
+    );
+    pub static ref ACCOUNT_TYPE: Type = Type::NamedTuple(
+        "Account".to_string(),
+        HashableIndexMap::from_iter([
+            ("address".to_string(), Type::Address),
+            ("alias".to_string(), Type::String),
         ]),
     );
 }

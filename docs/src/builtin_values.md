@@ -13,7 +13,6 @@ The underscore `_` variable stores the result of the last expression evaluated.
 2
 ```
 
-
 ### `keccak256(bytes data) -> bytes32`
 
 Returns the keccak256 hash of the input bytes.
@@ -83,10 +82,10 @@ libs = ["lib"]
 Loads an ABI from a file. The `name` parameter is used to reference the ABI in the REPL, the `path` parameter is the path to the file containing the ABI, and the `key` parameter is used to specify the key in the JSON file if it is nested.
 
 ```javascript
-repl.loadAbi("ERC20", "./ERC20.json")
-dai = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F)
+repl.loadAbi("ERC20", "./ERC20.json");
+dai = ERC20(0x6b175474e89094c44da98b954eedeac495271d0f);
 
-repl.loadAbi("ERC20", "./CompiledERC20.json", "abi")
+repl.loadAbi("ERC20", "./CompiledERC20.json", "abi");
 ```
 
 ### `repl.fetchAbi(string name, address implementationAddress) -> string`
@@ -101,31 +100,49 @@ See [Etherscan API Key configuration](./configuration.md#etherscan-api-key) for 
 >> dai = repl.fetchAbi("DAI", 0x6B175474E89094C44Da98b954EedeAC495271d0F)
 ```
 
-### `repl.account -> address | null`
+## `accounts` functions
+
+### `accounts.current -> address | null`
 
 Returns the currently loaded account or null if none.
 
-### `repl.loadPrivateKey(string? privateKey) -> address`
+### `accounts.loadPrivateKey((string | null)? privateKey, string? alias) -> address`
 
 Sets the current account to the one corresponding to the provided private key and returns the loaded address.
 If no private key is provided, the user will be prompted to enter one.
 
-### `repl.loadKeystore(string name, string? password) -> address`
+### `accounts.listKeystores() -> string[]`
+
+Returns a list of all keystores in `~/.foundry/keystore/`.
+
+### `accounts.loadKeystore(string name, string? alias, string? password) -> address`
 
 Loads the keystore located in `~/.foundry/keystore/<name>` and sets the current account to the one corresponding to the keystore.
 If the password is not provided as the second argument, it will be prompted.
 
 See [Using a keystore](./account_management.md#using-a-keystore) for more information.
 
-### `repl.listLedgerWallets(uint256 count) -> address[]`
+### `accounts.listLedgerWallets(uint256 count) -> address[]`
 
 Returns a list of `count` wallets in the ledger.
 
-### `repl.loadLedger(uint256 index) -> address`
+### `accounts.loadLedger(uint256 index, string? alias) -> address`
 
 Sets the current account to the one at the given ledger index and returns the loaded address.
-The index should match the order of the wallets returned by `repl.listLedgerWallets`, starting at 0.
+The index should match the order of the wallets returned by `accounts.listLedgerWallets`, starting at 0.
 Only the ledger live derivation path is supported.
+
+### `accounts.alias(address account, string alias) -> null`
+
+Sets the alias for the given account.
+
+### `accounts.loaded -> Account[]`
+
+Returns a list of all loaded accounts.
+
+### `accounts.select(address account) | accounts.select(string alias) -> address`
+
+Sets the current account to the one at the given address or alias and returns the loaded address.
 
 ## `vm` functions
 
@@ -217,7 +234,6 @@ Can be a number, a tag (e.g. "latest" or "safe"), or a block hash.
 Mines 1 block with no arguments or otherwise `blocks` blocks.
 NOTE: This only works for Anvil RPC endpoints.
 
-
 ```javascript
 >> vm.mine(3)
 ```
@@ -230,7 +246,6 @@ NOTE: This only works for Anvil RPC endpoints. `block.timestamp` will be updated
 ```javascript
 >> vm.skip(3600)
 ```
-
 
 ## `console` functions
 
