@@ -4,7 +4,7 @@ Eclair can be used without any configuration but it is possible to configure it 
 Eclair will also load [Foundry's configuration](https://book.getfoundry.sh/reference/config/overview) which can be used for some settings such as the RPC URL and the Etherscan API key.
 Using the global configuration at `~/.foundry/foundry.toml` can be convenient for such settings.
 
-You can find a sample configuration file in the [config](https://github.com/eclair-cash/eclair/blob/master/config/foundry.toml) directory.
+A [sample Foundry configuration file](https://github.com/danhper/eclair/blob/main/config/foundry.toml) can be found in the [config](https://github.com/danhper/eclair/blob/main/config) directory.
 
 ## RPC URL
 
