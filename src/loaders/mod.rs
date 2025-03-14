@@ -2,6 +2,7 @@ mod brownie;
 pub mod etherscan;
 pub mod file;
 mod foundry;
+pub mod four_bytes;
 mod hardhat;
 mod loader;
 pub mod types;

@@ -84,23 +84,33 @@ where
     _run_decode(decodable.signature(), decoded)
 }
 
-fn abi_decode_data(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
-    let data = match args.first() {
-        Some(Value::Bytes(bytes)) => bytes,
-        _ => bail!("abi.decodeData expects bytes as argument"),
-    };
-    if data.len() < 4 {
-        bail!("abi.decodeData expects at least 4 bytes");
+fn abi_decode_data<'a>(
+    env: &'a mut Env,
+    _receiver: &'a Value,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        let data = match args.first() {
+            Some(Value::Bytes(bytes)) => bytes,
+            _ => bail!("abi.decodeData expects bytes as argument"),
+        };
+        if data.len() < 4 {
+            bail!("abi.decodeData expects at least 4 bytes");
+        }
+        let selector = alloy::primitives::FixedBytes::<4>::from_slice(&data[..4]);
+        let (signature, decoded) = if let Some(func) = env.get_function(&selector) {
+            (func.signature(), func.abi_decode_input(&data[4..], true)?)
+        } else if let Some(error) = env.get_error(&selector) {
+            (error.signature(), error.abi_decode_input(&data[4..], true)?)
+        } else if let Ok(func) = loaders::four_bytes::find_function(selector).await {
+            env.register_function(func.clone());
+            (func.signature(), func.abi_decode_input(&data[4..], true)?)
+        } else {
+            bail!("function or error with selector {} not found", selector);
+        };
+        _run_decode(signature, decoded)
     }
-    let selector = alloy::primitives::FixedBytes::<4>::from_slice(&data[..4]);
-    let (signature, decoded) = if let Some(func) = env.get_function(&selector) {
-        (func.signature(), func.abi_decode_input(&data[4..], true)?)
-    } else if let Some(error) = env.get_error(&selector) {
-        (error.signature(), error.abi_decode_input(&data[4..], true)?)
-    } else {
-        bail!("function or error with selector {} not found", selector);
-    };
-    _run_decode(signature, decoded)
+    .boxed()
 }
 
 fn abi_decode_calldata(_env: &mut Env, receiver: &Value, args: &[Value]) -> Result<Value> {
@@ -268,7 +278,7 @@ lazy_static! {
         SyncMethod::arc("encodePacked", abi_encode_packed_, vec![]);
     pub static ref ABI_DECODE: Arc<dyn FunctionDef> =
         SyncMethod::arc("decode", abi_decode_, vec![]);
-    pub static ref ABI_DECODE_DATA: Arc<dyn FunctionDef> = SyncMethod::arc(
+    pub static ref ABI_DECODE_DATA: Arc<dyn FunctionDef> = AsyncMethod::arc(
         "decodeData",
         abi_decode_data,
         vec![vec![FunctionParam::new("data", Type::Bytes)]]

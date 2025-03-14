@@ -14,6 +14,7 @@
     - `accounts.listKeystores` to list all keystores in `~/.foundry/keystore/`
     - `accounts.alias` to set an alias for an account
 - Add `abi.decodeMultisend` to decode Safe multisend transactions
+- Integrate 4byte.directory API to find function signatures by selector when decoding calldata
 
 ### Bug fixes
 
