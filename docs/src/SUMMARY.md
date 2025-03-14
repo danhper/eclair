@@ -13,6 +13,7 @@
 - [Account management](./account_management.md)
 - [Contracts management](./contracts_management.md)
 - [Interacting with contracts](./interacting_with_contracts.md)
+- [Decoding data](./decoding_data.md)
 - [Differences with Solidity](./differences_with_solidity.md)
 - [Comparison with other REPLs](./comparison_with_other_repls.md)
 

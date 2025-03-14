@@ -17,10 +17,10 @@ The behavior can be changed by using one of the following method on the returned
 * `encode`: ABI-encodes the function call
 
 ```javascript
->> dai = repl.fetchAbi("DAI", 0x6B175474E89094C44Da98b954EedeAC495271d0F)
+>> dai = abi.fetch("DAI", 0x6B175474E89094C44Da98b954EedeAC495271d0F)
 >> dai.balanceOf(0x4DEDf26112B3Ec8eC46e7E31EA5e123490B05B8B)
 49984400000000000000000000
->> repl.loadPrivateKey()
+>> vm.loadPrivateKey()
 >> dai.balanceOf.send(0x4DEDf26112B3Ec8eC46e7E31EA5e123490B05B8B)
 Transaction(0x6a2f1b956769d06257475d18ceeec9ee9487d91c97d36346a3cc84d568e36e5c)
 >> dai.balanceOf.encode(0x4DEDf26112B3Ec8eC46e7E31EA5e123490B05B8B)
