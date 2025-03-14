@@ -13,6 +13,7 @@
     - `accounts.select` to select a loaded account
     - `accounts.listKeystores` to list all keystores in `~/.foundry/keystore/`
     - `accounts.alias` to set an alias for an account
+- Add `abi.decodeMultisend` to decode Safe multisend transactions
 
 ### Bug fixes
 

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::{
     interpreter::{
         functions::{AsyncMethod, FunctionDef, FunctionParam, SyncMethod},
+        types::{HashableIndexMap, MULTISEND_TRANSACTION_TYPE},
         ContractInfo, Env, Type, Value,
     },
     loaders,
@@ -199,6 +200,67 @@ fn load_abi(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
     Ok(Value::Null)
 }
 
+fn abi_decode_multisend(args: &[Value]) -> Result<Value> {
+    let data = match args.first() {
+        Some(Value::Bytes(bytes)) => bytes,
+        _ => bail!("abi.decodeMultisend expects bytes as argument"),
+    };
+    let mut offset = 0;
+    let mut transactions = Vec::new();
+
+    while offset < data.len() {
+        // Need at least 85 bytes for the fixed portion (1 + 20 + 32 + 32)
+        if offset + 85 > data.len() {
+            bail!("Invalid multisend data: truncated fixed portion");
+        }
+
+        // Operation (1 byte)
+        let operation = data[offset];
+        offset += 1;
+
+        // To address (20 bytes)
+        let to = alloy::primitives::Address::from_slice(&data[offset..offset + 20]);
+        offset += 20;
+
+        // Value (32 bytes)
+        let value = alloy::primitives::U256::from_be_slice(&data[offset..offset + 32]);
+        offset += 32;
+
+        // Data length (32 bytes)
+        let data_length = alloy::primitives::U256::from_be_slice(&data[offset..offset + 32]);
+        offset += 32;
+
+        // Data
+        let data_len_usize = data_length.to::<usize>();
+        if offset + data_len_usize > data.len() {
+            bail!("Invalid multisend data: truncated data portion");
+        }
+        let call_data = data[offset..offset + data_len_usize].to_vec();
+        offset += data_len_usize;
+
+        // Build transaction tuple
+        let tx = Value::NamedTuple(
+            "MultisendTransaction".to_string(),
+            HashableIndexMap::from_iter([
+                ("operation".to_string(), Value::from(operation)),
+                ("to".to_string(), Value::Addr(to)),
+                ("value".to_string(), Value::Uint(value, 256)),
+                ("data".to_string(), Value::Bytes(call_data)),
+            ]),
+        );
+        transactions.push(tx);
+    }
+
+    Ok(Value::Array(
+        transactions,
+        Box::new(MULTISEND_TRANSACTION_TYPE.clone()),
+    ))
+}
+
+fn abi_decode_multisend_(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    abi_decode_multisend(args)
+}
+
 lazy_static! {
     pub static ref ABI_ENCODE: Arc<dyn FunctionDef> =
         SyncMethod::arc("encode", abi_encode_, vec![]);
@@ -244,11 +306,18 @@ lazy_static! {
             ]
         ]
     );
+    pub static ref ABI_DECODE_MULTISEND: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "decodeMultisend",
+        abi_decode_multisend_,
+        vec![vec![FunctionParam::new("data", Type::Bytes)]]
+    );
 }
 
 #[cfg(test)]
 mod tests {
-    use alloy::hex;
+    use std::str::FromStr;
+
+    use alloy::{hex, primitives::Address};
 
     use super::*;
 
@@ -380,5 +449,39 @@ mod tests {
         let expected_selector = "0x40c10f19";
         let actual_selector = first_elem.at(&1.into()).unwrap().to_string();
         assert_eq!(expected_selector, actual_selector);
+    }
+
+    #[test]
+    fn test_abi_decode_multisend() {
+        let bytes = hex::decode("0x008a5eb9a5b726583a213c7e4de2403d2dfd42c8a600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044e2a4853ae060499125866d3940796528a5be3e30632cf5c956aae07e9b72d89c96e053f100000000000000000000000000000000000000000000000006f05b59d3b20000008a5eb9a5b726583a213c7e4de2403d2dfd42c8a600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044e2a4853a2a55eed44296e96ac21384858860ec77b2c3e06f2d82cbe24bc29993e5a520110000000000000000000000000000000000000000000000000de0b6b3a7640000").unwrap();
+        let decoded = abi_decode_multisend(&[Value::Bytes(bytes.clone())]).unwrap();
+        let transactions = decoded.as_vec().unwrap();
+        assert_eq!(transactions.len(), 2);
+        let first_transaction = transactions.first().unwrap();
+        assert_eq!(
+            first_transaction.get_field("operation").unwrap(),
+            Value::from(0u8)
+        );
+        assert_eq!(
+            first_transaction.get_field("to").unwrap(),
+            Value::Addr(Address::from_str("0x8a5eb9a5b726583a213c7e4de2403d2dfd42c8a6").unwrap())
+        );
+        assert_eq!(
+            first_transaction.get_field("value").unwrap(),
+            Value::from(0u64)
+        );
+        let second_transaction = transactions.last().unwrap();
+        assert_eq!(
+            second_transaction.get_field("operation").unwrap(),
+            Value::from(0u8)
+        );
+        assert_eq!(
+            second_transaction.get_field("to").unwrap(),
+            Value::Addr(Address::from_str("0x8a5eb9a5b726583a213c7e4de2403d2dfd42c8a6").unwrap())
+        );
+        assert_eq!(
+            second_transaction.get_field("value").unwrap(),
+            Value::from(0u64)
+        );
     }
 }

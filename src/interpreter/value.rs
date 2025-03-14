@@ -260,6 +260,12 @@ impl From<i32> for Value {
     }
 }
 
+impl From<u8> for Value {
+    fn from(n: u8) -> Self {
+        Value::Uint(U256::from(n), 8)
+    }
+}
+
 impl From<u64> for Value {
     fn from(n: u64) -> Self {
         Value::Uint(U256::from(n), 256)
@@ -575,6 +581,13 @@ impl Value {
         match self {
             Value::NamedTuple(_, map) => Ok(map),
             _ => bail!("cannot convert {} to map", self.get_type()),
+        }
+    }
+
+    pub fn as_vec(&self) -> Result<&Vec<Value>> {
+        match self {
+            Value::Array(arr, _) => Ok(arr),
+            _ => bail!("cannot convert {} to array", self.get_type()),
         }
     }
 

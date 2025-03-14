@@ -633,6 +633,15 @@ lazy_static! {
             ("alias".to_string(), Type::String),
         ]),
     );
+    pub static ref MULTISEND_TRANSACTION_TYPE: Type = Type::NamedTuple(
+        "MultisendTransaction".to_string(),
+        HashableIndexMap::from_iter([
+            ("operation".to_string(), Type::Uint(8)),
+            ("to".to_string(), Type::Address),
+            ("value".to_string(), Type::Uint(256)),
+            ("data".to_string(), Type::Bytes),
+        ]),
+    );
 }
 
 #[cfg(test)]

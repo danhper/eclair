@@ -134,6 +134,10 @@ lazy_static! {
         abi_methods.insert("encodePacked".to_string(), abi::ABI_ENCODE_PACKED.clone());
         abi_methods.insert("decode".to_string(), abi::ABI_DECODE.clone());
         abi_methods.insert("decodeData".to_string(), abi::ABI_DECODE_DATA.clone());
+        abi_methods.insert(
+            "decodeMultisend".to_string(),
+            abi::ABI_DECODE_MULTISEND.clone(),
+        );
         abi_methods.insert("load".to_string(), abi::ABI_LOAD.clone());
         abi_methods.insert("fetch".to_string(), abi::ABI_FETCH.clone());
         m.insert(NonParametricType::Abi, abi_methods);
