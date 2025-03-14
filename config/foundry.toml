@@ -1,0 +1,19 @@
+[rpc_endpoints]
+mainnet = "https://eth.llamarpc.com"
+optimism = "https://optimism.llamarpc.com"
+arbitrum = "https://arbitrum.llamarpc.com"
+base = "https://base.llamarpc.com"
+avalanche = "https://avalanche.public-rpc.com"
+polygon = "https://polygon.llamarpc.com"
+gnosis = "https://rpc.gnosischain.com"
+sei = "https://evm-rpc.sei-apis.com"
+
+[etherscan]
+# mainnet = { key = "" }
+# optimism = { key = "" }
+# arbitrum = { key = "" }
+# base = { key = "" }
+# polygon = { key = "" }
+# gnosis = { key = "" }
+# avalanche = { key = "" }
+# sei = { key = "", url = "https://seitrace.com/pacific-1/api", chain = 1329 }
