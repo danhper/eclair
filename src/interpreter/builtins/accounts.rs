@@ -189,6 +189,7 @@ lazy_static! {
         vec![
             vec![],
             vec![FunctionParam::new("privateKey", Type::String)],
+            vec![FunctionParam::new("privateKey", Type::FixBytes(32))],
             vec![
                 FunctionParam::new("privateKey", Type::Null),
                 FunctionParam::new("alias", Type::String)
