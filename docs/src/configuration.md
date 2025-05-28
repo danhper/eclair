@@ -30,22 +30,12 @@ This then allows to use `vm.rpc("mainnet")` or `vm.rpc("optimism")` to connect t
 
 ## Etherscan API Key
 
-Eclair requires an Etherscan API key to fetch contract ABIs and interact with the Etherscan API.
-The API key can be set using the `ETHERSCAN_API_KEY` environment variable, which will be available for all chains.
-For a per-chain configuration, the following environment variables can be used:
-
-- Ethereum: `ETHERSCAN_API_KEY`
-- Optimism: `OP_ETHERSCAN_API_KEY`
-- Gnosis Chain: `GNOSISSCAN_API_KEY`
-- Polygon: `POLYGONSCAN_API_KEY`
-- Polygon zkEVM: `POLYGONSCAN_ZKEVM_API_KEY`
-- Base: `BASESCAN_API_KEY`
-- Arbitrum: `ARBISCAN_API_KEY`
-- Sepolia: `SEPOLIA_ETHERSCAN_API_KEY`
+Eclair requires an Etherscan API key to fetch contract ABIs and interact with the Etherscan API V2.
+The API key can be set using the `ETHERSCAN_API_KEY` environment variable.
 
 ### Using Foundry configuration file
 
-The [`etherscan` section](https://book.getfoundry.sh/reference/config/etherscan) of `foundry.toml` can be used to set the API key for different chains.
+The [`etherscan` section](https://book.getfoundry.sh/reference/config/etherscan) of `foundry.toml` can be used to set the API key.
 
 Here is a sample configuration:
 
@@ -53,7 +43,8 @@ Here is a sample configuration:
 # ~/.foundry/foundry.toml
 [etherscan]
 mainnet = { key = "ETHERSCAN_API_KEY" }
-optimism = { key = "OP_ETHERSCAN_API_KEY" }
+# Chain not covered by Etherscan API V2
+sei = { key = "SEITRACE_API_KEY", url = "https://seitrace.com/pacific-1/api", chain = 1329 }
 ```
 
 

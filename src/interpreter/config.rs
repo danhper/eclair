@@ -47,5 +47,13 @@ impl Config {
             .cloned()
             .ok_or(anyhow!("missing etherscan config"))
             .or_else(|_| EtherscanConfig::default_for_chain(chain_id))
+            .or_else(|_| {
+                let mainnet_key = self
+                    .etherscan
+                    .get(&Chain::mainnet())
+                    .map(|c| c.api_key.clone())
+                    .ok_or(anyhow!("missing mainnet etherscan key"))?;
+                Ok(EtherscanConfig::with_key(chain_id, mainnet_key))
+            })
     }
 }

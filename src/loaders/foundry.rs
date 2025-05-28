@@ -37,7 +37,7 @@ impl ProjectLoader for FoundryProjectLoader {
 
     fn should_exclude_file(&self, path: &Path) -> bool {
         path.to_str()
-            .map_or(true, |f| f.contains(".s.sol") || f.contains(".t.sol"))
+            .is_none_or(|f| f.contains(".s.sol") || f.contains(".t.sol"))
     }
 
     fn is_valid(&self, directory: &Path) -> bool {
