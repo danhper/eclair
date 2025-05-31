@@ -1,5 +1,11 @@
 # Changelog
 
+## Not released
+
+### Bug fixes
+
+- Fix conversion from `bytesN` to `bytes`
+
 ## v0.1.5 (2025-05-28)
 
 ### Features
