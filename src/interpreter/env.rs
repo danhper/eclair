@@ -148,6 +148,10 @@ impl Env {
         self.block_id
     }
 
+    pub async fn get_block_number(&self) -> Result<u64> {
+        self.provider.get_block_number().await.map_err(Into::into)
+    }
+
     pub fn get_provider(&self) -> EclairProvider {
         self.provider.clone()
     }
@@ -160,8 +164,14 @@ impl Env {
         self.provider.get_chain_id().await.map_err(Into::into)
     }
 
-    pub fn fork(&mut self, url: &str) -> Result<()> {
-        let anvil = Anvil::new().arg("--steps-tracing").fork(url).try_spawn()?;
+    pub async fn fork(&mut self, url: &str, block_num: Option<u64>) -> Result<()> {
+        let anvil_setup = Anvil::new().arg("--steps-tracing").fork(url);
+        let anvil = if let Some(block_num) = block_num {
+            anvil_setup.fork_block_number(block_num)
+        } else {
+            anvil_setup.fork_block_number(self.get_block_number().await?)
+        }
+        .try_spawn()?;
         let endpoint = anvil.endpoint();
         self.set_provider_url(endpoint.as_str())?;
         self.anvil = Some(anvil);

@@ -5,6 +5,7 @@
 ### Bug fixes
 
 - Fix conversion from `bytesN` to `bytes`
+- Fix `traceCall` not working with `block` option
 
 ## v0.1.5 (2025-05-28)
 

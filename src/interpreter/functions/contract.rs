@@ -108,7 +108,7 @@ impl Hash for CallOptions {
 impl std::fmt::Display for CallOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(v) = &self.value {
-            write!(f, "value: {}", v)
+            write!(f, "value: {v}")
         } else {
             write!(f, "")
         }
@@ -372,11 +372,20 @@ where
         tx_req = tx_req.with_from(acc);
     }
 
+    let block_tag = opts.block.unwrap_or(env.block());
+    let block = env
+        .get_provider()
+        .get_block(block_tag, BlockTransactionsKind::Hashes)
+        .await?
+        .ok_or(anyhow!("could not get block {:?}", block_tag))?;
+    let block_num = block.header.number.ok_or(anyhow!("no block number"))?;
+    let block_num_tag = BlockNumberOrTag::Number(block_num);
+
     let (provider, previous_url) = if env.is_fork() {
         (env.get_provider(), None)
     } else {
         let url = env.get_rpc_url();
-        env.fork(url.as_str())?;
+        env.fork(url.as_str(), Some(block_num)).await?;
         (env.get_provider(), Some(url))
     };
 
@@ -386,15 +395,10 @@ where
         geth::GethDebugBuiltInTracerType::CallTracer,
     ));
     options = options.with_tracing_options(tracing_options);
-    let block_tag = env.block();
-    let block = provider
-        .get_block(block_tag, BlockTransactionsKind::Hashes)
-        .await?
-        .ok_or(anyhow!("could not get block {:?}", block_tag))?;
-    let block_num =
-        BlockNumberOrTag::Number(block.header.number.ok_or(anyhow!("no block number"))?);
 
-    let maybe_tx = provider.debug_trace_call(tx_req, block_num, options).await;
+    let maybe_tx = provider
+        .debug_trace_call(tx_req, block_num_tag, options)
+        .await;
     if let Some(url) = previous_url {
         env.set_provider_url(url.as_str())?;
     }

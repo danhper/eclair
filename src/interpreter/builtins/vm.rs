@@ -48,14 +48,21 @@ fn rpc(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
     }
 }
 
-fn fork(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
-    let url = match args {
-        [Value::Str(url)] => url.clone(),
-        [] => env.get_rpc_url(),
-        _ => bail!("fork: invalid arguments"),
-    };
-    env.fork(&url)?;
-    Ok(Value::Str(env.get_rpc_url()))
+fn fork<'a>(
+    env: &'a mut Env,
+    _receiver: &'a Value,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        let url = match args {
+            [Value::Str(url)] => url.clone(),
+            [] => env.get_rpc_url(),
+            _ => bail!("fork: invalid arguments"),
+        };
+        env.fork(&url, None).await?;
+        Ok(Value::Str(env.get_rpc_url()))
+    }
+    .boxed()
 }
 
 fn set_balance<'a>(
@@ -141,7 +148,7 @@ lazy_static! {
         rpc,
         vec![vec![], vec![FunctionParam::new("url", Type::String)]]
     );
-    pub static ref VM_FORK: Arc<dyn FunctionDef> = SyncMethod::arc(
+    pub static ref VM_FORK: Arc<dyn FunctionDef> = AsyncMethod::arc(
         "fork",
         fork,
         vec![vec![], vec![FunctionParam::new("url", Type::String)]]
