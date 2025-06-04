@@ -177,6 +177,7 @@ lazy_static! {
         vm_methods.insert("mine".to_string(), vm::VM_MINE.clone());
         vm_methods.insert("fork".to_string(), vm::VM_FORK.clone());
         vm_methods.insert("rpc".to_string(), vm::VM_RPC.clone());
+        vm_methods.insert("getEnv".to_string(), vm::VM_ENV.clone());
         vm_methods.insert("block".to_string(), vm::VM_BLOCK.clone());
         vm_methods.insert("connected".to_string(), vm::VM_IS_CONNECTED.clone());
         m.insert(NonParametricType::Vm, vm_methods);

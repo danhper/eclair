@@ -224,6 +224,15 @@ NOTE: This only works for Anvil RPC endpoints. `block.timestamp` will be updated
 >> vm.skip(3600)
 ```
 
+### `vm.getEnv(string key) -> string`
+
+Returns the value of the environment variable with the given key.
+
+```javascript
+>> vm.getEnv("HOME")
+"/home/user"
+```
+
 ## `console` functions
 
 ### `console.log(any... value) -> null`

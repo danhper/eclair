@@ -124,6 +124,14 @@ fn mine<'a>(
     .boxed()
 }
 
+fn get_env_var(_env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
+    let key = match args {
+        [Value::Str(key)] => key.clone(),
+        _ => bail!("getEnvVar: invalid arguments"),
+    };
+    Ok(Value::Str(std::env::var(&key)?))
+}
+
 fn block(env: &mut Env, _receiver: &Value, args: &[Value]) -> Result<Value> {
     match args {
         [] => Ok(env.block().into()),
@@ -183,4 +191,9 @@ lazy_static! {
     );
     pub static ref VM_IS_CONNECTED: Arc<dyn FunctionDef> =
         AsyncProperty::arc("connected", is_connected);
+    pub static ref VM_ENV: Arc<dyn FunctionDef> = SyncMethod::arc(
+        "getEnv",
+        get_env_var,
+        vec![vec![FunctionParam::new("key", Type::String)]]
+    );
 }

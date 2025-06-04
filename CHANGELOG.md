@@ -1,5 +1,11 @@
 # Changelog
 
+## Not released
+
+### Features
+
+- Add `vm.getEnv` to get environment variables
+
 ## v0.1.6 (2025-06-03)
 
 ### Bug fixes
