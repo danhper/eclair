@@ -10,6 +10,7 @@ mod address;
 mod block;
 mod concat;
 mod console;
+mod contract_function;
 mod event;
 mod events;
 mod format;
@@ -164,6 +165,16 @@ lazy_static! {
         let mut event_methods = HashMap::new();
         event_methods.insert("selector".to_string(), event::EVENT_SELECTOR.clone());
         m.insert(NonParametricType::Event, event_methods);
+
+        let mut contract_function_methods = HashMap::new();
+        contract_function_methods.insert(
+            "selector".to_string(),
+            contract_function::CONTRACT_FUNCTION_SELECTOR.clone(),
+        );
+        m.insert(
+            NonParametricType::ContractFunction,
+            contract_function_methods,
+        );
 
         let mut events_methods = HashMap::new();
         events_methods.insert("fetch".to_string(), events::FETCH_EVENTS.clone());

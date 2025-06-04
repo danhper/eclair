@@ -103,6 +103,9 @@ impl ContractInfo {
         if let Some(event) = self.1.events.get(name).and_then(|v| v.first()) {
             return Ok(Value::TypeObject(Type::Event(event.clone())));
         }
+        if let Some(func) = self.1.functions.get(name).and_then(|v| v.first()) {
+            return Ok(Value::TypeObject(Type::ContractFunction(func.clone())));
+        }
         let func = STATIC_METHODS
             .get(&NonParametricType::Contract)
             .unwrap()
@@ -134,6 +137,7 @@ pub enum NonParametricType {
     Mapping,
     Contract,
     Event,
+    ContractFunction,
     Transaction,
     Function,
     Repl,
@@ -166,6 +170,7 @@ pub enum Type {
     Mapping(Box<Type>, Box<Type>),
     Contract(ContractInfo),
     Event(alloy::json_abi::Event),
+    ContractFunction(alloy::json_abi::Function),
     Transaction,
     Function,
     Accounts,
@@ -205,6 +210,7 @@ impl Display for Type {
             Type::Mapping(k, v) => write!(f, "mapping({} => {})", k, v),
             Type::Contract(ContractInfo(name, _)) => write!(f, "{}", name),
             Type::Event(event) => write!(f, "{}", event.full_signature()),
+            Type::ContractFunction(func) => write!(f, "{}", func.full_signature()),
             Type::Function => write!(f, "function"),
 
             Type::Transaction => write!(f, "Transaction"),
@@ -242,6 +248,7 @@ impl<T: AsRef<Type>> From<T> for NonParametricType {
             Type::Mapping(..) => NonParametricType::Mapping,
             Type::Contract(..) => NonParametricType::Contract,
             Type::Event(..) => NonParametricType::Event,
+            Type::ContractFunction(..) => NonParametricType::ContractFunction,
             Type::Function => NonParametricType::Function,
             Type::Accounts => NonParametricType::Accounts,
             Type::Transaction => NonParametricType::Transaction,
@@ -565,6 +572,7 @@ impl Type {
 
                 if let Type::Contract(ContractInfo(_, abi)) = type_.as_ref() {
                     static_methods.extend(abi.events.keys().map(|s| s.to_string()));
+                    static_methods.extend(abi.functions.keys().map(|s| s.to_string()));
                 }
 
                 static_methods
