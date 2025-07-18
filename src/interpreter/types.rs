@@ -478,7 +478,10 @@ impl Type {
                 bail!("cannot only cast cast zero address from int")
             }
             (Type::Address, Value::FixBytes(v, _)) => {
-                Ok(Value::Addr(Address::from_slice(&v.0[12..])))
+                if v.0.len() < 20 {
+                    bail!("address is too short")
+                }
+                Ok(Value::Addr(Address::from_slice(&v.0[..20])))
             }
             (Type::String, Value::Bytes(v)) => {
                 Ok(Value::Str(String::from_utf8_lossy(v).to_string()))

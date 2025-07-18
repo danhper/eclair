@@ -5,6 +5,7 @@
 ### Features
 
 - Add `vm.getEnv` to get environment variables
+- Fix `bytes` to `address` casting
 
 ## v0.1.6 (2025-06-03)
 
