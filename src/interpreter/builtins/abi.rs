@@ -271,6 +271,40 @@ fn abi_decode_multisend_(_env: &mut Env, _receiver: &Value, args: &[Value]) -> R
     abi_decode_multisend(args)
 }
 
+fn abi_get_signature<'a>(
+    env: &'a mut Env,
+    _receiver: &'a Value,
+    args: &'a [Value],
+) -> BoxFuture<'a, Result<Value>> {
+    async move {
+        let selector = match args.first() {
+            Some(Value::FixBytes(bytes, 4)) => {
+                alloy::primitives::FixedBytes::<4>::from_slice(&bytes.0[..4])
+            }
+            _ => bail!("abi.getSignature expects bytes4 as argument"),
+        };
+
+        // First check if we have the function registered locally
+        if let Some(func) = env.get_function(&selector) {
+            return Ok(Value::Str(func.signature()));
+        }
+
+        // Then check if we have the error registered locally
+        if let Some(error) = env.get_error(&selector) {
+            return Ok(Value::Str(error.signature()));
+        }
+
+        // Finally try to look it up from 4byte.directory
+        if let Ok(func) = loaders::four_bytes::find_function(selector).await {
+            env.register_function(func.clone());
+            Ok(Value::Str(func.signature()))
+        } else {
+            bail!("function or error with selector {} not found", selector);
+        }
+    }
+    .boxed()
+}
+
 lazy_static! {
     pub static ref ABI_ENCODE: Arc<dyn FunctionDef> =
         SyncMethod::arc("encode", abi_encode_, vec![]);
@@ -292,6 +326,11 @@ lazy_static! {
         "decode_error",
         abi_decode_error,
         vec![vec![FunctionParam::new("data", Type::Bytes)]]
+    );
+    pub static ref ABI_GET_SIGNATURE: Arc<dyn FunctionDef> = AsyncMethod::arc(
+        "getSignature",
+        abi_get_signature,
+        vec![vec![FunctionParam::new("selector", Type::FixBytes(4))]]
     );
     pub static ref ABI_FETCH: Arc<dyn FunctionDef> = AsyncMethod::arc(
         "fetch",
@@ -328,6 +367,8 @@ mod tests {
     use std::str::FromStr;
 
     use alloy::{hex, primitives::Address};
+
+    use crate::interpreter::Config;
 
     use super::*;
 
@@ -493,5 +534,24 @@ mod tests {
             second_transaction.get_field("value").unwrap(),
             Value::from(0u64)
         );
+    }
+
+    #[tokio::test]
+    async fn test_abi_get_signature() {
+        let foundry_conf = foundry_config::load_config();
+        let config = Config::new(None, false, foundry_conf);
+        let mut env = Env::new(config);
+
+        // Test with a known function selector (transfer(address,uint256))
+        let transfer_selector = hex::decode("0xa9059cbb").unwrap();
+        let mut selector_bytes = [0u8; 32];
+        selector_bytes[..4].copy_from_slice(&transfer_selector);
+        let selector_value =
+            Value::FixBytes(alloy::primitives::B256::from_slice(&selector_bytes), 4);
+
+        let result = abi_get_signature(&mut env, &Value::Null, &[selector_value])
+            .await
+            .unwrap();
+        assert_eq!(result, Value::Str("transfer(address,uint256)".to_string()));
     }
 }

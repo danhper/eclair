@@ -139,6 +139,7 @@ lazy_static! {
             "decodeMultisend".to_string(),
             abi::ABI_DECODE_MULTISEND.clone(),
         );
+        abi_methods.insert("getSignature".to_string(), abi::ABI_GET_SIGNATURE.clone());
         abi_methods.insert("load".to_string(), abi::ABI_LOAD.clone());
         abi_methods.insert("fetch".to_string(), abi::ABI_FETCH.clone());
         m.insert(NonParametricType::Abi, abi_methods);

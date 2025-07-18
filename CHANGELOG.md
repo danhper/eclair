@@ -5,6 +5,10 @@
 ### Features
 
 - Add `vm.getEnv` to get environment variables
+- Add `abi.getSignature` to get the signature of a function or error by its selector
+
+### Bug fixes
+
 - Fix `bytes` to `address` casting
 
 ## v0.1.6 (2025-06-03)
