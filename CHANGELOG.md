@@ -10,6 +10,7 @@
 ### Bug fixes
 
 - Fix `bytes` to `address` casting
+- Fix Etherscan API V2 support
 
 ## v0.1.6 (2025-06-03)
 

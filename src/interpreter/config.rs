@@ -28,7 +28,7 @@ impl Config {
             .resolved()
             .iter()
             .filter_map(|(_k, v)| v.clone().ok().and_then(|c| c.chain.map(|cc| (cc, c))))
-            .map(|(k, v)| (k, EtherscanConfig::new(v.key, v.api_url)))
+            .map(|(k, v)| (k, EtherscanConfig::with_key(k.id(), v.key)))
             .collect();
         let rpc_url = rpc_url
             .or(rpc_endpoints.get("mainnet").cloned())

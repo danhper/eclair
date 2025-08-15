@@ -11,7 +11,7 @@ pub struct EtherscanConfig {
 }
 
 impl EtherscanConfig {
-    pub fn new(api_key: String, base_url: String) -> Self {
+    fn new(api_key: String, base_url: String) -> Self {
         Self { api_key, base_url }
     }
 
