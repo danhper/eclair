@@ -7,6 +7,7 @@ use alloy::primitives::{I256, U256};
 use anyhow::{anyhow, bail, Ok, Result};
 use futures::future::{BoxFuture, FutureExt};
 use indexmap::IndexMap;
+use solang_parser::pt as parser;
 use solang_parser::pt::{ContractPart, Expression, Statement};
 
 use crate::loaders::types::Project;
@@ -599,13 +600,38 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
                 }
             }
 
-            Expression::Type(_, type_) => Ok(Value::TypeObject(Type::try_from(type_)?)),
+            Expression::Type(_, type_) => Ok(Value::TypeObject(_resolve_parser_type(env, &type_)?)),
             Expression::Parenthesis(_, expr) => evaluate_expression(env, expr).await,
 
             v => bail!("{} not supported", v),
         }
     }
     .boxed()
+}
+
+fn _resolve_type_expr(env: &Env, expr: &Expression) -> Result<Type> {
+    match expr {
+        Expression::Type(_, inner) => _resolve_parser_type(env, inner),
+        Expression::Variable(id) => {
+            let name = id.to_string();
+            env.get_type(&name)
+                .cloned()
+                .ok_or_else(|| anyhow!("{} is not a known type", name))
+        }
+        v => bail!("unsupported type expression {}", v),
+    }
+}
+
+fn _resolve_parser_type(env: &Env, type_: &parser::Type) -> Result<Type> {
+    match type_ {
+        parser::Type::Mapping { key, value, .. } => {
+            let k = _resolve_type_expr(env, key.as_ref())?;
+            let v = _resolve_type_expr(env, value.as_ref())?;
+            Ok(Type::Mapping(Box::new(k), Box::new(v)))
+        }
+        // Fallback to existing conversion for non-mapping types
+        _ => Type::try_from(type_.clone()),
+    }
 }
 
 async fn _equals(env: &mut Env, lexpr: Box<Expression>, rexpr: Box<Expression>) -> Result<bool> {

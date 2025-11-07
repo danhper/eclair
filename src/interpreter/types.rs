@@ -335,7 +335,7 @@ impl TryFrom<parser::Type> for Type {
                     bail!("unsupported mapping key {} and value {}", key, value)
                 }
             },
-            parser::Type::Payable { .. } => bail!("payable type is not supported yet"),
+            parser::Type::Payable => bail!("payable type is not supported yet"),
         }
     }
 }

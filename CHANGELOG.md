@@ -6,6 +6,7 @@
 
 - Add `vm.getEnv` to get environment variables
 - Add `abi.getSignature` to get the signature of a function or error by its selector
+- Add support for mapping to contract types
 
 ### Bug fixes
 
