@@ -1,6 +1,6 @@
 # Changelog
 
-## Not released
+## v0.1.7 (2025-11-10)
 
 ### Features
 
