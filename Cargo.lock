@@ -2465,7 +2465,7 @@ dependencies = [
 
 [[package]]
 name = "eclair"
-version = "0.1.7"
+version = "0.1.8-dev"
 dependencies = [
  "alloy",
  "anyhow",
