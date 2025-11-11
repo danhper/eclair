@@ -22,7 +22,7 @@ fn wait_for_receipt<'a>(
             _ => bail!("wait_for_receipt function expects a transaction as argument"),
         };
         let provider = env.get_provider();
-        let tx = PendingTransactionBuilder::new(provider.root(), tx);
+        let tx = PendingTransactionBuilder::new(provider.root().clone(), tx);
         if args.len() > 1 {
             bail!("get_receipt function expects at most one argument")
         }

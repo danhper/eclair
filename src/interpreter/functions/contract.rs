@@ -9,9 +9,8 @@ use alloy::{
     providers::{ext::DebugApi, Provider},
     rpc::types::{
         trace::geth::{self, GethDebugTracingCallOptions},
-        BlockTransactionsKind, TransactionInput, TransactionRequest,
+        TransactionInput, TransactionRequest,
     },
-    transports::Transport,
 };
 use anyhow::{anyhow, bail, Result};
 use futures::{future::BoxFuture, FutureExt};
@@ -64,7 +63,7 @@ pub struct CallOptions {
     value: Option<U256>,
     block: Option<BlockId>,
     from: Option<Address>,
-    gas_limit: Option<u128>,
+    gas_limit: Option<u64>,
     max_fee: Option<u128>,
     priority_fee: Option<u128>,
     gas_price: Option<u128>,
@@ -125,7 +124,7 @@ impl TryFrom<&HashableIndexMap<String, Value>> for CallOptions {
                 "value" => opts.value = Some(v.as_u256()?),
                 "block" => opts.block = Some(v.as_block_id()?),
                 "from" => opts.from = Some(v.as_address()?),
-                "gasLimit" => opts.gas_limit = Some(v.as_u128()?),
+                "gasLimit" => opts.gas_limit = Some(v.as_u64()?),
                 "gasPrice" => opts.gas_price = Some(v.as_u128()?),
                 "maxFee" => opts.max_fee = Some(v.as_u128()?),
                 "priorityFee" => opts.priority_fee = Some(v.as_u128()?),
@@ -252,14 +251,13 @@ impl FunctionDef for ContractFunction {
     }
 }
 
-fn _build_transaction<T, P, N>(
+fn _build_transaction<P, N>(
     addr: &Address,
-    func: &CallBuilder<T, P, alloy::json_abi::Function, N>,
+    func: &CallBuilder<P, alloy::json_abi::Function, N>,
     opts: &CallOptions,
 ) -> Result<TransactionRequest>
 where
-    T: Transport + Clone,
-    P: Provider<T, N>,
+    P: Provider<N>,
     N: Network,
 {
     let data = func.calldata();
@@ -276,15 +274,14 @@ where
     Ok(tx_req)
 }
 
-async fn _execute_contract_send<T, P, N>(
+async fn _execute_contract_send<P, N>(
     addr: &Address,
-    func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    func: CallBuilder<P, alloy::json_abi::Function, N>,
     opts: &CallOptions,
     env: &Env,
 ) -> Result<Value>
 where
-    T: Transport + Clone,
-    P: Provider<T, N>,
+    P: Provider<N>,
     N: Network,
 {
     opts.validate_send()?;
@@ -308,16 +305,15 @@ where
     Ok(Value::Transaction(*tx.tx_hash()))
 }
 
-fn _decode_output<T, P, N>(
+fn _decode_output<P, N>(
     return_bytes: Bytes,
-    func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    func: CallBuilder<P, alloy::json_abi::Function, N>,
 ) -> Result<Value>
 where
-    T: Transport + Clone,
-    P: Provider<T, N>,
+    P: Provider<N>,
     N: Network,
 {
-    let result = func.decode_output(return_bytes, true)?;
+    let result = func.decode_output(return_bytes)?;
     let return_values = result
         .into_iter()
         .map(Value::try_from)
@@ -329,15 +325,14 @@ where
     }
 }
 
-async fn _execute_contract_call<T, P, N>(
+async fn _execute_contract_call<P, N>(
     addr: &Address,
-    func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    func: CallBuilder<P, alloy::json_abi::Function, N>,
     opts: &CallOptions,
     env: &Env,
 ) -> Result<Value>
 where
-    T: Transport + Clone,
-    P: Provider<T, N>,
+    P: Provider<N>,
     N: Network,
 {
     opts.validate_call()?;
@@ -347,19 +342,18 @@ where
     }
     let block = opts.block.unwrap_or(env.block());
     let provider = env.get_provider();
-    let return_bytes = provider.call(&tx_req).block(block).await?;
+    let return_bytes = provider.call(tx_req).block(block).await?;
     _decode_output(return_bytes, func)
 }
 
-async fn _execute_contract_trace_call<T, P, N>(
+async fn _execute_contract_trace_call<P, N>(
     addr: &Address,
-    func: CallBuilder<T, P, alloy::json_abi::Function, N>,
+    func: CallBuilder<P, alloy::json_abi::Function, N>,
     opts: &CallOptions,
     env: &mut Env,
 ) -> Result<Value>
 where
-    T: Transport + Clone,
-    P: Provider<T, N>,
+    P: Provider<N>,
     N: Network,
 {
     let data = func.calldata();
@@ -375,10 +369,10 @@ where
     let block_tag = opts.block.unwrap_or(env.block());
     let block = env
         .get_provider()
-        .get_block(block_tag, BlockTransactionsKind::Hashes)
+        .get_block(block_tag)
         .await?
         .ok_or(anyhow!("could not get block {:?}", block_tag))?;
-    let block_num = block.header.number.ok_or(anyhow!("no block number"))?;
+    let block_num = block.header.number;
     let block_num_tag = BlockNumberOrTag::Number(block_num);
 
     let (provider, previous_url) = if env.is_fork() {
@@ -397,7 +391,7 @@ where
     options = options.with_tracing_options(tracing_options);
 
     let maybe_tx = provider
-        .debug_trace_call(tx_req, block_num_tag, options)
+        .debug_trace_call(tx_req, BlockId::Number(block_num_tag), options)
         .await;
     if let Some(url) = previous_url {
         env.set_provider_url(url.as_str())?;

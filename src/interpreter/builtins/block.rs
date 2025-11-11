@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy::{eips::BlockId, providers::Provider, rpc::types::BlockTransactionsKind};
+use alloy::{eips::BlockId, providers::Provider};
 use anyhow::{anyhow, Ok, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
@@ -26,7 +26,7 @@ fn get_timestamp<'a>(env: &'a Env, _arg: &'a Value) -> BoxFuture<'a, Result<Valu
     async move {
         let latest_block = env
             .get_provider()
-            .get_block(BlockId::latest(), BlockTransactionsKind::Hashes)
+            .get_block(BlockId::latest())
             .await?
             .ok_or(anyhow!("latest block not found"))?;
         Ok(latest_block.header.timestamp.into())

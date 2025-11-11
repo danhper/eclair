@@ -49,6 +49,7 @@ pub(crate) fn create_editor(env: Arc<Mutex<Env>>) -> Result<Editor<MyHelper, Fil
 
 impl Highlighter for MyHelper {
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> std::borrow::Cow<'l, str> {
-        chisel::solidity_helper::SolidityHelper::highlight(line)
+        // chisel::solidity_helper::SolidityHelper::highlight(line)
+        std::borrow::Cow::Borrowed(line)
     }
 }

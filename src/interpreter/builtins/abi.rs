@@ -80,7 +80,7 @@ where
             selector,
             name
         ))?;
-    let decoded = decodable.abi_decode_input(&data[4..], true)?;
+    let decoded = decodable.abi_decode_input(&data[4..])?;
     _run_decode(decodable.signature(), decoded)
 }
 
@@ -99,12 +99,12 @@ fn abi_decode_data<'a>(
         }
         let selector = alloy::primitives::FixedBytes::<4>::from_slice(&data[..4]);
         let (signature, decoded) = if let Some(func) = env.get_function(&selector) {
-            (func.signature(), func.abi_decode_input(&data[4..], true)?)
+            (func.signature(), func.abi_decode_input(&data[4..])?)
         } else if let Some(error) = env.get_error(&selector) {
-            (error.signature(), error.abi_decode_input(&data[4..], true)?)
+            (error.signature(), error.abi_decode_input(&data[4..])?)
         } else if let Ok(func) = loaders::four_bytes::find_function(selector).await {
             env.register_function(func.clone());
-            (func.signature(), func.abi_decode_input(&data[4..], true)?)
+            (func.signature(), func.abi_decode_input(&data[4..])?)
         } else {
             bail!("function or error with selector {} not found", selector);
         };
@@ -538,7 +538,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_abi_get_signature() {
-        let foundry_conf = foundry_config::load_config();
+        let foundry_conf = foundry_config::load_config().unwrap();
         let config = Config::new(None, false, foundry_conf);
         let mut env = Env::new(config);
 

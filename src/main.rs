@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
-use foundry_cli::utils;
 
 use eclair::interpreter::Config;
 use eclair::interpreter::Env;
@@ -11,7 +10,7 @@ use tokio::sync::Mutex;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    utils::load_dotenv();
+    foundry_cli::utils::load_dotenv();
 
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
@@ -22,7 +21,7 @@ async fn main() -> Result<()> {
         Err(e) => return Err(e.into()),
     };
 
-    let foundry_conf = foundry_config::load_config();
+    let foundry_conf = foundry_config::load_config().map_err(anyhow::Error::msg)?;
 
     let config = Config::new(cli.rpc_url.clone(), cli.debug, foundry_conf);
     let env = Arc::new(Mutex::new(Env::new(config)));
