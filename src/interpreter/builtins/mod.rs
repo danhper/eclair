@@ -19,8 +19,8 @@ mod iterable;
 mod json;
 mod misc;
 mod numeric;
-mod receipt;
 mod repl;
+mod transaction;
 mod vm;
 
 use crate::interpreter::functions::Function;
@@ -112,7 +112,13 @@ lazy_static! {
 
         let mut transaction_methods = HashMap::new();
         transaction_methods.insert("format".to_string(), format::NON_NUM_FORMAT.clone());
-        transaction_methods.insert("getReceipt".to_string(), receipt::TX_GET_RECEIPT.clone());
+        transaction_methods.insert(
+            "getReceipt".to_string(),
+            transaction::TX_GET_RECEIPT.clone(),
+        );
+        transaction_methods.insert("input".to_string(), transaction::TX_GET_INPUT_DATA.clone());
+        transaction_methods.insert("from".to_string(), transaction::TX_GET_FROM.clone());
+        transaction_methods.insert("to".to_string(), transaction::TX_GET_TO.clone());
         m.insert(NonParametricType::Transaction, transaction_methods);
 
         let mut mapping_methods = HashMap::new();

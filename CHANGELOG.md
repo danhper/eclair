@@ -1,6 +1,15 @@
 # Changelog
 
-## Not released
+## v0.1.8 (2025-11-14)
+
+### Features
+
+- Add `tx.from`, `tx.to`, and `tx.input` properties to access transaction details
+
+### Other changes
+
+- Upgrade to alloy 1.1.0
+- Upgrade to Foundry 1.4.4
 
 ## v0.1.7 (2025-11-10)
 

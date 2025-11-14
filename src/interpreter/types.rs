@@ -518,6 +518,7 @@ impl Type {
                 Ok(Value::FixBytes(bytes, 20))
             }
             (Type::Transaction, Value::FixBytes(v, 32)) => Ok(Value::Transaction(*v)),
+            (Type::FixBytes(32), Value::Transaction(t)) => Ok(Value::FixBytes(*t, 32)),
             (Type::Bytes, Value::Str(v)) => Ok(Value::Bytes(v.as_bytes().to_vec())),
             (type_ @ Type::FixBytes(_), Value::Str(_)) => type_.cast(&Type::Bytes.cast(value)?),
             (Type::Bytes, Value::FixBytes(v, s)) => Ok(Value::Bytes(v.0[..*s].to_vec())),

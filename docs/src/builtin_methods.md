@@ -9,7 +9,6 @@ These methods are available on all types.
 Returns a human-readable (when possible) representation of the value.
 See the [format function](./builtin_functions.md#formatany-value-uint8-decimals-uint8-precision---string) for more details.
 
-
 ## `string` methods
 
 ### `string.length -> uint256`
@@ -39,7 +38,6 @@ Returns the length of the bytes.
 ### `bytes.concat(bytes other) -> bytes`
 
 Concatenates two byte arrays.
-
 
 ## `array` methods
 
@@ -75,7 +73,6 @@ Concatenates two arrays.
 >> [1, 2].concat([3, 4])
 [1, 2, 3, 4]
 ```
-
 
 ## `tuple` methods
 
@@ -113,7 +110,37 @@ The second argument can be used to specify the number of decimals.
 
 Divides two scaled numbers using similar logic to `mul`.
 
-## `Transaction` methods
+## `Transaction` properties and methods
+
+### `tx.from -> address`
+
+Returns the address that signed the transaction.
+
+```javascript
+>> tx = Transaction(0xfb89e2333b81f2751eedaf2aeffb787917d42ea6ea7c5afd4d45371f3f1b8079)
+>> tx.from
+0x35641673A0Ce64F644Ad2f395be19668A06A5616
+```
+
+### `tx.to -> address | null`
+
+Returns the recipient address of the transaction, or `null` if the transaction is a contract creation.
+
+```javascript
+>> tx = Transaction(0xfb89e2333b81f2751eedaf2aeffb787917d42ea6ea7c5afd4d45371f3f1b8079)
+>> tx.to
+0xe07F9D810a48ab5c3c914BA3cA53AF14E4491e8A
+```
+
+### `tx.input -> bytes`
+
+Returns the input data (calldata) of the transaction.
+
+```javascript
+>> tx = Transaction(0xfb89e2333b81f2751eedaf2aeffb787917d42ea6ea7c5afd4d45371f3f1b8079)
+>> tx.input
+0xa9059cbb000000000000000000000000789f8f7b547183ab8e99a5e0e6d567e90e0eb03b0000000000000000000000000000000000000000000000000de0b6b3a7640000
+```
 
 ### `Transaction.getReceipt() -> Receipt` | `Transaction.getReceipt(uint256 timeout) -> Receipt`
 
@@ -142,7 +169,6 @@ Logs is an array of named tuples with the following fields:
 - `topics` (`bytes32[]`): the topics of the log.
 - `data` (`bytes`): the data of the log.
 - `args` (`NamedTuple`): the decoded arguments of the log, if the event is known (present in one of the loaded ABIs).
-
 
 ## `Contract` static methods
 
