@@ -1,19 +1,32 @@
 use anyhow::Result;
 use rustyline::error::ReadlineError;
 use rustyline::history::FileHistory;
-use rustyline::Editor;
+use rustyline::{Config, Editor};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use super::config::{get_init_files, history_file};
-use super::helper::{create_editor, MyHelper};
+use super::solidity_helper::SolidityHelper;
 use super::Cli;
-use crate::interpreter;
+use crate::interpreter::{self, Env};
 use crate::loaders;
 
+fn create_editor(env: Arc<Mutex<Env>>) -> Result<Editor<SolidityHelper, FileHistory>> {
+    let config = Config::builder()
+        .completion_type(rustyline::CompletionType::List)
+        .auto_add_history(true)
+        .build();
+    let helper = SolidityHelper::new(env);
+    let history = FileHistory::default();
+    let mut rl: Editor<SolidityHelper, _> = Editor::with_history(config, history)?;
+
+    rl.set_helper(Some(helper));
+    Ok(rl)
+}
+
 pub struct Repl {
-    rl: Editor<MyHelper, FileHistory>,
+    rl: Editor<SolidityHelper, FileHistory>,
     env: Arc<Mutex<interpreter::Env>>,
     history_file: Option<PathBuf>,
 }
@@ -66,16 +79,14 @@ impl Repl {
     async fn run_repl(&mut self) {
         loop {
             let p = ">> ";
-            self.rl
-                .helper_mut()
-                .expect("No helper")
-                .set_prompt(&format!("\x1b[1;32m{p}\x1b[0m"));
             let readline = self.rl.readline(p);
+            self.rl.helper_mut().unwrap().set_errored(false);
             match readline {
                 Ok(line) => self.process_line(line.trim()).await,
                 Err(ReadlineError::Interrupted) => continue,
                 Err(ReadlineError::Eof) => break,
                 Err(err) => {
+                    self.rl.helper_mut().unwrap().set_errored(true);
                     println!("Error: {:?}", err);
                     break;
                 }

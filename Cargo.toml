@@ -6,10 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = { version = "^1.0.0", features = ["backtrace"] }
 glob = "^0.3.0"
-rustyline = { version = "^14.0.0", features = [
-    "with-sqlite-history",
-    "derive",
-] }
+rustyline = { version = "^17.0.0", features = ["derive"] }
 serde = "^1.0.0"
 serde_json = "^1.0.0"
 solang-parser = "^0.3.0"
@@ -17,7 +14,6 @@ clap = { version = "^4.5.0", features = ["derive", "env"] }
 
 foundry-cli = { git = "https://github.com/foundry-rs/foundry", tag = "v1.4.4" }
 foundry-config = { git = "https://github.com/foundry-rs/foundry", tag = "v1.4.4" }
-# chisel = { git = "https://github.com/foundry-rs/foundry", tag = "v1.4.4" }
 url = "2.5.1"
 futures = "0.3.30"
 tokio = { version = "1.38.0", features = ["rt-multi-thread"] }
@@ -40,6 +36,7 @@ shellexpand = { version = "3.1.0", features = ["path"] }
 indexmap = { version = "2.2.6", features = ["serde"] }
 lazy_static = "1.5.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
+yansi = "1.0.1"
 
 [build-dependencies]
 git2-rs = { version = "0.19.0", package = "git2", default-features = false }
