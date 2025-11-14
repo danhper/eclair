@@ -27,11 +27,11 @@ fn div(_env: &mut Env, receiver: &Value, args: &[Value]) -> Result<Value> {
 }
 
 fn type_min(_env: &Env, receiver: &Value) -> Result<Value> {
-    receiver.get_type().min().map(Into::into)
+    receiver.get_type().min()
 }
 
 fn type_max(_env: &Env, receiver: &Value) -> Result<Value> {
-    receiver.get_type().max().map(Into::into)
+    receiver.get_type().max()
 }
 
 lazy_static! {

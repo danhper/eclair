@@ -75,7 +75,7 @@ fn format_bytes(bytes: &[u8]) -> String {
     }
     let is_diplayable = bytes.iter().all(|c| c.is_ascii());
     if is_diplayable {
-        return String::from_utf8_lossy(stripped_bytes).to_string();
+        String::from_utf8_lossy(stripped_bytes).to_string()
     } else {
         format!("0x{}", hex::encode(bytes))
     }

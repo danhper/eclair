@@ -251,10 +251,10 @@ pub fn evaluate_expression(env: &mut Env, expr: Box<Expression>) -> BoxFuture<'_
         match *expr {
             Expression::BoolLiteral(_, b) => Ok(Value::Bool(b)),
             Expression::NumberLiteral(_, n, decimals, _) => {
-                let mut parsed_n = U256::from_str(&n).map_err(|e| anyhow!("{}", e.to_string()))?;
+                let mut parsed_n = U256::from_str(&n).map_err(|e| anyhow!("{}", e))?;
                 if !decimals.is_empty() {
                     let parsed_decimals =
-                        U256::from_str(&decimals).map_err(|e| anyhow!("{}", e.to_string()))?;
+                        U256::from_str(&decimals).map_err(|e| anyhow!("{}", e))?;
                     parsed_n *= U256::from(10).pow(parsed_decimals);
                 }
                 Ok(Value::Uint(parsed_n, 256))
