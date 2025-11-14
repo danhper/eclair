@@ -18,14 +18,14 @@ fn try_format_func(
     output: &Option<Bytes>,
     is_error: bool,
 ) -> Result<String> {
-    let decoded = func.abi_decode_input(input, true)?;
+    let decoded = func.abi_decode_input(input)?;
     let values = Value::try_from(decoded)?;
     let result = format!("{}{}", func.name, values);
     if let Some(output) = output {
         let value_output = if is_error {
             decode_error(env, output)?
         } else {
-            let decoded = func.abi_decode_output(output, true)?;
+            let decoded = func.abi_decode_output(output)?;
             if decoded.len() == 1 {
                 Value::try_from(decoded[0].clone())?
             } else {

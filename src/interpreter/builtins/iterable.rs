@@ -18,7 +18,7 @@ fn map<'a>(
         let mut values = vec![];
         for v in receiver.get_items()? {
             let value = match args.first() {
-                Some(Value::Func(func)) => func.execute(env, &[v.clone()]).await?,
+                Some(Value::Func(func)) => func.execute(env, std::slice::from_ref(&v)).await?,
                 Some(Value::TypeObject(type_)) => type_.cast(&v)?,
                 _ => bail!("map function expects a function or type as an argument"),
             };
@@ -66,7 +66,8 @@ fn filter<'a>(
         let mut values = vec![];
         for v in receiver.get_items()? {
             match args.first() {
-                Some(Value::Func(func)) => match func.execute(env, &[v.clone()]).await? {
+                Some(Value::Func(func)) => match func.execute(env, std::slice::from_ref(&v)).await?
+                {
                     Value::Bool(true) => values.push(v),
                     Value::Bool(false) => continue,
                     _ => bail!("filter function must return a boolean"),

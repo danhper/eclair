@@ -143,7 +143,7 @@ async fn _check_result(env: &mut Env, code: &str, expected: Value) {
 }
 
 fn _create_env() -> Env {
-    let foundry_conf = foundry_config::load_config();
+    let foundry_conf = foundry_config::load_config().unwrap();
     let config = Config::new(None, false, foundry_conf);
     let mut env = Env::new(config);
     interpreter::load_builtins(&mut env);

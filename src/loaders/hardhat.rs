@@ -29,7 +29,7 @@ impl ProjectLoader for HardhatProjectLoader {
     }
 
     fn should_exclude_file(&self, path: &Path) -> bool {
-        path.to_str().map_or(true, |f| f.contains(".dbg.json"))
+        path.to_str().is_none_or(|f| f.contains(".dbg.json"))
     }
 
     fn is_valid(&self, directory: &Path) -> bool {

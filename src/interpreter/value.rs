@@ -13,7 +13,6 @@ use std::{
     fmt::{self, Display, Formatter},
     ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub},
     str::FromStr,
-    u64,
 };
 
 use super::{

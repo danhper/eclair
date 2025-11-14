@@ -21,7 +21,7 @@ impl Config {
             .rpc_endpoints
             .resolved()
             .iter()
-            .filter_map(|(k, v)| v.clone().ok().map(|v_| (k.clone(), v_)))
+            .filter_map(|(k, v)| v.clone().endpoint.map(|v_| (k.clone(), v_)).ok())
             .collect();
         let etherscan = config
             .etherscan

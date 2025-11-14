@@ -4,7 +4,10 @@ use crate::interpreter::{
     functions::{AsyncMethod, AsyncProperty, FunctionDef, FunctionParam, SyncMethod},
     Env, Type, Value,
 };
-use alloy::providers::{ext::AnvilApi, Provider};
+use alloy::{
+    primitives::ruint::UintTryTo,
+    providers::{ext::AnvilApi, Provider},
+};
 use anyhow::{bail, Result};
 use futures::{future::BoxFuture, FutureExt};
 use lazy_static::lazy_static;
@@ -98,7 +101,7 @@ fn skip<'a>(
 ) -> BoxFuture<'a, Result<Value>> {
     async move {
         let time = match args {
-            [Value::Uint(time, 256)] => *time,
+            [Value::Uint(time, 256)] => time.uint_try_to()?,
             _ => bail!("skip: invalid arguments"),
         };
         env.get_provider().anvil_increase_time(time).await?;
@@ -115,7 +118,7 @@ fn mine<'a>(
     async move {
         let num_of_blocks = match args {
             [] => None,
-            [Value::Uint(num, 256)] => Some(*num),
+            [Value::Uint(num, 256)] => Some(num.uint_try_to()?),
             _ => bail!("skip: invalid arguments"),
         };
         env.get_provider().anvil_mine(num_of_blocks, None).await?;

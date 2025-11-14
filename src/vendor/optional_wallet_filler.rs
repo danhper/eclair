@@ -1,7 +1,7 @@
 use alloy::network::{Network, NetworkWallet, TransactionBuilder};
 use alloy::providers::fillers::{FillerControlFlow, TxFiller};
 use alloy::providers::{Provider, SendableTx, WalletProvider};
-use alloy::transports::{RpcError, Transport, TransportResult};
+use alloy::transports::{RpcError, TransportResult};
 
 /// A layer that signs transactions locally.
 ///
@@ -82,14 +82,13 @@ where
         }
     }
 
-    async fn prepare<P, T>(
+    async fn prepare<P>(
         &self,
         _provider: &P,
         _tx: &<N as Network>::TransactionRequest,
     ) -> TransportResult<Self::Fillable>
     where
-        P: Provider<T, N>,
-        T: Transport + Clone,
+        P: Provider<N>,
     {
         Ok(())
     }

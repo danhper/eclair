@@ -60,7 +60,7 @@ pub fn parse_rational_literal(whole: &str, raw_fraction: &str, raw_exponent: &st
 }
 
 pub fn decode_log_args(log: &Log, event: &Event) -> Result<Value> {
-    let decoded = event.decode_log(log.data(), true)?;
+    let decoded = event.decode_log(log.data())?;
     let mut fully_decoded = IndexMap::new();
     let (indexed_names, body_names): (Vec<_>, Vec<_>) = event.inputs.iter().partition_map(|v| {
         if v.indexed {
@@ -90,7 +90,7 @@ pub fn decode_error(env: &Env, data: &[u8]) -> Result<Value> {
     let error = env
         .get_error(&selector)
         .ok_or(anyhow!("error with selector {} not found", selector))?;
-    let decoded = error.abi_decode_input(&data[4..], true)?;
+    let decoded = error.abi_decode_input(&data[4..])?;
     let values = decoded
         .into_iter()
         .map(Value::try_from)

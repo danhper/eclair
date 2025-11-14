@@ -79,7 +79,7 @@ impl Lhs {
 
     pub fn execute_assign(&self, value: Value, env: &mut Env) -> Result<()> {
         match self {
-            Lhs::Name(name) if env.get_var(name).map_or(false, Value::is_builtin) => {
+            Lhs::Name(name) if env.get_var(name).is_some_and(Value::is_builtin) => {
                 bail!("cannot assign to builtin variable {}", name)
             }
             Lhs::Name(name) => env.set_var(name, value),

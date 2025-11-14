@@ -9,13 +9,13 @@ use url::Url;
 use alloy::{
     eips::BlockId,
     json_abi,
-    network::{AnyNetwork, Ethereum, EthereumWallet, NetworkWallet, TxSigner},
+    network::{AnyNetwork, EthereumWallet, NetworkWallet, TxSigner},
     node_bindings::{Anvil, AnvilInstance},
     primitives::{Address, FixedBytes, B256},
     providers::{
         ext::AnvilApi,
-        fillers::{FillProvider, JoinFill, RecommendedFiller},
-        Provider, ProviderBuilder, RootProvider, WalletProvider,
+        fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller},
+        Identity, Provider, ProviderBuilder, RootProvider, WalletProvider,
     },
     signers::{ledger::HDPath, Signature},
     transports::http::{Client, Http},
@@ -30,10 +30,14 @@ use crate::{
 
 use super::{evaluate_expression, types::Type, ContractInfo, Value};
 
-type RecommendedFillerWithWallet =
-    JoinFill<RecommendedFiller, OptionalWalletFiller<EthereumWallet>>;
-type EclairProvider =
-    FillProvider<RecommendedFillerWithWallet, RootProvider<Http<Client>>, Http<Client>, Ethereum>;
+type RecommendedFillerWithWallet = JoinFill<
+    JoinFill<
+        Identity,
+        JoinFill<GasFiller, JoinFill<BlobGasFiller, JoinFill<NonceFiller, ChainIdFiller>>>,
+    >,
+    OptionalWalletFiller<EthereumWallet>,
+>;
+type EclairProvider = FillProvider<RecommendedFillerWithWallet, RootProvider>;
 
 pub struct Env {
     variables: Vec<HashMap<String, Value>>,
@@ -59,9 +63,8 @@ impl Env {
     pub fn new(config: Config) -> Self {
         let rpc_url = config.rpc_url.parse().unwrap();
         let provider = ProviderBuilder::new()
-            .with_recommended_fillers()
             .filler(OptionalWalletFiller::<EthereumWallet>::new())
-            .on_http(rpc_url);
+            .connect_http(rpc_url);
         Env {
             variables: vec![HashMap::new()],
             types: HashMap::new(),
@@ -230,7 +233,14 @@ impl Env {
     }
 
     pub fn get_rpc_url(&self) -> String {
-        self.provider.client().transport().url().to_string()
+        self.provider
+            .client()
+            .transport()
+            .as_any()
+            .downcast_ref::<Http<Client>>()
+            .unwrap()
+            .url()
+            .to_string()
     }
 
     pub fn get_default_sender(&self) -> Option<Address> {
@@ -391,9 +401,8 @@ impl Env {
             wallet_filler.set_wallet(self.provider.wallet().clone());
         }
         let provider = ProviderBuilder::new()
-            .with_recommended_fillers()
             .filler(wallet_filler)
-            .on_http(rpc_url);
+            .connect_http(rpc_url);
         self.provider = provider;
         self.anvil = None;
         Ok(())
