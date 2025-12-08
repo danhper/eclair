@@ -1,7 +1,6 @@
 [book]
 authors = ["Daniel Perez"]
 language = "en"
-multilingual = false
 src = "src"
 title = "Eclair Documentation"
 description = "Eclair: a Solidity Interpreter"
