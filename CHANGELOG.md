@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.9-dev
+
+### Bug fixes
+
+- Fix `address.balance` not working with `block` option
+
 ## v0.1.8 (2025-11-14)
 
 ### Features

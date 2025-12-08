@@ -1,6 +1,6 @@
 [package]
 name = "eclair"
-version = "0.1.8"
+version = "0.1.9-dev"
 edition = "2021"
 
 [dependencies]

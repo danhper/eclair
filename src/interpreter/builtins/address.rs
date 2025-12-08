@@ -18,6 +18,7 @@ fn get_balance<'a>(env: &'a Env, receiver: &'a Value) -> BoxFuture<'a, Result<Va
         Ok(Value::Uint(
             env.get_provider()
                 .get_balance(receiver.as_address()?)
+                .block_id(env.block())
                 .await?,
             256,
         ))
