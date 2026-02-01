@@ -6,4 +6,4 @@ mod repl;
 mod solidity_helper;
 
 pub use cli::{Cli, ECLAIR_VERSION};
-pub use repl::Repl;
+pub use repl::{initialize_env, Repl};

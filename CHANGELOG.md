@@ -2,6 +2,10 @@
 
 ## v0.1.9-dev
 
+### Features
+
+- Allow executing a file when passed as a CLI argument
+
 ### Bug fixes
 
 - Fix `address.balance` not working with `block` option

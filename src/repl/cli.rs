@@ -22,4 +22,8 @@ pub struct Cli {
     /// File where to store history
     #[arg(long, value_name = "FILE_NAME", env = "INIT_FILE_NAME")]
     pub init_file_name: Option<PathBuf>,
+
+    /// File to execute instead of starting the REPL
+    #[arg(value_name = "FILE")]
+    pub script_file: Option<PathBuf>,
 }

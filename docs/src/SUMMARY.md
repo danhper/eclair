@@ -7,6 +7,7 @@
 
 - [Installation](./installation.md)
 - [Configuration](./configuration.md)
+- [Running Eclair](./running_eclair.md)
 
 # Guides
 

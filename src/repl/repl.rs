@@ -12,6 +12,23 @@ use super::Cli;
 use crate::interpreter::{self, Env};
 use crate::loaders;
 
+pub async fn initialize_env(env: &mut Env, init_file_name: &Option<PathBuf>) -> Result<()> {
+    let current_dir = std::env::current_dir()?;
+    let projects = loaders::load(current_dir);
+    interpreter::load_builtins(env);
+    for project in projects.iter() {
+        interpreter::load_project(env, project)?;
+    }
+
+    let init_files = get_init_files(init_file_name);
+    for init_file in init_files.iter() {
+        let code = std::fs::read_to_string(init_file)?;
+        interpreter::evaluate_setup(env, &code).await?;
+    }
+
+    Ok(())
+}
+
 fn create_editor(env: Arc<Mutex<Env>>) -> Result<Editor<SolidityHelper, FileHistory>> {
     let config = Config::builder()
         .completion_type(rustyline::CompletionType::List)
@@ -35,33 +52,18 @@ impl Repl {
     pub async fn create(env: Arc<Mutex<interpreter::Env>>, cli: &Cli) -> Result<Self> {
         let rl = create_editor(env.clone())?;
         let history_file = cli.history_file.clone().or(history_file());
-        let mut repl = Repl {
+        let repl = Repl {
             rl,
             env,
             history_file,
         };
 
-        repl._initialize_env(&cli.init_file_name).await?;
+        {
+            let mut env = repl.env.lock().await;
+            initialize_env(&mut env, &cli.init_file_name).await?;
+        }
 
         Ok(repl)
-    }
-
-    async fn _initialize_env(&mut self, init_file_name: &Option<PathBuf>) -> Result<()> {
-        let mut env = self.env.lock().await;
-        let current_dir = std::env::current_dir()?;
-        let projects = loaders::load(current_dir);
-        interpreter::load_builtins(&mut env);
-        for project in projects.iter() {
-            interpreter::load_project(&mut env, project)?;
-        }
-
-        let init_files = get_init_files(init_file_name);
-        for init_file in init_files.iter() {
-            let code = std::fs::read_to_string(init_file)?;
-            interpreter::evaluate_setup(&mut env, &code).await?;
-        }
-
-        Ok(())
     }
 
     pub async fn run(&mut self) {
